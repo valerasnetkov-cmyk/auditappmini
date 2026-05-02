@@ -1,0 +1,14 @@
+[config] Using fallback JWT_SECRET for local development
+SyntaxError: Expected property name or '}' in JSON at position 1 (line 1 column 2)
+    at JSON.parse (<anonymous>)
+    at parse (C:\Projects\Auditmini\auditappmini\backend\node_modules\body-parser\lib\types\json.js:92:19)
+    at C:\Projects\Auditmini\auditappmini\backend\node_modules\body-parser\lib\read.js:128:18
+    at AsyncResource.runInAsyncScope (node:async_hooks:228:14)
+    at invokeCallback (C:\Projects\Auditmini\auditappmini\backend\node_modules\raw-body\index.js:238:16)
+    at done (C:\Projects\Auditmini\auditappmini\backend\node_modules\raw-body\index.js:227:7)
+    at IncomingMessage.onEnd (C:\Projects\Auditmini\auditappmini\backend\node_modules\raw-body\index.js:287:7)
+    at IncomingMessage.emit (node:events:508:28)
+    at endReadableNT (node:internal/streams/readable:1729:12)
+    at process.processTicksAndRejections (node:internal/process/task_queues:90:21)
+[config] Using fallback JWT_SECRET for local development
+[config] Using fallback JWT_SECRET for local development

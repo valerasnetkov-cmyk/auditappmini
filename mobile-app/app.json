@@ -1,0 +1,12 @@
+{
+  "expo": {
+    "extra": {
+      "eas": {
+        "projectId": "453622ae-5e7d-419f-a852-7b7205bae0cb"
+      }
+    },
+    "android": {
+      "package": "auditauto.sne"
+    }
+  }
+}

@@ -1,0 +1,29 @@
+name: Defects UI Tests
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  defects-ui-tests:
+    name: Defects UI Tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+      - name: Install dependencies
+        run: |
+          npm install
+          npm --prefix web install
+          npm --prefix backend install
+      - name: Prepare Playwright browsers
+        run: npm --prefix web run prepare:e2e
+      - name: Start Backend server
+        run: |
+          PORT=3001 npm --prefix backend run start &
+          sleep 5
+      - name: Run Defects UI tests
+        run: |
+          npm --prefix web run test:e2e:defects

@@ -1,0 +1,13 @@
+{
+  "name": "auditappmini",
+  "private": true,
+  "scripts": {
+    "dev": "node scripts/dev.mjs",
+    "dev:backend": "npm --prefix backend run dev",
+    "dev:web": "npm --prefix web run dev",
+    "smoke": "npm --prefix backend run smoke",
+    "verify:backend": "npm --prefix backend run smoke",
+    "verify:web": "npm --prefix web run build",
+    "verify": "npm run verify:backend && npm run verify:web"
+  }
+}
