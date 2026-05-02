@@ -1,0 +1,13 @@
+node_modules/
+.env
+.env.*
+!.env.example
+*.log
+*.sqlite
+uploads/
+backend/uploads/
+dist/
+build/
+.next/
+.expo/
+.DS_Store
