@@ -4,8 +4,8 @@
   "private": true,
   "scripts": {
     "dev": "next dev -p 3002",
+    "start": "npm run dev",
     "build": "next build",
-    "start": "node ../scripts/start-web.mjs",
     "lint": "eslint",
     "prepare:e2e": "npx playwright install",
     "test:e2e": "npx playwright test",
