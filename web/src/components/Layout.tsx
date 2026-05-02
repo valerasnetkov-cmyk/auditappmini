@@ -1,4 +1,4 @@
-'use client'
+"use client";
 
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
@@ -22,30 +22,42 @@ type MenuItem = {
 
 export default function Layout({ children, currentPage }: LayoutProps) {
   const router = useRouter()
+  const [mounted, setMounted] = useState(false)
   const [quickSearch, setQuickSearch] = useState('')
   const [currentUser, setCurrentUser] = useState<AuthUser | null>(null)
+  const [userReady, setUserReady] = useState(false)
 
   useEffect(() => {
-    if (!getAuthToken()) return
-
-    let cancelled = false
-
-    const loadCurrentUser = async () => {
-      const result = await api.getMe()
-      if (!cancelled && result.data) {
-        setCurrentUser(result.data)
-      }
+    const token = getAuthToken()
+    if (!token) {
+      setUserReady(true)
+      return
     }
 
-    void loadCurrentUser()
-
+    let cancelled = false
+    const load = async () => {
+      try {
+        const res = await api.getMe()
+        if (!cancelled && res?.data) setCurrentUser(res.data)
+      } catch {
+        // ignore
+      } finally {
+        setUserReady(true)
+      }
+    }
+    void load()
     return () => {
       cancelled = true
     }
   }, [])
 
-  const handleQuickSearch = (event: React.FormEvent) => {
-    event.preventDefault()
+  // mark client mount to avoid hydration differences
+  useEffect(() => {
+    setMounted(true)
+  }, [])
+
+  const handleQuickSearch = (e: any) => {
+    e.preventDefault()
     if (!quickSearch.trim()) return
     router.push(`/vehicles?q=${encodeURIComponent(quickSearch.trim())}`)
   }
@@ -65,16 +77,20 @@ export default function Layout({ children, currentPage }: LayoutProps) {
     { href: '/settings', label: 'Настройки', icon: 'ST', key: 'settings', managerOnly: true },
   ]
 
-  const visibleMenuItems = menuItems.filter((item) => !item.managerOnly || isManagerRole(currentUser?.role))
+  const allMenuItems = menuItems
+  const userIsManager = !!(userReady && isManagerRole(currentUser?.role))
+  const visibleMenuItems = allMenuItems.filter((item) => {
+    if (!item.managerOnly) return true
+    if (!mounted) return false
+    return isManagerRole(currentUser?.role)
+  })
 
   return (
     <div className="flex min-h-screen bg-slate-50">
       <aside className="flex w-64 flex-col border-r border-slate-200 bg-white shadow-sm">
         <div className="border-b border-slate-200 p-5">
           <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-blue-600 text-sm font-semibold text-white">
-              AT
-            </div>
+            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-blue-600 text-sm font-semibold text-white">AT</div>
             <div>
               <h1 className="text-lg font-bold leading-tight text-slate-900">Audit Tech</h1>
               <p className="text-xs text-slate-500">Контроль осмотров и дефектов</p>
@@ -97,34 +113,30 @@ export default function Layout({ children, currentPage }: LayoutProps) {
 
         <nav className="flex-1 p-3">
           <ul className="space-y-1">
-            {visibleMenuItems.map((item) => (
-              <li key={item.key}>
-                <Link
-                  href={item.href}
-                  className={`flex items-center gap-3 rounded-xl px-4 py-2.5 transition-all ${
-                    currentPage === item.key
-                      ? 'bg-blue-600 text-white shadow-md shadow-blue-200'
-                      : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
-                  }`}
-                >
-                  <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-black/5 text-[11px] font-semibold">
-                    {item.icon}
-                  </span>
-                  <span className="font-medium">{item.label}</span>
-                </Link>
-              </li>
-            ))}
+            {visibleMenuItems.map((item) => {
+              const isActive = currentPage === item.key
+              const linkClassName = [
+                'flex items-center gap-3 rounded-xl px-4 py-2.5 transition-all',
+                isActive
+                  ? 'bg-blue-600 text-white shadow-md shadow-blue-200'
+                  : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900',
+              ].join(' ')
+
+              return (
+                <li key={item.key}>
+                  <Link href={item.href} className={linkClassName}>
+                    <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-black/5 text-[11px] font-semibold">{item.icon}</span>
+                    <span className="font-medium">{item.label}</span>
+                  </Link>
+                </li>
+              )
+            })}
           </ul>
         </nav>
 
         <div className="border-t border-slate-200 p-3">
-          <button
-            onClick={handleLogout}
-            className="flex w-full items-center gap-3 rounded-xl px-4 py-2.5 text-red-600 transition-all hover:bg-red-50"
-          >
-            <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-red-100 text-[11px] font-semibold text-red-700">
-              EX
-            </span>
+          <button onClick={handleLogout} className="flex w-full items-center gap-3 rounded-xl px-4 py-2.5 text-red-600 transition-all hover:bg-red-50">
+            <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-red-100 text-[11px] font-semibold text-red-700">EX</span>
             <span className="font-medium">Выйти</span>
           </button>
         </div>

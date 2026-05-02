@@ -212,6 +212,8 @@ export type InspectionDetail = {
   created_at: string
   accident_occurred_at?: string | null
   accident_location?: string | null
+  odometer_value?: number | null
+  odometer_unit?: string | null
   checklist_items: ChecklistItemResponse[]
   defects: DefectRecord[]
 }

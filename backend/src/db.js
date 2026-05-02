@@ -222,6 +222,7 @@ export async function initDatabase() {
       password TEXT NOT NULL,
       name TEXT NOT NULL,
       role TEXT NOT NULL CHECK (role IN ('inspector', 'manager')),
+      company_id TEXT DEFAULT 'default',
       mfa_enabled INTEGER NOT NULL DEFAULT 0,
       mfa_secret TEXT,
       created_at TEXT DEFAULT (datetime('now'))
@@ -238,12 +239,18 @@ export async function initDatabase() {
   } catch {
   }
 
+  try {
+    db.run(`ALTER TABLE users ADD COLUMN company_id TEXT DEFAULT 'default'`)
+  } catch {
+  }
+
   db.run(`
     CREATE TABLE IF NOT EXISTS vehicles (
       id TEXT PRIMARY KEY,
       number TEXT NOT NULL,
       name TEXT NOT NULL,
       status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'repair')),
+      company_id TEXT DEFAULT 'default',
       region TEXT,
       qr_code TEXT,
       last_scheduled_inspection TEXT,
@@ -264,6 +271,7 @@ export async function initDatabase() {
       id TEXT PRIMARY KEY,
       vehicle_id TEXT NOT NULL,
       inspector_id TEXT NOT NULL,
+      company_id TEXT DEFAULT 'default',
       type TEXT NOT NULL CHECK (type IN ('quick', 'scheduled', 'accident')),
       completed INTEGER NOT NULL DEFAULT 0,
       accident_occurred_at TEXT,
@@ -286,6 +294,7 @@ export async function initDatabase() {
     CREATE TABLE IF NOT EXISTS defects (
       id TEXT PRIMARY KEY,
       inspection_id TEXT NOT NULL,
+      company_id TEXT DEFAULT 'default',
       title TEXT NOT NULL,
       comment TEXT,
       status TEXT NOT NULL DEFAULT 'open',
@@ -338,6 +347,23 @@ export async function initDatabase() {
     )
   `)
 
+  // Audit logs table for tracking important actions
+  try {
+    db.run(`CREATE TABLE IF NOT EXISTS audit_logs (
+      id TEXT PRIMARY KEY,
+      company_id TEXT DEFAULT 'default',
+      user_id TEXT,
+      action TEXT NOT NULL,
+      entity_type TEXT,
+      entity_id TEXT,
+      old_value TEXT,
+      new_value TEXT,
+      ip_address TEXT,
+      user_agent TEXT,
+      created_at TEXT DEFAULT (datetime('now'))
+    )`)
+  } catch {}
+
   const settingsCheck = db.exec("SELECT value FROM settings WHERE key = 'scheduled_inspection_days'")
   if (settingsCheck.length === 0 || settingsCheck[0].values.length === 0) {
     db.run(`INSERT INTO settings (key, value) VALUES ('scheduled_inspection_days', '30')`)
@@ -365,17 +391,36 @@ export async function initDatabase() {
   } catch {
   }
 
-  const adminCheck = db.exec("SELECT id FROM users WHERE email = 'admin@example.com'")
-  if (adminCheck.length === 0 || adminCheck[0].values.length === 0) {
-    const hashedPassword = bcrypt.hashSync('admin123', 10)
-    db.run(`INSERT INTO users (id, email, password, name, role) VALUES (?, ?, ?, ?, ?)`, [
-      uuidv4(),
-      'admin@example.com',
-      hashedPassword,
-      'Администратор',
-      'manager',
-    ])
-    console.log('Admin user: admin@example.com / admin123')
+  try {
+    db.run(`ALTER TABLE inspections ADD COLUMN odometer_value INTEGER`)
+  } catch {}
+  try {
+    db.run(`ALTER TABLE inspections ADD COLUMN odometer_unit TEXT DEFAULT 'km'`)
+  } catch {}
+  try {
+    db.run(`ALTER TABLE inspections ADD COLUMN odometer_recognized_at TEXT`)
+  } catch {}
+
+  // Optional admin user from environment. If ADMIN_EMAIL is not provided, skip seeding here.
+  const ADMIN_EMAIL = process.env.ADMIN_EMAIL
+  const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD
+  if (ADMIN_EMAIL) {
+    if (!ADMIN_PASSWORD) {
+      console.log('Admin seed skipped: ADMIN_PASSWORD not provided in environment')
+    } else {
+      const existing = db.prepare("SELECT id FROM users WHERE email = ?").get(ADMIN_EMAIL)
+      if (!existing) {
+        const hashedPassword = bcrypt.hashSync(ADMIN_PASSWORD, 10)
+        db.run(`INSERT INTO users (id, email, password, name, role) VALUES (?, ?, ?, ?, ?)`, [
+          uuidv4(),
+          ADMIN_EMAIL,
+          hashedPassword,
+          'Администратор',
+          'manager',
+        ])
+        console.log(`Admin user: ${ADMIN_EMAIL} (seeded from env)`) 
+      }
+    }
   }
 
   repairDatabaseEncoding()

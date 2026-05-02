@@ -6,6 +6,7 @@
   "type": "module",
   "scripts": {
     "start": "node src/server.js",
+    "test:security": "node tests/role-tests.js",
     "dev": "node --watch src/server.js",
     "smoke": "npm run smoke:auth && npm run smoke:vehicles && npm run smoke:inspections && npm run smoke:analytics",
     "smoke:auth": "node scripts/smoke-auth.mjs",

@@ -1,9 +1,8 @@
 const path = require('path')
 
-/**
- * Resolve Next.js workspace tracing to the monorepo root
- * This suppresses the warning about multiple lockfiles in a monorepo setup.
- */
 module.exports = {
+  // Enable React strict mode for catching potential issues
+  reactStrictMode: true,
+  // Root for Next's output file tracing (monorepos like this repo require a correct root)
   outputFileTracingRoot: path.resolve(__dirname, '..'),
 }

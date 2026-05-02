@@ -9,6 +9,9 @@ import path from 'path'
 import { fileURLToPath } from 'url'
 import fs from 'fs'
 import { initDatabase, getDb } from './db.js'
+import registerCompleteInspectionRoutes from './routes/completeInspection.js'
+import { registerOdometerRoutes, registerVehicleNumberRecognitionRoutes } from './routes/odometer.js'
+import { photoRequirements, photoTypeLabels, defectCategories } from './routes/photo-requirements.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const uploadsDir = path.join(__dirname, '../uploads')
@@ -267,12 +270,25 @@ const API_MESSAGES = {
   regionInUse: 'Нельзя удалить регион, пока он используется в карточках техники',
   invalidRegion: 'Выберите регион из справочника',
   defectNotFound: 'Дефект не найден',
+  defectTitleRequired: 'Заголовок дефекта обязателен',
   inspectionNotFound: 'Осмотр не найден',
   accidentDetailsRequired: 'Для осмотра ДТП укажите время и место происшествия',
   settingsManagerOnly: 'Только менеджер может изменять настройки',
   demoDataCreated: 'Демо-данные созданы',
+photosRequiredForDefect: 'Фото для дефекта не загружено',
+  odometerPhotoRequired: 'Фото одометра обязательно',
+  odometerValueRequired: 'Укажите корректное значение одометра',
+  vehicleNumberPhotoRequired: 'Фото номера обязательно',
+  vehicleNumberRequired: 'Укажите номер техники',
   internalServerError: 'Внутренняя ошибка сервера',
 }
+
+// Register the complete-inspection route after API_MESSAGES is defined
+registerCompleteInspectionRoutes({ app, db, API_MESSAGES, getInspectionById, authenticate, photoRequirements })
+
+// Register odometer and vehicle number recognition routes
+registerOdometerRoutes({ app, db, authenticate, API_MESSAGES, upload })
+registerVehicleNumberRecognitionRoutes({ app, db, authenticate, API_MESSAGES, upload })
 
 function sendError(res, status, message) {
   return res.status(status).json({ error: message })
@@ -446,7 +462,9 @@ app.post('/api/users/:id/mfa/verify', authenticate, (req, res) => {
 
 // Registration endpoint for mobile app
 app.post('/api/auth/register', (req, res) => {
-  const { email, password, name, role = 'inspector' } = req.body
+  const { email, password, name } = req.body
+  // Public registration: always register as inspector
+  const role = 'inspector'
   if (!email || !password || !name) {
     return sendError(res, 400, API_MESSAGES.registerFieldsRequired)
   }
@@ -894,22 +912,31 @@ app.post('/api/inspections', authenticate, (req, res) => {
   checklist.forEach(item => {
     const itemId = uuidv4()
     insertChecklist.run(itemId, id, item.title, item.result ? 1 : 0, item.comment || null)
-
-    // Auto-create defect if result is false
-    if (!item.result) {
-      const defectId = uuidv4()
-      db.prepare(`
-        INSERT INTO defects (id, inspection_id, title, comment, status, created_at)
-        VALUES (?, ?, ?, ?, 'open', datetime('now'))
-      `).run(defectId, id, item.title, item.comment || null)
-    }
+    // Defects are now created via dedicated API call '/api/inspections/:id/defects'
   })
 
-  db.prepare('UPDATE inspections SET completed = 1 WHERE id = ?').run(id)
+  // Completion is deferred to /api/inspections/:id/complete
 
   const inspection = getInspectionById(id)
   res.status(201).json(inspection)
 })
+
+// Create a defect for a specific inspection
+app.post('/api/inspections/:id/defects', authenticate, (req, res) => {
+  const inspectionId = req.params.id
+  const { title, comment } = req.body
+  if (!title) return sendError(res, 400, API_MESSAGES.defectTitleRequired || 'Заголовок дефекта обязателен')
+  const inspection = getInspectionById(inspectionId)
+  if (!inspection) return sendError(res, 404, API_MESSAGES.inspectionNotFound)
+  const defectId = uuidv4()
+  db.prepare(`INSERT INTO defects (id, inspection_id, title, comment, status, created_at) VALUES (?, ?, ?, ?, 'open', datetime('now'))`).run(defectId, inspectionId, title, comment || null)
+  const defect = db.prepare('SELECT * FROM defects WHERE id = ?').get(defectId)
+  res.status(201).json(defect)
+})
+
+// (Legacy duplicate complete route removed)
+
+// (Legacy duplicate complete route removed)
 
 app.get('/api/inspections/:id', authenticate, (req, res) => {
   const inspection = db.prepare(`
@@ -1204,6 +1231,26 @@ app.put('/api/settings', authenticate, (req, res) => {
   }
   return res.json(readSettings())
   
+})
+
+// Get photo requirements for an inspection type
+app.get('/api/photo-requirements/:type', authenticate, (req, res) => {
+  const { type } = req.params
+  if (!photoRequirements[type]) {
+    return res.status(400).json({ error: 'Неизвестный тип осмотра' })
+  }
+  res.json({
+    type,
+    requirements: photoRequirements[type],
+    labels: photoTypeLabels.ru  // Default to Russian labels
+  })
+})
+
+// Get defect categories
+app.get('/api/defect-categories', authenticate, (req, res) => {
+  res.json({
+    categories: defectCategories.ru  // Default to Russian
+  })
 })
 
 // ============ NOTIFICATIONS ============

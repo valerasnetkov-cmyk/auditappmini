@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
 import "./globals.css";
 import { ToastProvider } from './contexts/ToastContext'
+import { ThemeProvider } from '@/lib/theme'
+import { initLocale } from '@/lib/i18n'
 
 export const dynamic = 'force-dynamic'
 
@@ -14,12 +16,18 @@ export default function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  if (typeof window !== 'undefined') {
+    initLocale()
+  }
+  
   return (
-    <html lang="ru">
+    <html lang="ru" suppressHydrationWarning>
       <body className="min-h-screen">
-        <ToastProvider>
-          {children}
-        </ToastProvider>
+        <ThemeProvider>
+          <ToastProvider>
+            {children}
+          </ToastProvider>
+        </ThemeProvider>
       </body>
     </html>
   );
