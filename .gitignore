@@ -53,3 +53,8 @@ build/
 .next/
 .expo/
 .DS_Store
+.next/
+.env
+.env.local
+*.log
+*.tsbuildinfo
