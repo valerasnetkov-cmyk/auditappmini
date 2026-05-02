@@ -64,6 +64,8 @@ export default function InspectionFormPage() {
   const [defectPhotos, setDefectPhotos] = useState<Record<string, PhotoRecord[]>>({})
   const [accidentOccurredAt, setAccidentOccurredAt] = useState('')
   const [accidentLocation, setAccidentLocation] = useState('')
+  const [odometerValue, setOdometerValue] = useState<string>('')
+  const [odometerUnit, setOdometerUnit] = useState<string>('km')
   const [uploadingPhoto, setUploadingPhoto] = useState<string | null>(null)
   const [deletingPhoto, setDeletingPhoto] = useState<string | null>(null)
   const [showQR, setShowQR] = useState(false)
@@ -124,6 +126,8 @@ export default function InspectionFormPage() {
       initChecklist(result.data.type, result.data.checklist_items)
       setAccidentOccurredAt(result.data.accident_occurred_at ? result.data.accident_occurred_at.slice(0, 16) : '')
       setAccidentLocation(result.data.accident_location || '')
+      setOdometerValue(result.data.odometer_value ? String(result.data.odometer_value) : '')
+      setOdometerUnit(result.data.odometer_unit || 'km')
 
       const photosByTitle: Record<string, PhotoRecord[]> = {}
       result.data.defects.forEach((defect) => {
@@ -228,6 +232,27 @@ export default function InspectionFormPage() {
     } finally {
       setDeletingPhoto(null)
     }
+  }
+
+  const getIncompleteWarnings = () => {
+    const warnings: string[] = []
+    if (!inspection) return warnings
+
+    if (inspection.type === 'accident') {
+      if (!accidentOccurredAt.trim()) warnings.push('Укажите время ДТП')
+      if (!accidentLocation.trim()) warnings.push('Укажите место ДТП')
+    }
+
+    if (inspection.type === 'quick' || inspection.type === 'scheduled') {
+      if (!odometerValue.trim()) warnings.push('Укажите пробег')
+    }
+
+    const uncheckedItems = checklist.filter(item => !item.result)
+    if (uncheckedItems.length > 0) {
+      warnings.push(`Не проверено пунктов: ${uncheckedItems.length}`)
+    }
+
+    return warnings
   }
 
   const handleSave = async () => {
@@ -461,6 +486,19 @@ export default function InspectionFormPage() {
           </div>
         ) : null}
 
+        {(() => {
+          const warnings = getIncompleteWarnings()
+          if (warnings.length === 0 || inspection?.completed) return null
+          return (
+            <div className="mb-4 rounded-lg border border-yellow-200 bg-yellow-50 px-4 py-3 text-sm text-yellow-800">
+              <strong className="font-medium">Неполные данные:</strong>
+              <ul className="mt-1 list-inside list-disc">
+                {warnings.map((w, i) => <li key={i}>{w}</li>)}
+              </ul>
+            </div>
+          )
+        })()}
+
         <div className="mb-6 rounded-2xl bg-white p-6 shadow-sm">
           {inspection?.type === 'accident' ? (
             <div className="mb-6 rounded-xl border border-red-200 bg-red-50 p-4">
@@ -625,7 +663,7 @@ export default function InspectionFormPage() {
                   ) : null}
 
                   {defect.photos.length ? (
-                    <div className="mt-2 flex gap-2">
+                    <div className="mt-2 flex gap-2 flex-wrap">
                       {defect.photos.map((photo, index) => (
                         <img
                           key={`${photo.url}-${index}`}
@@ -636,7 +674,9 @@ export default function InspectionFormPage() {
                         />
                       ))}
                     </div>
-                  ) : null}
+                  ) : (
+                    <span className="text-xs text-gray-400">Нет фото</span>
+                  )}
                 </div>
               ))}
             </div>

@@ -10,6 +10,7 @@ import { formatDate } from '@/lib/dateUtils'
 import type { VehicleDefectHistoryItem } from '@/lib/types'
 import { buildApiUrl } from '@/lib/api/client'
 import { useToast } from '@/app/contexts/ToastContext'
+import OdometerHistory from '@/components/OdometerHistory'
 import type { InspectionRecord, UpdateVehiclePayload, VehicleDetail, VehicleHistoryEntry, VehicleStatus } from '@/lib/types'
 
 type VehicleInspection = InspectionRecord
@@ -307,6 +308,10 @@ export default function VehicleDetailPage() {
               </tbody>
             </table>
           )}
+
+          <div className="mt-6">
+            <OdometerHistory inspections={inspections} />
+          </div>
         </div>
 
         <section className="mt-6 rounded-2xl bg-white p-6 shadow-sm">

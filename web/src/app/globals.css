@@ -1,62 +1,137 @@
 @import "tailwindcss";
 
 :root {
+  /* Light theme (default) */
   --primary: #2563eb;
   --primary-hover: #1d4ed8;
+  --primary-light: #3b82f6;
   --secondary: #64748b;
   --success: #22c55e;
+  --success-bg: #dcfce7;
   --warning: #f59e0b;
+  --warning-bg: #fef3c7;
   --danger: #ef4444;
+  --danger-bg: #fee2e2;
+  --info: #0ea5e9;
+  --info-bg: #e0f2fe;
+  
   --background: #f8fafc;
   --surface: #ffffff;
+  --surface-elevated: #ffffff;
   --border: #e2e8f0;
-  --text-primary: #1e293b;
-  --text-secondary: #64748b;
+  --border-light: #f1f5f9;
+  
+  --text-primary: #0f172a;
+  --text-secondary: #475569;
+  --text-tertiary: #64748b;
   --text-muted: #94a3b8;
+  
+  --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.05);
+  --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.1);
+  --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.1);
 }
 
-/* Dark theme */
+/* Dark theme - enhanced color palette */
 [data-theme="dark"] {
   --primary: #3b82f6;
-  --primary-hover: #2563eb;
+  --primary-hover: #60a5fa;
+  --primary-light: #1d4ed8;
   --secondary: #94a3b8;
-  --success: #22c55e;
-  --warning: #f59e0b;
-  --danger: #ef4444;
-  --background: #0f172a;
-  --surface: #1e293b;
+  --success: #4ade80;
+  --success-bg: #166534;
+  --warning: #fbbf24;
+  --warning-bg: #78350f;
+  --danger: #f87171;
+  --danger-bg: #7f1d1d;
+  --info: #38bdf8;
+  --info-bg: #0c4a6e;
+  
+  --background: #020617;
+  --surface: #0f172a;
+  --surface-elevated: #1e293b;
   --border: #334155;
+  --border-light: #1e293b;
+  
   --text-primary: #f1f5f9;
-  --text-secondary: #94a3b8;
+  --text-secondary: #cbd5e1;
+  --text-tertiary: #94a3b8;
   --text-muted: #64748b;
+  
+  --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.3);
+  --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.4);
+  --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.5);
 }
 
-[data-theme="dark"] .bg-white {
+[data-theme="dark"] body {
+  background: var(--background);
+}
+
+/* Surface overrides */
+[data-theme="dark"] .bg-white { background: var(--surface); }
+[data-theme="dark"] .bg-slate-50 { background: var(--surface); }
+[data-theme="dark"] .bg-slate-100 { background: var(--surface-elevated); }
+
+/* Text color overrides */
+[data-theme="dark"] .text-slate-900,
+[data-theme="dark"] .text-gray-900 { color: var(--text-primary); }
+[data-theme="dark"] .text-slate-800,
+[data-theme="dark"] .text-gray-800 { color: var(--text-primary); }
+[data-theme="dark"] .text-slate-700,
+[data-theme="dark"] .text-gray-700 { color: var(--text-secondary); }
+[data-theme="dark"] .text-slate-600,
+[data-theme="dark"] .text-gray-600 { color: var(--text-tertiary); }
+[data-theme="dark"] .text-slate-500,
+[data-theme="dark"] .text-gray-500 { color: var(--text-muted); }
+
+/* Border color overrides */
+[data-theme="dark"] .border-slate-200,
+[data-theme="dark"] .border-gray-200 { border-color: var(--border); }
+[data-theme="dark"] .border-slate-100,
+[data-theme="dark"] .border-gray-100 { border-color: var(--border-light); }
+
+/* Input/Form overrides */
+[data-theme="dark"] input,
+[data-theme="dark"] textarea,
+[data-theme="dark"] select {
   background: var(--surface);
-}
-
-[data-theme="dark"] .text-gray-900,
-[data-theme="dark"] .text-gray-800,
-[data-theme="dark"] .text-gray-700 {
+  border-color: var(--border);
   color: var(--text-primary);
 }
 
-[data-theme="dark"] .text-gray-600,
-[data-theme="dark"] .text-gray-500 {
-  color: var(--text-secondary);
+[data-theme="dark"] input::placeholder,
+[data-theme="dark"] textarea::placeholder {
+  color: var(--text-muted);
 }
 
-[data-theme="dark"] .border-gray-200,
-[data-theme="dark"] .border-gray-100 {
+/* Card styling for dark mode */
+[data-theme="dark"] .card,
+[data-theme="dark"] .rounded-xl {
+  background: var(--surface);
   border-color: var(--border);
 }
 
-[data-theme="dark"] .bg-gray-50 {
-  background: #1e293b;
+/* Button overrides */
+[data-theme="dark"] .btn-secondary {
+  background: var(--surface-elevated);
+  color: var(--text-secondary);
+  border-color: var(--border);
 }
 
-[data-theme="dark"] .bg-gray-100 {
-  background: #334155;
+/* Table styling */
+[data-theme="dark"] table,
+[data-theme="dark"] th,
+[data-theme="dark"] td {
+  border-color: var(--border);
+}
+
+/* Sidebar styling */
+[data-theme="dark"] aside {
+  background: var(--surface);
+  border-color: var(--border);
+}
+
+[data-theme="dark"] .hover\:bg-slate-100:hover {
+  background: var(--surface-elevated);
 }
 
 @theme inline {

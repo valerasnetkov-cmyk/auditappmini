@@ -1,6 +1,6 @@
 "use client"
 
-import { useLocale, setLocale, t } from '@/lib/i18n'
+import { setLocale, t } from '@/lib/i18n'
 import { useState, useEffect } from 'react'
 
 export default function LocaleSwitcher() {

@@ -66,11 +66,12 @@ export const translations = {
     success: 'Успешно',
     noData: 'Нет данных',
 
-    // Theme
-    theme: 'Тема',
-    lightTheme: 'Светлая',
-    darkTheme: 'Тёмная',
-    systemTheme: 'Системная',
+// Theme
+  theme: 'Тема',
+  lightTheme: 'Светлая',
+  darkTheme: 'Тёмная',
+  systemTheme: 'Системная',
+  language: 'Язык',
   },
   en: {
     // Auth
@@ -144,6 +145,7 @@ export const translations = {
     lightTheme: 'Light',
     darkTheme: 'Dark',
     systemTheme: 'System',
+    language: 'Language',
 
     // Validation errors
     odometerRequired: 'Укажите пробег',
@@ -165,13 +167,9 @@ export const translations = {
 export type Locale = keyof typeof translations
 export type TranslationKey = keyof typeof translations['ru']
 
-export function useLocale() {
-  return { locale: currentLocale, setLocale, t }
-}
-
 let currentLocale: Locale = 'ru'
 
-export { setLocale, t }
+export function setLocale(locale: Locale) {
   if (translations[locale]) {
     currentLocale = locale
     localStorage.setItem('locale', locale)
