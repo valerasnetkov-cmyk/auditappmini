@@ -1,0 +1,37 @@
+{
+  "name": "web",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev -p 3002",
+    "build": "next build",
+    "start": "node ../scripts/start-web.mjs",
+    "lint": "eslint",
+    "prepare:e2e": "npx playwright install",
+    "test:e2e": "npx playwright test",
+    "test:e2e:ci": "npx playwright test --reporter=github",
+    "test:e2e:defects": "npx playwright test web/e2e/tests/defects-ui.spec.ts web/e2e/tests/defect-timeline.spec.ts web/e2e/tests/defect-timeline-detail.spec.ts web/e2e/tests/defect-detail-close.spec.ts web/e2e/tests/defect-detail-reopen.spec.ts",
+    "test:e2e:defects:ci": "npx playwright test web/e2e/tests/defects-ui.spec.ts web/e2e/tests/defect-timeline.spec.ts web/e2e/tests/defect-timeline-detail.spec.ts web/e2e/tests/defect-detail-close.spec.ts web/e2e/tests/defect-detail-reopen.spec.ts --reporter=github"
+  },
+  "dependencies": {
+    "@heroicons/react": "^2.2.0",
+    "@supabase/ssr": "^0.10.0",
+    "@supabase/supabase-js": "^2.102.1",
+    "next": "16.2.2",
+    "react": "19.2.4",
+    "react-dom": "19.2.4"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.40.0",
+    "playwright": "^1.40.0",
+    "speakeasy": "^2.0.0",
+    "@tailwindcss/postcss": "^4",
+    "@types/node": "^20",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "eslint": "^9",
+    "eslint-config-next": "16.2.2",
+    "tailwindcss": "^4",
+    "typescript": "^5"
+  }
+}
