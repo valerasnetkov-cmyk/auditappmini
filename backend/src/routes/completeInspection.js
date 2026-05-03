@@ -51,6 +51,15 @@ export default function registerCompleteInspectionRoutes({ app, db, API_MESSAGES
       }
     }
 
+    // VALIDATION 4: For scheduled inspections, verify checklist is complete
+    if (inspection.type === 'scheduled') {
+      const checklistItems = db.prepare('SELECT result FROM checklist_items WHERE inspection_id = ?').all(inspectionId)
+      const uncheckedItems = checklistItems.filter(item => !item.result)
+      if (uncheckedItems.length > 0) {
+        return sendError(res, 400, 'Заполните все пункты чек-листа')
+      }
+    }
+
     // Get defects for this inspection
     const defects = db.prepare('SELECT id FROM defects WHERE inspection_id = ?').all(inspectionId)
 

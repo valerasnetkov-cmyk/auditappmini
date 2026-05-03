@@ -33,6 +33,34 @@ const SCHEDULED_CHECKLIST = [
 ]
 const ACCIDENT_CHECKLIST = ['Повреждения кузова', 'Остекление', 'Ходовая', 'Кузов', 'Безопасность']
 
+const CHECKLIST_SECTIONS = {
+  quick: {
+    'Кузов': ['Внешний вид', 'Повреждения кузова'],
+    'Ходовая': ['Колёса'],
+    'Прочее': ['Стёкла', 'Госномер'],
+  },
+  scheduled: {
+    'Кузов': ['Внешний вид', 'Повреждения кузова', 'Лакокрасочное покрытие', 'Стёкла', 'Фары', 'Зеркала', 'Двери', 'Госномер'],
+    'Ходовая': ['Колёса'],
+    'Двигатель': ['Двигатель'],
+    'Салон': ['Салон', 'Приборная панель'],
+  },
+  accident: {
+    'Кузов': ['Повреждения кузова', 'Кузов'],
+    'Ходовая': ['Ходовая'],
+    'Безопасность': ['Остекление', 'Безопасность'],
+  },
+}
+
+function getItemSection(type: InspectionType, title: string): string {
+  const sections = CHECKLIST_SECTIONS[type as keyof typeof CHECKLIST_SECTIONS]
+  if (!sections) return 'Прочее'
+  for (const [section, items] of Object.entries(sections)) {
+    if ((items as string[]).includes(title)) return section
+  }
+  return 'Прочее'
+}
+
 function getTypeLabel(type: string) {
   if (type === 'quick') return 'Быстрый'
   if (type === 'scheduled') return 'Плановый'
@@ -276,6 +304,8 @@ export default function InspectionFormPage() {
         })),
         accident_occurred_at: inspection.type === 'accident' && accidentOccurredAt ? new Date(accidentOccurredAt).toISOString() : undefined,
         accident_location: inspection.type === 'accident' ? accidentLocation : undefined,
+        odometer_value: (inspection.type === 'quick' || inspection.type === 'scheduled') && odometerValue ? parseInt(odometerValue, 10) : undefined,
+        odometer_unit: (inspection.type === 'quick' || inspection.type === 'scheduled') && odometerUnit ? odometerUnit : undefined,
       })
 
       if (result.error) {
@@ -515,7 +545,7 @@ export default function InspectionFormPage() {
                 </div>
                 <div>
                   <label className="mb-1 block text-sm font-medium text-slate-700">Место ДТП</label>
-                  <input
+<input
                     type="text"
                     value={accidentLocation}
                     onChange={(event) => setAccidentLocation(event.target.value)}
@@ -526,21 +556,27 @@ export default function InspectionFormPage() {
               </div>
               <p className="mt-3 text-xs text-slate-500">Время осмотра: {formatDateTime(inspection?.created_at)}</p>
             </div>
-          ) : null}
-
-          {inspection?.type === 'accident' ? (
+          ) : (inspection?.type === 'quick' || inspection?.type === 'scheduled') ? (
             <div className="mb-6 rounded-xl border border-slate-200 bg-slate-50 p-4">
-              <div className="mb-3 flex items-center justify-between">
-                <h2 className="text-base font-semibold text-slate-900">Сводка по инциденту</h2>
-                <span className="rounded-full bg-red-100 px-3 py-1 text-xs font-medium text-red-700">ДТП</span>
-              </div>
-              <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-                {accidentSummary.map((item) => (
-                  <div key={item.label} className="rounded-lg border border-slate-200 bg-white px-4 py-3">
-                    <div className="text-xs text-slate-500">{item.label}</div>
-                    <div className="mt-1 text-sm font-medium text-slate-900">{item.value}</div>
-                  </div>
-                ))}
+              <h2 className="mb-3 text-base font-semibold text-slate-900">Одометр</h2>
+              <div className="flex items-center gap-3">
+                <div className="flex-1">
+                  <input
+                    type="number"
+                    value={odometerValue}
+                    onChange={(event) => setOdometerValue(event.target.value)}
+                    placeholder="Пробег"
+                    className="w-full rounded-lg border px-3 py-2 text-sm"
+                  />
+                </div>
+                <select
+                  value={odometerUnit}
+                  onChange={(event) => setOdometerUnit(event.target.value)}
+                  className="rounded-lg border px-3 py-2 text-sm"
+                >
+                  <option value="km">км</option>
+                  <option value="miles">миль</option>
+                </select>
               </div>
             </div>
           ) : null}
@@ -553,11 +589,13 @@ export default function InspectionFormPage() {
           <div className="space-y-3">
             {checklist.map((item, index) => {
               const existingDefect = inspection?.defects.find((defect) => defect.title === item.title)
-
               return (
                 <div key={item.title} className={`rounded-lg border p-4 ${!item.result ? 'border-red-200 bg-red-50' : 'border-slate-200 bg-slate-50'}`}>
                   <div className="mb-2 flex items-center justify-between">
-                    <span className="font-medium text-slate-900">{item.title}</span>
+                    <div className="flex items-center gap-2">
+                      <span className="font-medium text-slate-900">{item.title}</span>
+                      {!item.result && <span className="rounded bg-red-100 px-1.5 py-0.5 text-xs text-red-700">ДЕФЕКТ</span>}
+                    </div>
                     <div className="flex gap-2">
                       <button
                         type="button"

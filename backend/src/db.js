@@ -245,6 +245,21 @@ export async function initDatabase() {
   }
 
   db.run(`
+    CREATE TABLE IF NOT EXISTS companies (
+      id TEXT PRIMARY KEY,
+      slug TEXT UNIQUE NOT NULL,
+      name TEXT NOT NULL,
+      region_code TEXT,
+      data_residency TEXT,
+      api_cluster_key TEXT,
+      storage_cluster_key TEXT,
+      ocr_cluster_key TEXT,
+      status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'inactive')),
+      created_at TEXT DEFAULT (datetime('now'))
+    )
+  `)
+
+  db.run(`
     CREATE TABLE IF NOT EXISTS vehicles (
       id TEXT PRIMARY KEY,
       number TEXT NOT NULL,
@@ -378,6 +393,11 @@ export async function initDatabase() {
 
   try {
     db.run(`ALTER TABLE vehicles ADD COLUMN region TEXT`)
+  } catch {
+  }
+
+  try {
+    db.run(`ALTER TABLE vehicles ADD COLUMN company_id TEXT DEFAULT 'default'`)
   } catch {
   }
 

@@ -26,6 +26,31 @@ export type LoginResponse = {
 
 export type UserRole = 'inspector' | 'manager' | 'admin' | string
 
+export type CompanyRecord = {
+  id: string
+  slug: string
+  name: string
+  region_code?: string
+  data_residency?: string
+  api_cluster_key?: string
+  storage_cluster_key?: string
+  ocr_cluster_key?: string
+  status: 'active' | 'inactive'
+  created_at: string
+}
+
+export type CreateCompanyPayload = {
+  slug: string
+  name: string
+  region_code?: string
+  data_residency?: string
+  api_cluster_key?: string
+  storage_cluster_key?: string
+  ocr_cluster_key?: string
+}
+
+export type UpdateCompanyPayload = Partial<CreateCompanyPayload> & { status?: 'active' | 'inactive' }
+
 export type UserRecord = {
   id: string
   email: string
@@ -230,6 +255,8 @@ export type UpdateInspectionPayload = {
   checklist: ChecklistItemInput[]
   accident_occurred_at?: string
   accident_location?: string
+  odometer_value?: number
+  odometer_unit?: string
 }
 
 export type InspectionCreateResponse = {

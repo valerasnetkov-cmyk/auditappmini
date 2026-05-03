@@ -73,6 +73,7 @@ export default function Layout({ children, currentPage }: LayoutProps) {
     { href: '/inspections', label: 'Осмотры', icon: 'IN', key: 'inspections' },
     { href: '/defects', label: 'Дефекты', icon: 'DF', key: 'defects' },
     { href: '/users', label: 'Пользователи', icon: 'US', key: 'users', managerOnly: true },
+    { href: '/companies', label: 'Компании', icon: 'CO', key: 'companies', managerOnly: true },
     { href: '/profile', label: 'Профиль', icon: 'PR', key: 'profile' },
     { href: '/settings', label: 'Настройки', icon: 'ST', key: 'settings', managerOnly: true },
   ]

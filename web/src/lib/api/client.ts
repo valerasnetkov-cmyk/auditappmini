@@ -4,6 +4,8 @@ import type {
   ApiResponse,
   AuthUser,
   ChecklistItemInput,
+  CompanyRecord,
+  CreateCompanyPayload,
   CreateInspectionPayload,
   CreateRegionPayload,
   CreateUserPayload,
@@ -21,6 +23,7 @@ import type {
   NotificationItem,
   RegionRecord,
   SettingsResponse,
+  UpdateCompanyPayload,
   UpdateDefectPayload,
   UpdateInspectionPayload,
   UpdateUserPayload,
@@ -174,6 +177,10 @@ class ApiClient {
 
   async getMe() {
     return this.request<AuthUser>('/auth/me')
+  }
+
+  async checkHealth() {
+    return this.request<{ status: string; version: string }>('/health')
   }
 
   async getVehicles(params?: { page?: number; limit?: number; search?: string; status?: string }) {
@@ -441,6 +448,34 @@ class ApiClient {
   async reopenDefect(defectId: string) {
     return this.request<any>(`/defects/${defectId}/reopen`, {
       method: 'POST',
+    })
+  }
+
+  async getCompanies() {
+    return this.request<CompanyRecord[]>('/companies')
+  }
+
+  async getCompany(id: string) {
+    return this.request<CompanyRecord>(`/companies/${id}`)
+  }
+
+  async createCompany(data: CreateCompanyPayload) {
+    return this.request<CompanyRecord>('/companies', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    })
+  }
+
+  async updateCompany(id: string, data: UpdateCompanyPayload) {
+    return this.request<CompanyRecord>(`/companies/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    })
+  }
+
+  async deleteCompany(id: string) {
+    return this.request<void>(`/companies/${id}`, {
+      method: 'DELETE',
     })
   }
 }

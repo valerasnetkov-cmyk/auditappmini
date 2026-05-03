@@ -88,26 +88,47 @@ export function registerVehicleNumberRecognitionRoutes({ app, db, authenticate, 
       return res.status(400).json({ error: API_MESSAGES?.vehicleNumberRequired || 'Укажите номер техники' })
     }
 
-    // Normalize to Latin letters (same as in backend)
-    const normalized = number.trim().toUpperCase().replace(/\s+/g, '')
+// Map Latin to Cyrillic for Russian license plates
+    const cyrillicMap = {
+      A: 'A', B: 'B', E: 'E', K: 'K', M: 'M', H: 'H',
+      O: 'O', P: 'P', C: 'C', T: 'T', Y: 'Y', X: 'X'
+    }
+    
+    // Convert user input to Cyrillic to match database
+    let normalized = number.trim().toUpperCase().replace(/\s+/g, '')
+    let cyrillicNumber = ''
+    for (const char of normalized) {
+      cyrillicNumber += cyrillicMap[char] || char
+    }
 
-    // Try to find vehicle by normalized number
-    const vehicle = db.prepare('SELECT * FROM vehicles WHERE number = ?').get(normalized)
+    // Try both Latin and Cyrillic versions
+    const companyId = req.user.company_id || 'default-company'
+    let vehicle = null
+    try {
+      vehicle = db.prepare('SELECT * FROM vehicles WHERE (number = ? OR number = ?) AND (company_id = ? OR company_id IS NULL)').get(normalized, cyrillicNumber, companyId)
+    } catch {
+      vehicle = db.prepare('SELECT * FROM vehicles WHERE number = ? OR number = ?').get(normalized, cyrillicNumber)
+    }
 
     if (vehicle) {
       return res.json({
         found: true,
-        vehicle_id: vehicle.id,
-        vehicle_number: vehicle.number,
-        vehicle_name: vehicle.name,
-        status: vehicle.status
+        data: {
+          id: vehicle.id,
+          number: vehicle.number,
+          name: vehicle.name,
+          status: vehicle.status,
+          qr_code: vehicle.qr_code,
+          region: vehicle.region,
+          company_id: vehicle.company_id
+        }
       })
     }
 
     res.json({
       found: false,
       normalized_number: normalized,
-      message: 'Техника с таким номером не найдена'
+      message: API_MESSAGES?.vehicleNotFound || 'Техника с таким номером не найдена'
     })
   })
 }

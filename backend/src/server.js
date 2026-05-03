@@ -10,6 +10,7 @@ import { fileURLToPath } from 'url'
 import fs from 'fs'
 import { initDatabase, getDb } from './db.js'
 import registerCompleteInspectionRoutes from './routes/completeInspection.js'
+import registerCompanyRoutes from './routes/companies.js'
 import { registerOdometerRoutes, registerVehicleNumberRecognitionRoutes } from './routes/odometer.js'
 import { photoRequirements, photoTypeLabels, defectCategories } from './routes/photo-requirements.js'
 
@@ -25,7 +26,7 @@ const PORT = process.env.PORT || 3001
 const DEFAULT_JWT_SECRET = 'audit-secret-key-2024'
 const JWT_SECRET = process.env.JWT_SECRET || DEFAULT_JWT_SECRET
 const isProduction = process.env.NODE_ENV === 'production'
-const corsOrigins = (process.env.CORS_ORIGINS || 'http://localhost:3000,http://localhost:3002')
+const corsOrigins = (process.env.CORS_ORIGINS || 'http://localhost:3000,http://localhost:3002,http://localhost:8083,http://localhost:8081,http://localhost:8082')
   .split(',')
   .map(origin => origin.trim())
   .filter(Boolean)
@@ -63,12 +64,26 @@ app.use(cors({
 
 app.use(express.json())
 
+function sendError(res, status, message) {
+  return res.status(status).json({ error: message })
+}
+
+app.get('/api/health', (req, res) => {
+  const dbOk = db ? true : false
+  res.json({
+    status: dbOk ? 'ok' : 'error',
+    timestamp: new Date().toISOString(),
+    uptime: process.uptime(),
+    version: '1.0.0',
+  })
+})
+
 app.use((req, res, next) => {
   console.log(`[${new Date().toISOString()}] ${req.method} ${req.url} from ${req.ip}`)
   next()
 })
-app.use('/uploads', express.static(uploadsDir))
 
+// Define authenticate before using it
 const authenticate = (req, res, next) => {
   const authHeader = req.headers.authorization
   if (!authHeader || !authHeader.startsWith('Bearer ')) {
@@ -85,6 +100,30 @@ const authenticate = (req, res, next) => {
   }
 }
 
+const getMimeType = (filename) => {
+  const ext = filename.toLowerCase().split('.').pop()
+  const types = { jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png', gif: 'image/gif', webp: 'image/webp' }
+  return types[ext] || 'application/octet-stream'
+}
+
+// Public uploads for login page demo (no auth required)
+app.use('/uploads/demo', express.static(uploadsDir, {
+  setHeaders: (res, path) => {
+    const mime = getMimeType(path)
+    res.setHeader('Content-Type', mime)
+    res.setHeader('Cache-Control', 'public, max-age=31536000')
+  }
+}))
+
+// Protected uploads - require authentication
+app.use('/uploads', authenticate, express.static(uploadsDir, {
+  setHeaders: (res, path) => {
+    const mime = getMimeType(path)
+    res.setHeader('Content-Type', mime)
+    res.setHeader('Cache-Control', 'public, max-age=31536000')
+  }
+}))
+
 const db = getDb()
 const NUMERIC_SETTING_KEYS = new Set(['scheduled_inspection_days', 'notification_days_before', 'timezone_offset'])
 
@@ -100,7 +139,7 @@ function readSettings() {
 }
 
 function getUserSummaryById(id) {
-  return db.prepare('SELECT id, email, name, role FROM users WHERE id = ?').get(id)
+  return db.prepare('SELECT id, email, name, role, company_id FROM users WHERE id = ?').get(id)
 }
 
 function getUserIdByEmail(email) {
@@ -142,12 +181,12 @@ function getInspectionById(id) {
   return db.prepare('SELECT * FROM inspections WHERE id = ?').get(id)
 }
 
-function createUserRecord({ id, email, passwordHash, name, role, ignoreExisting = false }) {
+function createUserRecord({ id, email, passwordHash, name, role, companyId = 'default-company', ignoreExisting = false }) {
   const statement = ignoreExisting
-    ? db.prepare('INSERT OR IGNORE INTO users (id, email, password, name, role) VALUES (?, ?, ?, ?, ?)')
-    : db.prepare('INSERT INTO users (id, email, password, name, role) VALUES (?, ?, ?, ?, ?)')
+    ? db.prepare('INSERT OR IGNORE INTO users (id, email, password, name, role, company_id) VALUES (?, ?, ?, ?, ?, ?)')
+    : db.prepare('INSERT INTO users (id, email, password, name, role, company_id) VALUES (?, ?, ?, ?, ?, ?)')
 
-  return statement.run(id, email, passwordHash, name, role)
+  return statement.run(id, email, passwordHash, name, role, companyId)
 }
 
 function updateUserRecord(id, { email, name, role, passwordHash }) {
@@ -168,11 +207,11 @@ function updateUserRecord(id, { email, name, role, passwordHash }) {
   }
 }
 
-function createVehicleRecord({ id, number, name, status, qrCode, region }) {
+function createVehicleRecord({ id, number, name, status, qrCode, region, companyId = 'default-company' }) {
   return db.prepare(`
-    INSERT INTO vehicles (id, number, name, status, qr_code, region)
-    VALUES (?, ?, ?, ?, ?, ?)
-  `).run(id, number.toUpperCase(), name, status, qrCode || null, region || null)
+    INSERT INTO vehicles (id, number, name, status, qr_code, region, company_id)
+    VALUES (?, ?, ?, ?, ?, ?, ?)
+  `).run(id, number, name, status, qrCode, region, companyId)
 }
 
 function updateVehicleRecord(id, { number, name, status, qrCode, region }) {
@@ -205,22 +244,12 @@ function deleteRegionRecord(id) {
 }
 
 const LICENSE_PLATE_LATIN_TO_CYRILLIC = {
-  A: 'А',
-  B: 'В',
-  E: 'Е',
-  K: 'К',
-  M: 'М',
-  H: 'Н',
-  O: 'О',
-  P: 'Р',
-  C: 'С',
-  T: 'Т',
-  Y: 'У',
-  X: 'Х',
+  A: 'A', B: 'B', E: 'E', K: 'K', M: 'M', H: 'H',
+  O: 'O', P: 'P', C: 'C', T: 'T', Y: 'Y', X: 'X'
 }
+const LICENSE_PLATE_ALLOWED_LETTERS = ['A', 'B', 'E', 'K', 'M', 'H', 'O', 'P', 'C', 'T', 'Y', 'X']
 
-const LICENSE_PLATE_ALLOWED_LETTERS = ['А', 'В', 'Е', 'К', 'М', 'Н', 'О', 'Р', 'С', 'Т', 'У', 'Х']
-const RUSSIAN_LICENSE_PLATE_PATTERN = /^[АВЕКМНОРСТУХ]\d{3}[АВЕКМНОРСТУХ]{2}\d{2,3}$/
+const RUSSIAN_LICENSE_PLATE_PATTERN = /^[ABEKMHOPCTYX]\d{3}[ABEKMHOPCTYX]{2}\d{2,3}$/
 
 function randomInteger(maxExclusive) {
   return Math.floor(Math.random() * maxExclusive)
@@ -245,54 +274,45 @@ function generateDemoVehicleNumber() {
 }
 
 const API_MESSAGES = {
-  authRequired: 'Необходима авторизация',
-  invalidToken: 'Недействительный токен',
-  loginCredentialsRequired: 'Укажите email и пароль',
-  userNotFound: 'Пользователь не найден',
-  invalidPassword: 'Неверный пароль',
-  accessDenied: 'Доступ запрещён',
-  mfaNotConfigured: 'MFA не настроен',
-  invalidMfaCode: 'Неверный код MFA',
-  registerFieldsRequired: 'Укажите email, пароль и имя',
-  userEmailExists: 'Пользователь с таким email уже существует',
-  managersOnly: 'Доступ только для менеджеров',
-  allFieldsRequired: 'Заполните все поля',
-  emailAlreadyUsed: 'Email уже используется',
-  noAccess: 'Нет доступа',
-  selfDeleteForbidden: 'Нельзя удалить себя',
-  vehicleFieldsRequired: 'Укажите госномер и название техники',
-  vehicleNumberExists: 'Техника с таким госномером уже существует',
-  invalidVehicleNumber: 'Некорректный госномер. Используйте формат А123ВС77 и только разрешённые буквы: А, В, Е, К, М, Н, О, Р, С, Т, У, Х',
-  vehicleNotFound: 'Техника не найдена',
-  regionNameRequired: 'Укажите название региона',
-  regionAlreadyExists: 'Такой регион уже существует',
-  regionNotFound: 'Регион не найден',
-  regionInUse: 'Нельзя удалить регион, пока он используется в карточках техники',
-  invalidRegion: 'Выберите регион из справочника',
-  defectNotFound: 'Дефект не найден',
-  defectTitleRequired: 'Заголовок дефекта обязателен',
-  inspectionNotFound: 'Осмотр не найден',
-  accidentDetailsRequired: 'Для осмотра ДТП укажите время и место происшествия',
-  settingsManagerOnly: 'Только менеджер может изменять настройки',
-  demoDataCreated: 'Демо-данные созданы',
-photosRequiredForDefect: 'Фото для дефекта не загружено',
-  odometerPhotoRequired: 'Фото одометра обязательно',
-  odometerValueRequired: 'Укажите корректное значение одометра',
-  vehicleNumberPhotoRequired: 'Фото номера обязательно',
-  vehicleNumberRequired: 'Укажите номер техники',
-  internalServerError: 'Внутренняя ошибка сервера',
+  authRequired: 'Authorization required',
+  invalidToken: 'Invalid token',
+  loginCredentialsRequired: 'Enter email and password',
+  userNotFound: 'User not found',
+  invalidPassword: 'Invalid password',
+  accessDenied: 'Access denied',
+  mfaNotConfigured: 'MFA not configured',
+  invalidMfaCode: 'Invalid MFA code',
+  registerFieldsRequired: 'Enter email, password and name',
+  userEmailExists: 'User with this email already exists',
+  managersOnly: 'Access only for managers',
+  allFieldsRequired: 'Fill in all fields',
+  emailAlreadyUsed: 'Email already used',
+  noAccess: 'No access',
+  selfDeleteForbidden: 'Cannot delete yourself',
+  vehicleFieldsRequired: 'Enter vehicle number and name',
+  vehicleNumberExists: 'Vehicle with this number already exists',
+  invalidVehicleNumber: 'Invalid number. Use format A123BC77 and only allowed letters: A, B, E, K, M, H, O, P, C, T, Y, X',
+  vehicleNotFound: 'Vehicle not found',
+  regionNameRequired: 'Enter region name',
+  regionNotFound: 'Region not found',
+  regionInUse: 'Cannot delete region while it is used in vehicle cards',
+  invalidRegion: 'Select region from directory',
+  inspectionNotFound: 'Inspection not found',
+  demoDataCreated: 'Demo data created',
+  odometerValueRequired: 'Enter correct odometer value',
+  vehicleNumberRequired: 'Enter vehicle number',
+  internalServerError: 'Internal server error',
 }
 
 // Register the complete-inspection route after API_MESSAGES is defined
 registerCompleteInspectionRoutes({ app, db, API_MESSAGES, getInspectionById, authenticate, photoRequirements })
 
+// Register company routes
+registerCompanyRoutes({ app, db, authenticate })
+
 // Register odometer and vehicle number recognition routes
 registerOdometerRoutes({ app, db, authenticate, API_MESSAGES, upload })
 registerVehicleNumberRecognitionRoutes({ app, db, authenticate, API_MESSAGES, upload })
-
-function sendError(res, status, message) {
-  return res.status(status).json({ error: message })
-}
 
 function sendInternalError(res, scope, err) {
   console.error(`${scope}:`, err)
@@ -418,15 +438,16 @@ app.post('/api/auth/login', (req, res) => {
     return res.json({ mfaRequired: true, user: { id: user.id, email: user.email, name: user.name, role: user.role } })
   }
 
+  const companyId = user.company_id || 'default-company'
   const token = jwt.sign(
-    { id: user.id, email: user.email, role: user.role, name: user.name },
+    { id: user.id, email: user.email, role: user.role, name: user.name, company_id: companyId },
     JWT_SECRET,
     { expiresIn: '7d' }
   )
 
   res.json({
     token,
-    user: { id: user.id, email: user.email, name: user.name, role: user.role }
+    user: { id: user.id, email: user.email, name: user.name, role: user.role, company_id: companyId }
   })
 })
 
@@ -495,10 +516,11 @@ app.get('/api/auth/me', authenticate, (req, res) => {
 
 app.get('/api/users', authenticate, (req, res) => {
   if (!ensureManager(req, res)) return
+  const companyId = req.user.company_id || 'default-company'
   
   const users = db.prepare(`
-    SELECT id, email, name, role, created_at, mfa_enabled FROM users ORDER BY created_at DESC
-  `).all()
+    SELECT id, email, name, role, company_id, created_at, mfa_enabled FROM users WHERE company_id = ? ORDER BY created_at DESC
+  `).all(companyId)
   
   res.json(users)
 })
@@ -804,9 +826,10 @@ app.delete('/api/vehicles/:id', authenticate, (req, res) => {
 app.get('/api/inspections', authenticate, (req, res) => {
   const { page = 1, limit = 20, type = '', vehicle = '', from = '', to = '' } = req.query
   const offset = (page - 1) * limit
+  const companyId = req.user.company_id || 'default-company'
 
-  let whereClause = '1=1'
-  const params = []
+  let whereClause = 'i.company_id = ?'
+  const params = [companyId]
 
   if (type) {
     whereClause += ' AND i.type = ?'
@@ -1048,9 +1071,10 @@ app.delete('/api/inspections/:id', authenticate, (req, res) => {
 app.get('/api/defects', authenticate, (req, res) => {
   const { page = 1, limit = 20, search = '', vehicle = '', from = '', to = '' } = req.query
   const offset = (page - 1) * limit
+  const companyId = req.user.company_id || 'default-company'
 
-  let whereClause = '1=1'
-  const params = []
+  let whereClause = 'd.company_id = ?'
+  const params = [companyId]
 
   if (search) {
     whereClause += ' AND (d.title LIKE ? OR d.comment LIKE ?)'
@@ -1325,6 +1349,34 @@ app.post('/api/seed', authenticate, (req, res) => {
 
   const { vehicles = 50, inspections = 100 } = req.body
 
+  // Create default company if none exists
+  const existingCompanies = db.prepare('SELECT COUNT(*) as count FROM companies').get().count
+  if (existingCompanies === 0) {
+    db.prepare(`
+      INSERT INTO companies (id, slug, name, region_code, data_residency, api_cluster_key, storage_cluster_key, ocr_cluster_key)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(
+      'default-company',
+      'default',
+      'Тестовая компания',
+      'RU-MOS',
+      'Russia',
+      'default-key',
+      'default-storage',
+      'default-ocr'
+    )
+  }
+
+  // Try to update all records to use default-company (may fail if column doesn't exist yet)
+  try {
+    db.prepare('UPDATE users SET company_id = ? WHERE company_id IS NULL OR company_id = ?').run('default-company', 'default')
+    db.prepare('UPDATE vehicles SET company_id = ? WHERE company_id IS NULL OR company_id = ?').run('default-company', 'default')
+    db.prepare('UPDATE inspections SET company_id = ? WHERE company_id IS NULL OR company_id = ?').run('default-company', 'default')
+    db.prepare('UPDATE defects SET company_id = ? WHERE company_id IS NULL OR company_id = ?').run('default-company', 'default')
+  } catch (e) {
+    console.log('Note: Some company_id columns may not exist yet:', e.message)
+  }
+
   // Create demo users
   const demoUsers = [
     { email: 'demo_inspector_1@example.com', name: 'Иванов Иван', role: 'inspector' },
@@ -1345,18 +1397,19 @@ app.post('/api/seed', authenticate, (req, res) => {
     }
   })
 
-  // Create vehicles
+// Create vehicles
   const now = new Date()
   const vehicleRecords = []
   const latestScheduledInspectionByVehicle = new Map()
   const insertVehicle = db.prepare(`
-    INSERT INTO vehicles (id, number, name, status, qr_code, region, created_at, last_scheduled_inspection)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO vehicles (id, number, name, status, qr_code, region, company_id, created_at, last_scheduled_inspection)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
   `)
 
   const carNames = ['ГАЗель Next', 'ГАЗель Бизнес', 'Соболь', 'Ford Transit', 'Mercedes Sprinter', 'Volkswagen Crafter']
   const statuses = ['active', 'repair']
   const regions = ['Москва', 'Московская обл.', 'Санкт-Петербург', 'Краснодар', 'Екатеринбург', 'Новосибирск']
+  const companyId = 'default-company'
 
   for (let i = 1; i <= vehicles; i++) {
     const id = uuidv4()
@@ -1366,7 +1419,7 @@ app.post('/api/seed', authenticate, (req, res) => {
     const region = randomItem(regions)
     const createdAt = randomDateBetween(new Date(now.getTime() - 180 * 24 * 60 * 60 * 1000), now).toISOString()
 
-    insertVehicle.run(id, number, name, status, name.split(' ')[0], region, createdAt, null)
+    insertVehicle.run(id, number, name, status, name.split(' ')[0], region, companyId, createdAt, null)
     vehicleRecords.push({ id, createdAt })
   }
 
@@ -1440,6 +1493,7 @@ app.post('/api/seed', authenticate, (req, res) => {
 app.get('/api/analytics/overview', authenticate, (req, res) => {
   const { from = '', to = '' } = req.query
   const now = new Date()
+  const companyId = req.user.company_id || 'default-company'
   
   let dateFrom = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000)
   let dateTo = now
@@ -1447,41 +1501,41 @@ app.get('/api/analytics/overview', authenticate, (req, res) => {
   if (from) dateFrom = new Date(from)
   if (to) dateTo = new Date(to + ' 23:59:59')
 
-  // Total stats
-  const totalVehicles = db.prepare('SELECT COUNT(*) as count FROM vehicles').get().count
-  const totalInspections = db.prepare('SELECT COUNT(*) as count FROM inspections').get().count
-  const totalDefects = db.prepare('SELECT COUNT(*) as count FROM defects').get().count
+  // Total stats by company
+  const totalVehicles = db.prepare('SELECT COUNT(*) as count FROM vehicles WHERE company_id = ?').get(companyId).count
+  const totalInspections = db.prepare('SELECT COUNT(*) as count FROM inspections WHERE company_id = ?').get(companyId).count
+  const totalDefects = db.prepare('SELECT COUNT(*) as count FROM defects WHERE company_id = ?').get(companyId).count
 
-  // Week stats
+  // Week stats by company
   const weekInspections = db.prepare(`
-    SELECT COUNT(*) as count FROM inspections WHERE created_at >= ?
-  `).get(dateFrom.toISOString()).count
+    SELECT COUNT(*) as count FROM inspections WHERE company_id = ? AND created_at >= ?
+  `).get(companyId, dateFrom.toISOString()).count
 
   const weekDefects = db.prepare(`
-    SELECT COUNT(*) as count FROM defects WHERE created_at >= ?
-  `).get(dateFrom.toISOString()).count
+    SELECT COUNT(*) as count FROM defects WHERE company_id = ? AND created_at >= ?
+  `).get(companyId, dateFrom.toISOString()).count
 
   // Month stats
   const monthFrom = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000)
   const monthInspections = db.prepare(`
-    SELECT COUNT(*) as count FROM inspections WHERE created_at >= ?
-  `).get(monthFrom.toISOString()).count
+    SELECT COUNT(*) as count FROM inspections WHERE company_id = ? AND created_at >= ?
+  `).get(companyId, monthFrom.toISOString()).count
 
   // Vehicles by status
   const vehiclesByStatus = db.prepare(`
-    SELECT status, COUNT(*) as count FROM vehicles GROUP BY status
-  `).all()
+    SELECT status, COUNT(*) as count FROM vehicles WHERE company_id = ? GROUP BY status
+  `).all(companyId)
 
   // Inspections by type
   const inspectionsByType = db.prepare(`
-    SELECT type, COUNT(*) as count FROM inspections GROUP BY type
-  `).all()
+    SELECT type, COUNT(*) as count FROM inspections WHERE company_id = ? GROUP BY type
+  `).all(companyId)
 
   // Accident stats
-  const totalAccidents = db.prepare(`SELECT COUNT(*) as count FROM inspections WHERE type = 'accident'`).get().count
+  const totalAccidents = db.prepare(`SELECT COUNT(*) as count FROM inspections WHERE company_id = ? AND type = 'accident'`).get(companyId).count
   const lastAccident = db.prepare(`
-    SELECT i.created_at FROM inspections i WHERE type = 'accident' ORDER BY created_at DESC LIMIT 1
-  `).get()
+    SELECT i.created_at FROM inspections i WHERE i.company_id = ? AND i.type = 'accident' ORDER BY created_at DESC LIMIT 1
+  `).get(companyId)
   
   let daysWithoutAccident = null
   if (lastAccident) {
@@ -1563,48 +1617,52 @@ app.get('/api/analytics/overview', authenticate, (req, res) => {
 
 app.get('/api/analytics/export/excel', authenticate, (req, res) => {
   const { type = 'vehicles' } = req.query
+  const companyId = req.user.company_id || 'default-company'
 
   let data
   let filename
 
   if (type === 'vehicles') {
     data = db.prepare(`
-      SELECT v.number, v.name, v.status, v.qr_code, v.created_at,
+      SELECT v.number, v.name, v.status, v.region, v.qr_code, v.created_at,
              (SELECT COUNT(*) FROM inspections WHERE vehicle_id = v.id) as inspections_count,
              (SELECT COUNT(*) FROM defects d JOIN inspections i ON d.inspection_id = i.id WHERE i.vehicle_id = v.id) as defects_count
       FROM vehicles v
+      WHERE v.company_id = ?
       ORDER BY v.number
-    `).all()
-    filename = 'vehicles.xlsx'
+    `).all(companyId)
+    filename = 'vehicles.json'
   } else if (type === 'inspections') {
     data = db.prepare(`
       SELECT i.id, v.number as vehicle_number, v.name as vehicle_name, 
-             i.type, i.completed, i.created_at, u.name as inspector_name,
+             i.type, i.completed, i.created_at, i.accident_occurred_at, i.accident_location,
+             u.name as inspector_name,
              (SELECT COUNT(*) FROM defects WHERE inspection_id = i.id) as defects_count
       FROM inspections i
       JOIN vehicles v ON i.vehicle_id = v.id
       JOIN users u ON i.inspector_id = u.id
+      WHERE i.company_id = ?
       ORDER BY i.created_at DESC
       LIMIT 1000
-    `).all()
-    filename = 'inspections.xlsx'
+    `).all(companyId)
+    filename = 'inspections.json'
   } else if (type === 'defects') {
     data = db.prepare(`
-      SELECT d.title, d.comment, d.created_at,
+      SELECT d.title, d.comment, d.status, d.created_at,
              v.number as vehicle_number, v.name as vehicle_name,
              i.type as inspection_type
       FROM defects d
       JOIN inspections i ON d.inspection_id = i.id
       JOIN vehicles v ON i.vehicle_id = v.id
+      WHERE d.company_id = ?
       ORDER BY d.created_at DESC
       LIMIT 1000
-    `).all()
-    filename = 'defects.xlsx'
+    `).all(companyId)
+    filename = 'defects.json'
   }
 
-  // Return as JSON (frontend will handle Excel conversion)
   res.setHeader('Content-Type', 'application/json')
-  res.setHeader('Content-Disposition', `attachment; filename=${filename.replace('xlsx', 'json')}`)
+  res.setHeader('Content-Disposition', `attachment; filename=${filename}`)
   res.json({ data, exportedAt: new Date().toISOString() })
 })
 
