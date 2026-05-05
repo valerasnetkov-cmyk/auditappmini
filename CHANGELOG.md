@@ -1,114 +1,39 @@
-# Changelog - 2026-05
+# Changelog
 
-## Changes
+Все заметные изменения проекта фиксируются в этом файле.
 
-### Backend
+Формат основан на [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
-#### Bug Fixes
-- Fixed duplicate `photosRequiredForDefect` in API_MESSAGES (removed duplicate)
-- Fixed missing `defectTitleRequired` message key
-- Fixed ReferenceError in `registerCompleteInspectionRoutes` - moved after API_MESSAGES definition
-- Added `authenticate` middleware to completeInspection route
-- Fixed admin seed - now requires both ADMIN_EMAIL AND ADMIN_PASSWORD
+## [Unreleased]
 
-#### New Features
+### Fixed
+- Карточка дефекта в web переписана без битой кодировки: теперь показывает данные ДТП, время осмотра, время фиксации дефекта, фото, историю статуса и связанные записи.
+- Исправлены общие компоненты `Timeline` и `PhotoGallery`: русские подписи больше не отображаются mojibake, фото строят URL через backend base URL.
+- Приведена логика российских госномеров к единому правилу: канонический формат в данных и UI теперь кириллический, например `А123ВС77` или `А123ВС177`.
+- Backend и frontend принимают латинские аналоги `A, B, E, K, M, H, O, P, C, T, Y, X`, но нормализуют их в разрешенные кириллические символы `А, В, Е, К, М, Н, О, Р, С, Т, У, Х`.
+- Исправлена миграция существующей SQLite-базы: при старте добавляются отсутствующие поля `created_at`, `company_id`, поля одометра, ДТП и дефектов.
+- Исправлен backend smoke-сбой `/api/users`: существующая база без `users.created_at` теперь корректно обновляется при инициализации.
+- Исправлена валидация ДТП-осмотров: неполные данные ДТП возвращают `400`, а не приводят к sql.js ошибке с `undefined`.
+- Исправлены русские сообщения в маршрутах одометра, распознавания номера и завершения осмотра.
+- Исправлены PM2 scripts: команды используют `ecosystem.config.cjs`, который совместим с ES module проектом.
+- Audit logger теперь импортирует `crypto` явно и пишет `company_id` из текущего пользователя.
 
-**Odometer API**
-- `POST /api/odometer/recognize` - recognize odometer from photo (placeholder)
-- `POST /api/inspections/:id/odometer` - save confirmed odometer
+### Changed
+- Demo-номера в seed-данных генерируются кириллицей.
+- `/api/vehicles/resolve-number` ищет технику по кириллическому каноническому номеру.
+- OCR/ANPR endpoints остаются MVP-заглушками и требуют ручного подтверждения инспектором.
+- Проверка планового осмотра теперь считает незаполненными только пункты без результата, а не пункты с результатом `false`, потому что `false` означает выявленный дефект.
 
-**Vehicle Number API**
-- `POST /api/vehicle-number/recognize` - recognize number from photo (placeholder)
-- `POST /api/vehicles/resolve-number` - normalize and find vehicle
+### Verified
+- `npm run verify` проходит полностью: backend smoke и production build frontend.
 
-**Photo Requirements**
-- `GET /api/photo-requirements/:type` - requirements by inspection type
-- `GET /api/defect-categories` - defect categories
+## [1.0.0] - 2024-05-XX
 
-**Inspection Completion Validation**
-- Validates odometer for quick/scheduled inspections
-- Validates accident time/location for accident inspections
-- Validates required photos by inspection type
-- Validates each defect has photos
-
-**Database**
-- Added `company_id` to users, vehicles, inspections, defects tables
-- Added `odometer_value`, `odometer_unit`, `odometer_recognized_at` to inspections
-- Added `audit_logs` table for tracking important actions
-
-**Audit Logging**
-- Added `backend/src/routes/audit.js` utility
-- Track user actions, vehicle changes, inspection events
-
-### Frontend
-
-#### New Features
-- **Theme System**
-  - `web/src/lib/theme.tsx` - ThemeProvider with light/dark/system support
-  - `web/src/components/ThemeSwitcher.tsx` - theme toggle component
-  - CSS variables in `globals.css` for dark theme
-
-- **i18n (Internationalization)**
-  - `web/src/lib/i18n.ts` - translations for RU/EN
-  - `web/src/components/LocaleSwitcher.tsx` - language toggle
-  - Added validation error messages
-
-- **Settings Page**
-  - `web/src/app/settings/page.tsx` - settings with theme/language toggles
-
-- **TypeScript Types**
-  - Added `odometer_value`, `odometer_unit` to InspectionDetail
-
-#### Configuration
-- Updated Next.js to 16.2.4
-- Updated React to 18.x
-- Added `reactStrictMode: true` to next.config.js
-
-### Route Modules
-- `backend/src/routes/odometer.js` - odometer and vehicle number recognition
-- `backend/src/routes/photo-requirements.js` - photo requirements and defect categories
-- `backend/src/routes/audit.js` - audit logging utilities
-
-### Documentation
-- Updated implementation plan checks
-
-## Breaking Changes
-- Admin seeding requires both ADMIN_EMAIL and ADMIN_PASSWORD env vars (no default password)
-- Inspection completion now requires odometer for quick/scheduled types
-- Inspection completion requires accident details for accident type
-- All business tables now have `company_id` field (defaults to 'default' for backward compatibility)
-
-## API Endpoints Added
-```
-GET  /api/photo-requirements/:type
-GET  /api/defect-categories
-POST /api/odometer/recognize
-POST /api/inspections/:id/odometer
-POST /api/vehicle-number/recognize
-POST /api/vehicles/resolve-number
-```
-
-## Files Created
-```
-backend/src/routes/audit.js
-backend/src/routes/odometer.js
-backend/src/routes/photo-requirements.js
-web/src/lib/theme.tsx
-web/src/lib/i18n.ts
-web/src/components/ThemeSwitcher.tsx
-web/src/components/LocaleSwitcher.tsx
-web/src/app/settings/page.tsx
-```
-
-## Files Modified
-```
-backend/src/server.js
-backend/src/db.js
-backend/src/routes/completeInspection.js
-web/package.json
-web/next.config.js
-web/src/app/layout.tsx
-web/src/app/globals.css
-web/src/lib/types.ts
-web/src/lib/api/client.ts
-```
+### Added
+- Initial release of Audit Tech application.
+- Vehicle inspection and defect tracking system.
+- QR code based vehicle identification.
+- Multi-role user support.
+- Photo documentation for inspections and defects.
+- Odometer tracking.
+- Analytics dashboard.

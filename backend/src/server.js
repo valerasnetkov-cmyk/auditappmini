@@ -7,7 +7,11 @@ import bcrypt from 'bcryptjs'
 import { v4 as uuidv4 } from 'uuid'
 import multer from 'multer'
 import path from 'path'
-import { transliterateCyrillicToLatin } from './utils/transliteration.js'
+import {
+  LICENSE_PLATE_ALLOWED_CYRILLIC,
+  normalizeVehicleNumberToCyrillic,
+  isValidRussianLicensePlate,
+} from './utils/transliteration.js'
 import { fileURLToPath } from 'url'
 import fs from 'fs'
 import { initDatabase, getDb } from './db.js'
@@ -183,7 +187,7 @@ function getInspectionById(id) {
   return db.prepare('SELECT * FROM inspections WHERE id = ?').get(id)
 }
 
-function createUserRecord({ id, email, passwordHash, name, role, companyId = 'default-company', ignoreExisting = false }) {
+function createUserRecord({ id, email, passwordHash, name, role, companyId = 'default', ignoreExisting = false }) {
   const statement = ignoreExisting
     ? db.prepare('INSERT OR IGNORE INTO users (id, email, password, name, role, company_id) VALUES (?, ?, ?, ?, ?, ?)')
     : db.prepare('INSERT INTO users (id, email, password, name, role, company_id) VALUES (?, ?, ?, ?, ?, ?)')
@@ -209,7 +213,7 @@ function updateUserRecord(id, { email, name, role, passwordHash }) {
   }
 }
 
-function createVehicleRecord({ id, number, name, status, qrCode, region, companyId = 'default-company' }) {
+function createVehicleRecord({ id, number, name, status, qrCode, region, companyId = 'default' }) {
   return db.prepare(`
     INSERT INTO vehicles (id, number, name, status, qr_code, region, company_id)
     VALUES (?, ?, ?, ?, ?, ?, ?)
@@ -245,14 +249,6 @@ function deleteRegionRecord(id) {
   return db.prepare('DELETE FROM regions WHERE id = ?').run(id)
 }
 
-const LICENSE_PLATE_LATIN_TO_CYRILLIC = {
-  A: 'A', B: 'B', E: 'E', K: 'K', M: 'M', H: 'H',
-  O: 'O', P: 'P', C: 'C', T: 'T', Y: 'Y', X: 'X'
-}
-const LICENSE_PLATE_ALLOWED_LETTERS = ['A', 'B', 'E', 'K', 'M', 'H', 'O', 'P', 'C', 'T', 'Y', 'X']
-
-const RUSSIAN_LICENSE_PLATE_PATTERN = /^[ABEKMHOPCTYX]\d{3}[ABEKMHOPCTYX]{2}\d{2,3}$/
-
 function randomInteger(maxExclusive) {
   return Math.floor(Math.random() * maxExclusive)
 }
@@ -269,10 +265,9 @@ function randomDateBetween(startDate, endDate) {
 }
 
 function generateDemoVehicleNumber() {
-  const LATIN_LETTERS = ['A','B','E','K','M','H','O','P','C','T','Y','X']
-  const pickLetter = () => randomItem(LATIN_LETTERS)
-  const digits = String(randomInteger(1000)).padStart(3, '0')
-  const regionNumber = String(10 + randomInteger(190)).padStart(2, '0')
+  const pickLetter = () => LICENSE_PLATE_ALLOWED_CYRILLIC[Math.floor(Math.random() * LICENSE_PLATE_ALLOWED_CYRILLIC.length)]
+  const digits = String(Math.floor(Math.random() * 1000)).padStart(3, '0')
+  const regionNumber = String(10 + Math.floor(Math.random() * 190)).padStart(2, '0')
   return `${pickLetter()}${digits}${pickLetter()}${pickLetter()}${regionNumber}`
 }
 
@@ -294,13 +289,14 @@ const API_MESSAGES = {
   selfDeleteForbidden: 'Cannot delete yourself',
   vehicleFieldsRequired: 'Enter vehicle number and name',
   vehicleNumberExists: 'Vehicle with this number already exists',
-  invalidVehicleNumber: 'Invalid number. Use format A123BC77 and only allowed letters: A, B, E, K, M, H, O, P, C, T, Y, X',
+  invalidVehicleNumber: 'Некорректный номер. Используйте формат А123ВС77 или А123ВС177. Разрешены только А, В, Е, К, М, Н, О, Р, С, Т, У, Х',
   vehicleNotFound: 'Vehicle not found',
   regionNameRequired: 'Enter region name',
   regionNotFound: 'Region not found',
   regionInUse: 'Cannot delete region while it is used in vehicle cards',
   invalidRegion: 'Select region from directory',
   inspectionNotFound: 'Inspection not found',
+  accidentDetailsRequired: 'Укажите время и место ДТП',
   demoDataCreated: 'Demo data created',
   odometerValueRequired: 'Enter correct odometer value',
   vehicleNumberRequired: 'Enter vehicle number',
@@ -329,19 +325,7 @@ function normalizeRegionName(region) {
 }
 
 function normalizeVehicleNumber(number) {
-  if (typeof number !== 'string') return ''
-
-  return number
-    .trim()
-    .toUpperCase()
-    .replace(/\s+/g, '')
-    .split('')
-    .map((symbol) => LICENSE_PLATE_LATIN_TO_CYRILLIC[symbol] || symbol)
-    .join('')
-}
-
-function isValidRussianLicensePlate(number) {
-  return RUSSIAN_LICENSE_PLATE_PATTERN.test(normalizeVehicleNumber(number))
+  return normalizeVehicleNumberToCyrillic(number)
 }
 
 function validateVehiclePayload({ number, name, region }) {
@@ -441,7 +425,7 @@ app.post('/api/auth/login', (req, res) => {
     return res.json({ mfaRequired: true, user: { id: user.id, email: user.email, name: user.name, role: user.role } })
   }
 
-  const companyId = user.company_id || 'default-company'
+  const companyId = user.company_id || 'default'
   const token = jwt.sign(
     { id: user.id, email: user.email, role: user.role, name: user.name, company_id: companyId },
     JWT_SECRET,
@@ -519,7 +503,7 @@ app.get('/api/auth/me', authenticate, (req, res) => {
 
 app.get('/api/users', authenticate, (req, res) => {
   if (!ensureManager(req, res)) return
-  const companyId = req.user.company_id || 'default-company'
+  const companyId = req.user.company_id || 'default'
   
   const users = db.prepare(`
     SELECT id, email, name, role, company_id, created_at, mfa_enabled FROM users WHERE company_id = ? ORDER BY created_at DESC
@@ -829,7 +813,7 @@ app.delete('/api/vehicles/:id', authenticate, (req, res) => {
 app.get('/api/inspections', authenticate, (req, res) => {
   const { page = 1, limit = 20, type = '', vehicle = '', from = '', to = '' } = req.query
   const offset = (page - 1) * limit
-  const companyId = req.user.company_id || 'default-company'
+  const companyId = req.user.company_id || 'default'
 
   let whereClause = 'i.company_id = ?'
   const params = [companyId]
@@ -1074,7 +1058,7 @@ app.delete('/api/inspections/:id', authenticate, (req, res) => {
 app.get('/api/defects', authenticate, (req, res) => {
   const { page = 1, limit = 20, search = '', vehicle = '', from = '', to = '' } = req.query
   const offset = (page - 1) * limit
-  const companyId = req.user.company_id || 'default-company'
+  const companyId = req.user.company_id || 'default'
 
   let whereClause = 'd.company_id = ?'
   const params = [companyId]
@@ -1372,10 +1356,10 @@ app.post('/api/seed', authenticate, (req, res) => {
 
   // Try to update all records to use default (may fail if column doesn't exist yet)
   try {
-    db.prepare('UPDATE users SET company_id = ? WHERE company_id IS NULL OR company_id = ? OR company_id = ?').run('default', 'default-company', 'default-company')
-    db.prepare('UPDATE vehicles SET company_id = ? WHERE company_id IS NULL OR company_id = ? OR company_id = ?').run('default', 'default-company', 'default-company')
-    db.prepare('UPDATE inspections SET company_id = ? WHERE company_id IS NULL OR company_id = ? OR company_id = ?').run('default', 'default-company', 'default-company')
-    db.prepare('UPDATE defects SET company_id = ? WHERE company_id IS NULL OR company_id = ? OR company_id = ?').run('default', 'default-company', 'default-company')
+    db.prepare('UPDATE users SET company_id = ? WHERE company_id IS NULL OR company_id = ? OR company_id = ?').run('default', 'default', 'default')
+    db.prepare('UPDATE vehicles SET company_id = ? WHERE company_id IS NULL OR company_id = ? OR company_id = ?').run('default', 'default', 'default')
+    db.prepare('UPDATE inspections SET company_id = ? WHERE company_id IS NULL OR company_id = ? OR company_id = ?').run('default', 'default', 'default')
+    db.prepare('UPDATE defects SET company_id = ? WHERE company_id IS NULL OR company_id = ? OR company_id = ?').run('default', 'default', 'default')
   } catch (e) {
     console.log('Note: Some company_id columns may not exist yet:', e.message)
   }
@@ -1412,7 +1396,7 @@ app.post('/api/seed', authenticate, (req, res) => {
   const carNames = ['ГАЗель Next', 'ГАЗель Бизнес', 'Соболь', 'Ford Transit', 'Mercedes Sprinter', 'Volkswagen Crafter']
   const statuses = ['active', 'repair']
   const regions = ['Москва', 'Московская обл.', 'Санкт-Петербург', 'Краснодар', 'Екатеринбург', 'Новосибирск']
-  const companyId = 'default-company'
+  const companyId = 'default'
 
   for (let i = 1; i <= vehicles; i++) {
     const id = uuidv4()
@@ -1496,7 +1480,7 @@ app.post('/api/seed', authenticate, (req, res) => {
 app.get('/api/analytics/overview', authenticate, (req, res) => {
   const { from = '', to = '' } = req.query
   const now = new Date()
-  const companyId = req.user.company_id || 'default-company'
+  const companyId = req.user.company_id || 'default'
   
   let dateFrom = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000)
   let dateTo = now
@@ -1620,7 +1604,7 @@ app.get('/api/analytics/overview', authenticate, (req, res) => {
 
 app.get('/api/analytics/export/excel', authenticate, (req, res) => {
   const { type = 'vehicles' } = req.query
-  const companyId = req.user.company_id || 'default-company'
+  const companyId = req.user.company_id || 'default'
 
   let data
   let filename

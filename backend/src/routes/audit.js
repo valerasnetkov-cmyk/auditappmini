@@ -1,3 +1,5 @@
+import crypto from 'node:crypto'
+
 // Audit logging utility
 export function createAuditLogger({ db, getCurrentUser }) {
   return function logAudit({ action, entityType, entityId, oldValue, newValue, req }) {
@@ -11,7 +13,7 @@ export function createAuditLogger({ db, getCurrentUser }) {
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
       `).run(
         crypto.randomUUID(),
-        'default', // company_id - will be used when company_id is properly propagated
+        req?.user?.company_id || 'default',
         userId,
         action,
         entityType,

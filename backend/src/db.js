@@ -4,6 +4,7 @@ import { v4 as uuidv4 } from 'uuid'
 import path from 'path'
 import { fileURLToPath } from 'url'
 import fs from 'fs'
+import { normalizeVehicleNumberToCyrillic, repairMojibakeRussian } from './utils/transliteration.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const dbPath = path.join(__dirname, 'database.sqlite')
@@ -71,19 +72,11 @@ const LICENSE_PLATE_PATTERN = /^[АВЕКМНОРСТУХ]\d{3}[АВЕКМНОР
 
 function repairTextValue(value) {
   if (typeof value !== 'string') return value
-  return TEXT_REPLACEMENTS.get(value) || value
+  return repairMojibakeRussian(TEXT_REPLACEMENTS.get(value) || value)
 }
 
 function normalizeVehicleNumber(value) {
-  if (typeof value !== 'string') return ''
-
-  return value
-    .trim()
-    .toUpperCase()
-    .replace(/\s+/g, '')
-    .split('')
-    .map((symbol) => LICENSE_PLATE_LATIN_TO_CYRILLIC[symbol] || symbol)
-    .join('')
+  return normalizeVehicleNumberToCyrillic(value)
 }
 
 function hashString(value) {
@@ -187,7 +180,7 @@ function syncRegionDirectory() {
   `)
 
   DEFAULT_REGIONS.forEach((region) => {
-    insertRegion.run([uuidv4(), region])
+    insertRegion.run([uuidv4(), repairTextValue(region)])
   })
 
   const vehicleRegions = db.prepare(`
@@ -203,6 +196,54 @@ function syncRegionDirectory() {
 
   vehicleRegions.free()
   insertRegion.free()
+}
+
+function ensureColumn(table, column, definition) {
+  const existingColumns = db.exec(`PRAGMA table_info(${table})`)?.[0]?.values || []
+  const hasColumn = existingColumns.some((row) => row[1] === column)
+
+  if (!hasColumn) {
+    db.run(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`)
+  }
+}
+
+function applySchemaMigrations() {
+  ensureColumn('users', 'company_id', "TEXT DEFAULT 'default'")
+  ensureColumn('users', 'mfa_enabled', 'INTEGER NOT NULL DEFAULT 0')
+  ensureColumn('users', 'mfa_secret', 'TEXT')
+  ensureColumn('users', 'created_at', 'TEXT')
+
+  ensureColumn('vehicles', 'company_id', "TEXT DEFAULT 'default'")
+  ensureColumn('vehicles', 'region', 'TEXT')
+  ensureColumn('vehicles', 'qr_code', 'TEXT')
+  ensureColumn('vehicles', 'last_scheduled_inspection', 'TEXT')
+  ensureColumn('vehicles', 'created_at', 'TEXT')
+
+  ensureColumn('inspections', 'company_id', "TEXT DEFAULT 'default'")
+  ensureColumn('inspections', 'completed', 'INTEGER NOT NULL DEFAULT 0')
+  ensureColumn('inspections', 'accident_occurred_at', 'TEXT')
+  ensureColumn('inspections', 'accident_location', 'TEXT')
+  ensureColumn('inspections', 'odometer_value', 'INTEGER')
+  ensureColumn('inspections', 'odometer_unit', "TEXT DEFAULT 'km'")
+  ensureColumn('inspections', 'odometer_recognized_at', 'TEXT')
+  ensureColumn('inspections', 'created_at', 'TEXT')
+
+  ensureColumn('defects', 'company_id', "TEXT DEFAULT 'default'")
+  ensureColumn('defects', 'comment', 'TEXT')
+  ensureColumn('defects', 'status', "TEXT NOT NULL DEFAULT 'open'")
+  ensureColumn('defects', 'created_at', 'TEXT')
+  ensureColumn('defects', 'closed_at', 'TEXT')
+
+  ensureColumn('photos', 'defect_id', 'TEXT')
+  ensureColumn('photos', 'geo', 'TEXT')
+  ensureColumn('photos', 'is_required', 'INTEGER NOT NULL DEFAULT 0')
+  ensureColumn('photos', 'created_at', 'TEXT')
+
+  db.run("UPDATE users SET created_at = datetime('now') WHERE created_at IS NULL")
+  db.run("UPDATE vehicles SET created_at = datetime('now') WHERE created_at IS NULL")
+  db.run("UPDATE inspections SET created_at = datetime('now') WHERE created_at IS NULL")
+  db.run("UPDATE defects SET created_at = datetime('now') WHERE created_at IS NULL")
+  db.run("UPDATE photos SET created_at = datetime('now') WHERE created_at IS NULL")
 }
 
 export async function initDatabase() {
@@ -379,6 +420,8 @@ export async function initDatabase() {
     )`)
   } catch {}
 
+  applySchemaMigrations()
+
   const settingsCheck = db.exec("SELECT value FROM settings WHERE key = 'scheduled_inspection_days'")
   if (settingsCheck.length === 0 || settingsCheck[0].values.length === 0) {
     db.run(`INSERT INTO settings (key, value) VALUES ('scheduled_inspection_days', '30')`)
@@ -428,17 +471,24 @@ export async function initDatabase() {
     if (!ADMIN_PASSWORD) {
       console.log('Admin seed skipped: ADMIN_PASSWORD not provided in environment')
     } else {
-      const existing = db.prepare("SELECT id FROM users WHERE email = ?").get(ADMIN_EMAIL)
-      if (!existing) {
-        const hashedPassword = bcrypt.hashSync(ADMIN_PASSWORD, 10)
-        db.run(`INSERT INTO users (id, email, password, name, role) VALUES (?, ?, ?, ?, ?)`, [
-          uuidv4(),
-          ADMIN_EMAIL,
-          hashedPassword,
-          'Администратор',
-          'manager',
-        ])
-        console.log(`Admin user: ${ADMIN_EMAIL} (seeded from env)`) 
+      try {
+        const existing = db.prepare('SELECT id FROM users WHERE email = ?')
+        existing.bind([ADMIN_EMAIL])
+        const adminExists = existing.step()
+        existing.free()
+
+        if (adminExists) {
+          console.log(`Admin already exists: ${ADMIN_EMAIL}`)
+        } else {
+          const hashedPassword = bcrypt.hashSync(ADMIN_PASSWORD, 10)
+          db.run(
+            'INSERT INTO users (id, email, password, name, role, company_id) VALUES (?, ?, ?, ?, ?, ?)',
+            [uuidv4(), ADMIN_EMAIL, hashedPassword, 'Администратор', 'manager', 'default'],
+          )
+          saveDatabase()
+        }
+      } catch (e) {
+        console.log('[DB] Error checking admin:', e.message)
       }
     }
   }
@@ -472,7 +522,10 @@ export function getDb() {
       },
       get: (...params) => {
         const stmt = db.prepare(sql)
-        if (params.length > 0) stmt.bind(params)
+        // Handle both: .get(a, b) and .get([a, b])
+        const bindParams = params.length === 1 && Array.isArray(params[0]) ? params[0] : params
+        if (bindParams.length > 0) stmt.bind(bindParams)
+        // IMPORTANT: step() only once - calling twice breaks it!
         if (stmt.step()) {
           const row = stmt.getAsObject()
           stmt.free()
@@ -483,7 +536,8 @@ export function getDb() {
       },
       all: (...params) => {
         const stmt = db.prepare(sql)
-        if (params.length > 0) stmt.bind(params)
+        const bindParams = params.length === 1 && Array.isArray(params[0]) ? params[0] : params
+        if (bindParams.length > 0) stmt.bind(bindParams)
         const results = []
         while (stmt.step()) {
           results.push(stmt.getAsObject())
