@@ -1,4 +1,5 @@
-﻿import express from 'express'
+﻿import 'dotenv/config'
+import express from 'express'
 import speakeasy from 'speakeasy'
 import cors from 'cors'
 import jwt from 'jsonwebtoken'
@@ -6,6 +7,7 @@ import bcrypt from 'bcryptjs'
 import { v4 as uuidv4 } from 'uuid'
 import multer from 'multer'
 import path from 'path'
+import { transliterateCyrillicToLatin } from './utils/transliteration.js'
 import { fileURLToPath } from 'url'
 import fs from 'fs'
 import { initDatabase, getDb } from './db.js'
@@ -267,7 +269,8 @@ function randomDateBetween(startDate, endDate) {
 }
 
 function generateDemoVehicleNumber() {
-  const pickLetter = () => randomItem(LICENSE_PLATE_ALLOWED_LETTERS)
+  const LATIN_LETTERS = ['A','B','E','K','M','H','O','P','C','T','Y','X']
+  const pickLetter = () => randomItem(LATIN_LETTERS)
   const digits = String(randomInteger(1000)).padStart(3, '0')
   const regionNumber = String(10 + randomInteger(190)).padStart(2, '0')
   return `${pickLetter()}${digits}${pickLetter()}${pickLetter()}${regionNumber}`
@@ -1356,7 +1359,7 @@ app.post('/api/seed', authenticate, (req, res) => {
       INSERT INTO companies (id, slug, name, region_code, data_residency, api_cluster_key, storage_cluster_key, ocr_cluster_key)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
-      'default-company',
+      'default',
       'default',
       'Тестовая компания',
       'RU-MOS',
@@ -1367,12 +1370,12 @@ app.post('/api/seed', authenticate, (req, res) => {
     )
   }
 
-  // Try to update all records to use default-company (may fail if column doesn't exist yet)
+  // Try to update all records to use default (may fail if column doesn't exist yet)
   try {
-    db.prepare('UPDATE users SET company_id = ? WHERE company_id IS NULL OR company_id = ?').run('default-company', 'default')
-    db.prepare('UPDATE vehicles SET company_id = ? WHERE company_id IS NULL OR company_id = ?').run('default-company', 'default')
-    db.prepare('UPDATE inspections SET company_id = ? WHERE company_id IS NULL OR company_id = ?').run('default-company', 'default')
-    db.prepare('UPDATE defects SET company_id = ? WHERE company_id IS NULL OR company_id = ?').run('default-company', 'default')
+    db.prepare('UPDATE users SET company_id = ? WHERE company_id IS NULL OR company_id = ? OR company_id = ?').run('default', 'default-company', 'default-company')
+    db.prepare('UPDATE vehicles SET company_id = ? WHERE company_id IS NULL OR company_id = ? OR company_id = ?').run('default', 'default-company', 'default-company')
+    db.prepare('UPDATE inspections SET company_id = ? WHERE company_id IS NULL OR company_id = ? OR company_id = ?').run('default', 'default-company', 'default-company')
+    db.prepare('UPDATE defects SET company_id = ? WHERE company_id IS NULL OR company_id = ? OR company_id = ?').run('default', 'default-company', 'default-company')
   } catch (e) {
     console.log('Note: Some company_id columns may not exist yet:', e.message)
   }

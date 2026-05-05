@@ -1,0 +1,1 @@
+[config] Using fallback JWT_SECRET for local development

@@ -275,7 +275,7 @@ export default function VehiclesPage() {
         <div>
           <input
             type="text"
-            placeholder="Госномер, например А123ВС77"
+            placeholder="Госномер, например A123BC77"
             value={formData.number}
             onChange={(event) => setFormData({ ...formData, number: normalizeVehicleNumber(event.target.value) })}
             autoCapitalize="characters"

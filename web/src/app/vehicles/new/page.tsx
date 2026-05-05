@@ -123,10 +123,15 @@ export default function NewVehiclePage() {
                 maxLength={9}
                 spellCheck={false}
                 className="w-full rounded-lg border border-slate-200 px-3 py-2"
-                placeholder="А123ВС77"
+                placeholder="A123BC77"
                 required
               />
               <p className="mt-1 text-sm text-slate-500">{VEHICLE_NUMBER_HELP}</p>
+              {formData.number && (
+                <p className="mt-1 text-sm text-slate-600">
+                  Сохранится как: <span className="font-medium text-blue-600">{normalizeVehicleNumber(formData.number)}</span>
+                </p>
+              )}
             </div>
 
             <div>
