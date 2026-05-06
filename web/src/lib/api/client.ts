@@ -12,6 +12,7 @@ import type {
   CreateVehiclePayload,
   DashboardStats,
   DefectRecord,
+  DirectusIntegrationStatus,
   ExportRow,
   ExportType,
   InspectionCreateResponse,
@@ -396,6 +397,10 @@ class ApiClient {
       method: 'PUT',
       body: JSON.stringify(data),
     })
+  }
+
+  async getDirectusStatus() {
+    return this.request<DirectusIntegrationStatus>('/integrations/directus/status')
   }
 
   async getAnalyticsOverview(params?: string) {

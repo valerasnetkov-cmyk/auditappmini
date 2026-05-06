@@ -1,9 +1,11 @@
 import { spawn } from 'node:child_process'
+import fs from 'node:fs/promises'
 import process from 'node:process'
 import speakeasy from 'speakeasy'
 
 const HOST = '127.0.0.1'
 const PORT = Number(process.env.PORT || 3013 + (process.pid % 500))
+const DATABASE_PATH = `./.tmp-smoke/smoke-mfa-${process.pid}.sqlite`
 const BASE_URL = `http://${HOST}:${PORT}`
 const LOGIN_URL = `${BASE_URL}/api/auth/login`
 const USERS_URL = `${BASE_URL}/api/users`
@@ -47,7 +49,7 @@ async function request(path, options = {}, expectedStatus = 200) {
 async function run() {
   const server = spawn(process.execPath, ['src/server.js'], {
     cwd: process.cwd(),
-    env: { ...process.env, PORT: String(PORT) },
+    env: { ...process.env, PORT: String(PORT), DATABASE_PATH },
     stdio: ['ignore', 'pipe', 'pipe'],
   })
 
@@ -124,6 +126,7 @@ async function run() {
   } finally {
     server.kill()
     await sleep(300)
+    await fs.rm(DATABASE_PATH, { force: true })
   }
 
   if (stderr.trim()) {

@@ -3,8 +3,8 @@ import fs from 'node:fs/promises'
 import process from 'node:process'
 
 const HOST = '127.0.0.1'
-const PORT = Number(process.env.PORT || 4015 + (process.pid % 500))
-const DATABASE_PATH = `./.tmp-smoke/smoke-inspections-${process.pid}.sqlite`
+const PORT = Number(process.env.PORT || 4617 + (process.pid % 500))
+const DATABASE_PATH = `./.tmp-smoke/smoke-directus-${process.pid}.sqlite`
 const BASE_URL = `http://${HOST}:${PORT}`
 
 function sleep(ms) {
@@ -55,7 +55,13 @@ async function request(path, options = {}, expectedStatus = 200) {
 async function run() {
   const server = spawn(process.execPath, ['src/server.js'], {
     cwd: process.cwd(),
-    env: { ...process.env, PORT: String(PORT), DATABASE_PATH },
+    env: {
+      ...process.env,
+      PORT: String(PORT),
+      DATABASE_PATH,
+      DIRECTUS_TOKEN: '',
+      DIRECTUS_DEFAULT_COMPANY_ID: '',
+    },
     stdio: ['ignore', 'pipe', 'pipe'],
   })
 
@@ -80,8 +86,16 @@ async function run() {
     const authHeaders = { Authorization: `Bearer ${login.token}` }
     const jsonHeaders = { ...authHeaders, 'Content-Type': 'application/json' }
     const suffix = Date.now()
-    const plateNumber = `А${String(suffix % 1000).padStart(3, '0')}КМ${String((suffix % 900) + 100)}`
-    const regionName = `Inspection Smoke Region ${suffix}`
+    const plateNumber = `A${String(suffix % 1000).padStart(3, '0')}BC${String((suffix % 900) + 100)}`
+    const regionName = `Directus Smoke Region ${suffix}`
+
+    const status = await request('/api/integrations/directus/status', {
+      headers: authHeaders,
+    })
+
+    if (status.configured !== false || status.collections?.length !== 9) {
+      throw new Error(`Unexpected Directus status payload: ${JSON.stringify(status)}`)
+    }
 
     await request('/api/regions', {
       method: 'POST',
@@ -94,26 +108,11 @@ async function run() {
       headers: jsonHeaders,
       body: JSON.stringify({
         number: plateNumber,
-        name: `Inspection Smoke ${suffix}`,
+        name: `Directus Smoke ${suffix}`,
         status: 'active',
         region: regionName,
       }),
     }, 201)
-
-    const invalidAccidentInspectionResponse = await fetch(`${BASE_URL}/api/inspections`, {
-      method: 'POST',
-      headers: jsonHeaders,
-      body: JSON.stringify({
-        vehicle_id: vehicle.id,
-        type: 'accident',
-        checklist: [],
-      }),
-    })
-
-    if (invalidAccidentInspectionResponse.status !== 400) {
-      const body = await invalidAccidentInspectionResponse.text()
-      throw new Error(`Accident validation failed: expected 400, got ${invalidAccidentInspectionResponse.status}: ${body}`)
-    }
 
     const inspection = await request('/api/inspections', {
       method: 'POST',
@@ -123,7 +122,7 @@ async function run() {
         type: 'accident',
         checklist: [],
         accident_occurred_at: '2026-05-01T10:15:00.000Z',
-        accident_location: 'Южно-Сахалинск, тестовый маршрут',
+        accident_location: 'Yuzhno-Sakhalinsk, Directus smoke route',
       }),
     }, 201)
 
@@ -132,36 +131,38 @@ async function run() {
       headers: jsonHeaders,
       body: JSON.stringify({
         checklist: [
-          { title: 'Кузов', result: true, comment: '' },
-          { title: 'Остекление', result: false, comment: 'Трещина после ДТП' },
+          { title: 'Body', result: true, comment: '' },
+          { title: 'Glass', result: false, comment: 'Crack after accident' },
         ],
         accident_occurred_at: '2026-05-01T10:15:00.000Z',
-        accident_location: 'Южно-Сахалинск, тестовый маршрут',
+        accident_location: 'Yuzhno-Sakhalinsk, Directus smoke route',
       }),
     })
 
-    const inspectionDetails = await request(`/api/inspections/${inspection.id}`, {
+    const preview = await request(`/api/integrations/directus/inspections/${inspection.id}/preview`, {
       headers: authHeaders,
     })
 
-    const firstDefectId = inspectionDetails.defects?.[0]?.id
-    const defectDetails = firstDefectId
-      ? await request(`/api/defects/${firstDefectId}`, {
-          headers: authHeaders,
-        })
-      : null
+    if (preview.accident_case?.case_number !== `inspection-${inspection.id}`) {
+      throw new Error(`Unexpected preview case number: ${JSON.stringify(preview.accident_case)}`)
+    }
 
-    const inspectionsList = await request(`/api/inspections?vehicle=${vehicle.id}`, {
-      headers: authHeaders,
-    })
+    if (preview.damages?.length !== 1) {
+      throw new Error(`Unexpected Directus damages preview: ${JSON.stringify(preview.damages)}`)
+    }
 
-    const defectsList = await request(`/api/defects?vehicle=${vehicle.id}`, {
-      headers: authHeaders,
-    })
+    if (preview.accident_case?.source_inspection_id !== inspection.id) {
+      throw new Error(`Unexpected source inspection id: ${JSON.stringify(preview.accident_case)}`)
+    }
 
-    const vehicleDefects = await request(`/api/vehicles/${vehicle.id}/defects?limit=10`, {
+    if (!preview.damages?.[0]?.source_defect_id) {
+      throw new Error(`Directus damage preview must contain source_defect_id: ${JSON.stringify(preview.damages)}`)
+    }
+
+    const syncUnavailable = await request(`/api/integrations/directus/inspections/${inspection.id}/sync`, {
+      method: 'POST',
       headers: authHeaders,
-    })
+    }, 503)
 
     await request(`/api/inspections/${inspection.id}`, {
       method: 'DELETE',
@@ -173,29 +174,17 @@ async function run() {
       headers: authHeaders,
     }, 204)
 
-    const missingInspectionResponse = await fetch(`${BASE_URL}/api/inspections/${inspection.id}`, {
-      headers: authHeaders,
-    })
-
-    if (missingInspectionResponse.status !== 404) {
-      const body = await missingInspectionResponse.text()
-      throw new Error(`Deleted inspection still accessible: ${missingInspectionResponse.status} ${body}`)
-    }
-
     console.log(
       JSON.stringify(
         {
           ok: true,
-          vehicleId: vehicle.id,
+          configured: status.configured,
           inspectionId: inspection.id,
-          checklistItems: inspectionDetails.checklist_items?.length || 0,
-          defectsCreated: inspectionDetails.defects?.length || 0,
-          inspectionsListed: inspectionsList.data?.length || 0,
-          defectsListed: defectsList.data?.length || 0,
-          vehicleDefectsListed: Array.isArray(vehicleDefects) ? vehicleDefects.length : 0,
-          accidentValidationStatus: invalidAccidentInspectionResponse.status,
-          defectInspectionType: defectDetails?.inspection_type ?? null,
-          defectAccidentLocation: defectDetails?.accident_location ?? null,
+          caseNumber: preview.accident_case.case_number,
+          sourceInspectionId: preview.accident_case.source_inspection_id,
+          damages: preview.damages.length,
+          syncStatus: 503,
+          syncError: syncUnavailable.error,
         },
         null,
         2,

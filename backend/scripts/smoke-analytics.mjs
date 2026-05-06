@@ -1,8 +1,10 @@
 import { spawn } from 'node:child_process'
+import fs from 'node:fs/promises'
 import process from 'node:process'
 
 const HOST = '127.0.0.1'
 const PORT = Number(process.env.PORT || 4516 + (process.pid % 500))
+const DATABASE_PATH = `./.tmp-smoke/smoke-analytics-${process.pid}.sqlite`
 const BASE_URL = `http://${HOST}:${PORT}`
 
 function sleep(ms) {
@@ -53,7 +55,7 @@ async function request(path, options = {}, expectedStatus = 200) {
 async function run() {
   const server = spawn(process.execPath, ['src/server.js'], {
     cwd: process.cwd(),
-    env: { ...process.env, PORT: String(PORT) },
+    env: { ...process.env, PORT: String(PORT), DATABASE_PATH },
     stdio: ['ignore', 'pipe', 'pipe'],
   })
 
@@ -129,6 +131,7 @@ async function run() {
   } finally {
     server.kill()
     await sleep(300)
+    await fs.rm(DATABASE_PATH, { force: true })
   }
 
   if (stderr.trim()) {

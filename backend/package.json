@@ -13,12 +13,14 @@
     "pm2:restart": "pm2 restart ecosystem.config.cjs",
     "pm2:logs": "pm2 logs audit-backend",
     "pm2:delete": "pm2 delete audit-backend",
-    "smoke": "npm run smoke:auth && npm run smoke:vehicles && npm run smoke:inspections && npm run smoke:analytics",
+    "smoke": "npm run smoke:auth && npm run smoke:vehicles && npm run smoke:inspections && npm run smoke:analytics && npm run smoke:directus:service && npm run smoke:directus",
     "smoke:auth": "node scripts/smoke-auth.mjs",
     "smoke:vehicles": "node scripts/smoke-vehicles.mjs",
     "smoke:inspections": "node scripts/smoke-inspections.mjs",
     "smoke:analytics": "node scripts/smoke-analytics.mjs",
-    "smoke:mfa": "node scripts/smoke-mfa.mjs"
+    "smoke:mfa": "node scripts/smoke-mfa.mjs",
+    "smoke:directus": "node scripts/smoke-directus.mjs",
+    "smoke:directus:service": "node scripts/smoke-directus-service.mjs"
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",

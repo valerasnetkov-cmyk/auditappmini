@@ -17,6 +17,7 @@ import fs from 'fs'
 import { initDatabase, getDb } from './db.js'
 import registerCompleteInspectionRoutes from './routes/completeInspection.js'
 import registerCompanyRoutes from './routes/companies.js'
+import registerDirectusIntegrationRoutes from './routes/directus.js'
 import { registerOdometerRoutes, registerVehicleNumberRecognitionRoutes } from './routes/odometer.js'
 import { photoRequirements, photoTypeLabels, defectCategories } from './routes/photo-requirements.js'
 
@@ -404,6 +405,8 @@ function ensureManagerOrSelf(req, res, userId, message = API_MESSAGES.noAccess) 
   sendError(res, 403, message)
   return false
 }
+
+registerDirectusIntegrationRoutes({ app, db, authenticate, ensureManager, sendError, API_MESSAGES })
 
 function validateAccidentDetails(type, accidentOccurredAt, accidentLocation) {
   if (type !== 'accident') {

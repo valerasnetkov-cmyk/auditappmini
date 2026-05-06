@@ -7,7 +7,10 @@ import fs from 'fs'
 import { normalizeVehicleNumberToCyrillic, repairMojibakeRussian } from './utils/transliteration.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
-const dbPath = path.join(__dirname, 'database.sqlite')
+const configuredDbPath = process.env.DATABASE_PATH
+const dbPath = configuredDbPath
+  ? path.resolve(process.cwd(), configuredDbPath)
+  : path.join(__dirname, 'database.sqlite')
 
 let db = null
 
@@ -304,6 +307,7 @@ function applySchemaMigrations() {
 
 export async function initDatabase() {
   const SQL = await initSqlJs()
+  fs.mkdirSync(path.dirname(dbPath), { recursive: true })
 
   if (fs.existsSync(dbPath)) {
     const data = fs.readFileSync(dbPath)
@@ -558,6 +562,7 @@ export async function initDatabase() {
 
 function saveDatabase() {
   if (db) {
+    fs.mkdirSync(path.dirname(dbPath), { recursive: true })
     const data = db.export()
     fs.writeFileSync(dbPath, Buffer.from(data))
   }

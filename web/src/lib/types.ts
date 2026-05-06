@@ -290,6 +290,12 @@ export type SettingsResponse = {
   timezone_offset?: number
 }
 
+export type DirectusIntegrationStatus = {
+  configured: boolean
+  url: string
+  collections: string[]
+}
+
 export type CountByRegion = {
   region?: string | null
   count: number

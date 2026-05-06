@@ -491,3 +491,59 @@ docs/vehicle-number-recognition.md
 docs/ocr-provider-architecture.md
 docs/vehicle-number-format.md
 ```
+
+---
+
+## Directus CMS
+
+Directus добавлен как отдельный CMS/Data Studio слой рядом с текущим backend. Он нужен для управления компаниями, техникой, ДТП-заявками, участниками, повреждениями, фото-метаданными, OCR-результатами и antifraud-флагами через админ-панель.
+
+Directus не заменяет существующий `backend/`. В custom backend остаются OCR номера и одометра, hash фото, проверки гео/времени, PDF, ZIP-экспорт, antifraud-логика, webhooks и бизнес-валидация завершения ДТП-заявки.
+
+Запуск:
+
+```bash
+cd directus
+cp .env.example .env
+docker compose up -d
+```
+
+Порты:
+
+- Directus Studio: `http://localhost:8055`
+- PostgreSQL Directus: `localhost:5433`
+- CORS разрешен для `http://localhost:3000`, `http://localhost:3002`, `http://localhost:3001`
+
+Env:
+
+- `directus/.env.example` - настройки Directus и PostgreSQL.
+- `backend/.env.example` - `DIRECTUS_URL`, `DIRECTUS_TOKEN` и опциональный `DIRECTUS_DEFAULT_COMPANY_ID` для server-to-server REST API.
+- `web/.env.example` - `NEXT_PUBLIC_DIRECTUS_URL` для frontend helper.
+
+Интеграционные файлы:
+
+- `directus/schema/collections.md` - MVP-коллекции и связи.
+- `directus/schema/seed.md` - статусы, роли и стартовые справочники.
+- `directus/schema/mvp-schema.json` и `directus/scripts/bootstrap-schema.mjs` - безопасный bootstrap коллекций и полей после первого запуска Directus.
+- `backend/src/services/directus.js` - backend helper для REST API Directus.
+- `web/src/lib/directus.ts` - минимальный web helper на `@directus/sdk`.
+- `docs/directus-cms.md` - архитектура, ограничения и дальнейшие шаги.
+
+Backend endpoints для аккуратной проверки интеграции:
+
+- `GET /api/integrations/directus/status`
+- `GET /api/integrations/directus/inspections/:id/preview`
+- `POST /api/integrations/directus/inspections/:id/sync`
+
+Bootstrap коллекций:
+
+```bash
+cd directus
+node scripts/bootstrap-schema.mjs
+```
+
+Dry-run без подключения к Directus:
+
+```bash
+npm run directus:bootstrap:dry
+```

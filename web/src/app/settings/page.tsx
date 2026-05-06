@@ -3,13 +3,13 @@
 import { useEffect, useRef, useState } from 'react'
 import type { ChangeEvent, FormEvent } from 'react'
 import { useRouter } from 'next/navigation'
-import * as XLSX from 'xlsx'
+import ExcelJS from 'exceljs'
 import Layout from '@/components/Layout'
 import LocaleSwitcher from '@/components/LocaleSwitcher'
 import ThemeSwitcher from '@/components/ThemeSwitcher'
 import api from '@/lib/api/client'
 import { getAuthToken } from '@/lib/auth'
-import type { RegionRecord } from '@/lib/types'
+import type { DirectusIntegrationStatus, RegionRecord } from '@/lib/types'
 
 type ImportResult = {
   imported: number
@@ -59,6 +59,9 @@ export default function SettingsPage() {
   const [editingRegionName, setEditingRegionName] = useState('')
   const [savingRegionId, setSavingRegionId] = useState<string | null>(null)
   const [deletingRegionId, setDeletingRegionId] = useState<string | null>(null)
+  const [directusStatus, setDirectusStatus] = useState<DirectusIntegrationStatus | null>(null)
+  const [directusError, setDirectusError] = useState<string | null>(null)
+  const [directusLoading, setDirectusLoading] = useState(false)
 
   const loadRegions = async () => {
     const result = await api.getRegions()
@@ -68,6 +71,24 @@ export default function SettingsPage() {
     }
 
     setRegions((result.data || []).filter((region) => getRegionVehicleCount(region) > 0))
+  }
+
+  const loadDirectusStatus = async () => {
+    setDirectusLoading(true)
+    setDirectusError(null)
+
+    try {
+      const result = await api.getDirectusStatus()
+      if (result.error) {
+        setDirectusError(result.error)
+        setDirectusStatus(null)
+        return
+      }
+
+      setDirectusStatus(result.data || null)
+    } finally {
+      setDirectusLoading(false)
+    }
   }
 
   useEffect(() => {
@@ -86,16 +107,22 @@ export default function SettingsPage() {
 
     setLoading(false)
     void loadRegions()
+    void loadDirectusStatus()
   }, [router])
 
-  const parseExcel = (buffer: ArrayBuffer): ParsedVehicle[] => {
+  const parseExcel = async (buffer: ArrayBuffer): Promise<ParsedVehicle[]> => {
     try {
-      const workbook = XLSX.read(buffer, { type: 'array' })
-      const sheetName = workbook.SheetNames[0]
-      if (!sheetName) return []
+      const workbook = new ExcelJS.Workbook()
+      await workbook.xlsx.load(buffer)
 
-      const sheet = workbook.Sheets[sheetName]
-      const rows = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '' }) as unknown[][]
+      const sheet = workbook.worksheets[0]
+      if (!sheet) return []
+
+      const rows: unknown[][] = []
+      sheet.eachRow({ includeEmpty: false }, (row) => {
+        const values = Array.isArray(row.values) ? row.values.slice(1) : []
+        rows.push(values)
+      })
       if (!rows.length) return []
 
       const firstRow = rows[0].map((value) => parseToken(value).toLowerCase())
@@ -142,7 +169,7 @@ export default function SettingsPage() {
     setImporting(true)
 
     try {
-      const vehicles = parseExcel(await file.arrayBuffer())
+      const vehicles = await parseExcel(await file.arrayBuffer())
       if (!vehicles.length) {
         setStatus({ tone: 'danger', text: 'Не удалось распознать данные. Проверьте колонки: номер, название, регион.' })
         return
@@ -290,6 +317,58 @@ export default function SettingsPage() {
           <h2 className="mb-4 text-lg font-semibold text-foreground">Язык интерфейса</h2>
           <LocaleSwitcher />
         </div>
+
+        {isManager ? (
+          <div className="card mb-4 p-4">
+            <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <h2 className="text-lg font-semibold text-foreground">Directus CMS</h2>
+                <p className="mt-1 text-sm text-foreground-secondary">
+                  Статус отдельного CMS/Data Studio слоя. Данные проверяются через backend, без передачи service token во frontend.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => void loadDirectusStatus()}
+                disabled={directusLoading}
+                className="btn btn-secondary btn-sm disabled:opacity-50"
+              >
+                {directusLoading ? 'Проверка...' : 'Обновить'}
+              </button>
+            </div>
+
+            {directusError ? (
+              <div className="alert-danger rounded-card p-3 text-sm">{directusError}</div>
+            ) : (
+              <div className="grid gap-3 md:grid-cols-3">
+                <div className="rounded-card border border-line bg-muted-surface p-3">
+                  <div className="text-xs uppercase tracking-wide text-foreground-muted">Состояние</div>
+                  <div className={`mt-2 font-semibold ${directusStatus?.configured ? 'text-status-success' : 'text-status-warning'}`}>
+                    {directusStatus?.configured ? 'Подключен' : 'Token не настроен'}
+                  </div>
+                </div>
+                <div className="rounded-card border border-line bg-muted-surface p-3">
+                  <div className="text-xs uppercase tracking-wide text-foreground-muted">URL</div>
+                  <div className="mt-2 break-all font-semibold text-foreground">{directusStatus?.url || 'http://localhost:8055'}</div>
+                </div>
+                <div className="rounded-card border border-line bg-muted-surface p-3">
+                  <div className="text-xs uppercase tracking-wide text-foreground-muted">Коллекции</div>
+                  <div className="mt-2 font-semibold text-foreground">{directusStatus?.collections?.length ?? 0}</div>
+                </div>
+              </div>
+            )}
+
+            {directusStatus?.collections?.length ? (
+              <div className="mt-3 flex flex-wrap gap-2">
+                {directusStatus.collections.map((collection) => (
+                  <span key={collection} className="rounded-pill bg-muted px-3 py-1 text-xs font-medium text-foreground-secondary">
+                    {collection}
+                  </span>
+                ))}
+              </div>
+            ) : null}
+          </div>
+        ) : null}
 
         {isManager ? (
           <div className="card mb-4 p-4">

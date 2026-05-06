@@ -1,0 +1,128 @@
+{
+  "collections": [
+    {
+      "collection": "companies",
+      "fields": [
+        { "field": "id", "type": "uuid", "primary": true },
+        { "field": "name", "type": "string", "required": true },
+        { "field": "type", "type": "string", "options": ["insurance", "leasing"] },
+        { "field": "country", "type": "string" },
+        { "field": "region", "type": "string" },
+        { "field": "settings", "type": "json" },
+        { "field": "created_at", "type": "datetime" }
+      ]
+    },
+    {
+      "collection": "vehicles",
+      "fields": [
+        { "field": "id", "type": "uuid", "primary": true },
+        { "field": "company_id", "type": "uuid" },
+        { "field": "plate_number", "type": "string", "required": true },
+        { "field": "vin", "type": "string" },
+        { "field": "brand", "type": "string" },
+        { "field": "model", "type": "string" },
+        { "field": "year", "type": "integer" },
+        { "field": "status", "type": "string", "options": ["active", "inactive", "repair", "archived"] },
+        { "field": "created_at", "type": "datetime" }
+      ]
+    },
+    {
+      "collection": "accident_cases",
+      "fields": [
+        { "field": "id", "type": "uuid", "primary": true },
+        { "field": "company_id", "type": "uuid" },
+        { "field": "vehicle_id", "type": "uuid" },
+        { "field": "case_number", "type": "string", "required": true },
+        { "field": "source_inspection_id", "type": "string" },
+        { "field": "accident_date", "type": "date" },
+        { "field": "accident_time", "type": "time" },
+        { "field": "accident_geo", "type": "json" },
+        { "field": "accident_address", "type": "string" },
+        { "field": "accident_type", "type": "string" },
+        { "field": "status", "type": "string", "options": ["draft", "photo_required", "submitted", "review", "need_more_data", "closed"] },
+        { "field": "comment", "type": "text" },
+        { "field": "created_at", "type": "datetime" }
+      ]
+    },
+    {
+      "collection": "accident_participants",
+      "fields": [
+        { "field": "id", "type": "uuid", "primary": true },
+        { "field": "accident_case_id", "type": "uuid" },
+        { "field": "type", "type": "string", "options": ["owner", "driver", "second_party", "witness"] },
+        { "field": "name", "type": "string" },
+        { "field": "phone", "type": "string" },
+        { "field": "vehicle_number", "type": "string" },
+        { "field": "comment", "type": "text" }
+      ]
+    },
+    {
+      "collection": "damages",
+      "fields": [
+        { "field": "id", "type": "uuid", "primary": true },
+        { "field": "accident_case_id", "type": "uuid" },
+        { "field": "source_inspection_id", "type": "string" },
+        { "field": "source_defect_id", "type": "string" },
+        { "field": "vehicle_zone", "type": "string" },
+        { "field": "description", "type": "text" },
+        { "field": "severity", "type": "string", "options": ["low", "medium", "high", "critical"] },
+        { "field": "photo_id", "type": "uuid" },
+        { "field": "created_at", "type": "datetime" }
+      ]
+    },
+    {
+      "collection": "photos",
+      "fields": [
+        { "field": "id", "type": "uuid", "primary": true },
+        { "field": "accident_case_id", "type": "uuid" },
+        { "field": "damage_id", "type": "uuid" },
+        { "field": "source_inspection_id", "type": "string" },
+        { "field": "source_defect_id", "type": "string" },
+        { "field": "source_photo_id", "type": "string" },
+        { "field": "type", "type": "string" },
+        { "field": "url", "type": "string", "required": true },
+        { "field": "geo", "type": "json" },
+        { "field": "device_time", "type": "datetime" },
+        { "field": "server_time", "type": "datetime" },
+        { "field": "hash", "type": "string" },
+        { "field": "created_at", "type": "datetime" }
+      ]
+    },
+    {
+      "collection": "odometer_recognitions",
+      "fields": [
+        { "field": "id", "type": "uuid", "primary": true },
+        { "field": "accident_case_id", "type": "uuid" },
+        { "field": "photo_id", "type": "uuid" },
+        { "field": "recognized_value", "type": "integer" },
+        { "field": "confirmed_value", "type": "integer" },
+        { "field": "confirmed_by_user", "type": "boolean" },
+        { "field": "created_at", "type": "datetime" }
+      ]
+    },
+    {
+      "collection": "plate_recognitions",
+      "fields": [
+        { "field": "id", "type": "uuid", "primary": true },
+        { "field": "accident_case_id", "type": "uuid" },
+        { "field": "photo_id", "type": "uuid" },
+        { "field": "recognized_plate", "type": "string" },
+        { "field": "confirmed_plate", "type": "string" },
+        { "field": "confirmed_by_user", "type": "boolean" },
+        { "field": "created_at", "type": "datetime" }
+      ]
+    },
+    {
+      "collection": "fraud_checks",
+      "fields": [
+        { "field": "id", "type": "uuid", "primary": true },
+        { "field": "accident_case_id", "type": "uuid" },
+        { "field": "check_type", "type": "string" },
+        { "field": "result", "type": "string", "options": ["passed", "warning", "failed", "manual_review"] },
+        { "field": "score", "type": "decimal" },
+        { "field": "details", "type": "json" },
+        { "field": "created_at", "type": "datetime" }
+      ]
+    }
+  ]
+}
