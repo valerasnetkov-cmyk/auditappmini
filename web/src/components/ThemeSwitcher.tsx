@@ -8,15 +8,15 @@ export default function ThemeSwitcher() {
 
   return (
     <div className="flex items-center gap-2 p-2">
-      <span className="text-sm text-gray-600">{t('theme')}:</span>
+      <span className="text-sm text-foreground-secondary">{t('theme')}:</span>
       
       <div className="flex gap-1">
         <button
           onClick={() => setTheme('light')}
           className={`px-3 py-1 text-sm rounded ${
             theme === 'light' 
-              ? 'bg-blue-600 text-white' 
-              : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+              ? 'bg-primary text-foreground-inverse' 
+              : 'bg-muted-surface text-foreground-secondary hover:bg-soft-surface'
           }`}
         >
           {t('lightTheme')}
@@ -26,8 +26,8 @@ export default function ThemeSwitcher() {
           onClick={() => setTheme('dark')}
           className={`px-3 py-1 text-sm rounded ${
             theme === 'dark' 
-              ? 'bg-blue-600 text-white' 
-              : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+              ? 'bg-primary text-foreground-inverse' 
+              : 'bg-muted-surface text-foreground-secondary hover:bg-soft-surface'
           }`}
         >
           {t('darkTheme')}
@@ -37,8 +37,8 @@ export default function ThemeSwitcher() {
           onClick={() => setTheme('system')}
           className={`px-3 py-1 text-sm rounded ${
             theme === 'system' 
-              ? 'bg-blue-600 text-white' 
-              : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+              ? 'bg-primary text-foreground-inverse' 
+              : 'bg-muted-surface text-foreground-secondary hover:bg-soft-surface'
           }`}
         >
           {t('systemTheme')}
@@ -46,7 +46,7 @@ export default function ThemeSwitcher() {
       </div>
       
       {resolvedTheme && (
-        <span className="text-xs text-gray-500">
+        <span className="text-xs text-foreground-muted">
           ({resolvedTheme === 'dark' ? t('darkTheme') : t('lightTheme')})
         </span>
       )}

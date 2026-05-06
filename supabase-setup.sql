@@ -17,7 +17,6 @@ create table if not exists vehicles (
     number text not null,
     name text not null,
     status text not null default 'active' check (status in ('active', 'repair')),
-    qr_code text unique,
     created_at timestamp with time zone default now()
 );
 

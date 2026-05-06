@@ -94,7 +94,6 @@ async function run() {
         number: plateNumber,
         name: `Inspection Smoke ${suffix}`,
         status: 'active',
-        qr_code: `INSPECT-${suffix}`,
         region: regionName,
       }),
     }, 201)

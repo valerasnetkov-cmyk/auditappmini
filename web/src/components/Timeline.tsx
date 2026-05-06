@@ -18,7 +18,7 @@ function getStatusLabel(status?: string) {
 
 export default function Timeline({ items }: { items: TimelineItem[] }) {
   if (!items || items.length === 0) {
-    return <div className="text-sm text-slate-500">История пока пустая</div>
+    return <div className="text-sm text-foreground-muted">История пока пустая</div>
   }
 
   return (
@@ -31,10 +31,10 @@ export default function Timeline({ items }: { items: TimelineItem[] }) {
 
         return (
           <div key={item.id} data-testid={`defect-timeline-${item.id}`} className="flex items-start gap-3">
-            <span className="mt-2 h-2 w-2 rounded-full bg-blue-600" aria-label="timeline-point" />
+            <span className="mt-2 h-2 w-2 rounded-full bg-primary" aria-label="timeline-point" />
             <div>
-              <div className="text-sm text-slate-600">{date}</div>
-              <div className="text-sm text-slate-700">
+              <div className="text-sm text-foreground-muted">{date}</div>
+              <div className="text-sm text-foreground-secondary">
                 {label}
                 {item.changed_by_name ? ` · ${item.changed_by_name}` : ''}
                 {!item.changed_by_name && item.changed_by ? ` · ${item.changed_by}` : ''}

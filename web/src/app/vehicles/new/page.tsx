@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { FormEvent, useEffect, useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import Layout from '@/components/Layout'
@@ -13,7 +13,6 @@ type VehicleFormState = {
   number: string
   name: string
   status: VehicleStatus
-  qr_code: string
   region: string
 }
 
@@ -21,8 +20,12 @@ const initialForm: VehicleFormState = {
   number: '',
   name: '',
   status: 'active',
-  qr_code: '',
   region: '',
+}
+
+function getVehicleStatusLabel(status: VehicleStatus) {
+  if (status === 'repair') return 'Ремонт'
+  return 'В работе'
 }
 
 export default function NewVehiclePage() {
@@ -40,7 +43,10 @@ export default function NewVehiclePage() {
 
   const loadRegions = async () => {
     try {
-      const result = await api.getRegions()
+      setLoading(true)
+      setError('')
+
+      const result = await api.getRegions({ includeEmpty: true })
       if (result.error) {
         setError(result.error)
         return
@@ -54,7 +60,7 @@ export default function NewVehiclePage() {
     }
   }
 
-  const handleSubmit = async (event: React.FormEvent) => {
+  const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
     setSaving(true)
     setError('')
@@ -64,7 +70,6 @@ export default function NewVehiclePage() {
         number: normalizeVehicleNumber(formData.number),
         name: formData.name.trim(),
         status: formData.status,
-        qr_code: formData.qr_code.trim() || undefined,
         region: formData.region || undefined,
       })
 
@@ -81,121 +86,141 @@ export default function NewVehiclePage() {
     }
   }
 
+  const normalizedNumber = normalizeVehicleNumber(formData.number)
+  const canSubmit = Boolean(normalizedNumber && formData.name.trim()) && !saving
+
   if (loading) {
     return (
-      <div className="flex min-h-screen items-center justify-center">
-        <div className="h-8 w-8 animate-spin rounded-full border-b-2 border-blue-600"></div>
-      </div>
+      <Layout currentPage="vehicles">
+        <div className="flex min-h-[60vh] items-center justify-center">
+          <div className="h-8 w-8 animate-spin rounded-full border-b-2 border-primary" />
+        </div>
+      </Layout>
     )
   }
 
   return (
     <Layout currentPage="vehicles">
       <div className="p-6">
-        <div className="mb-6 flex items-start justify-between gap-4">
+        <header className="mb-6 flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
           <div>
-            <h1 className="text-2xl font-bold text-slate-900">Новая техника</h1>
-            <p className="mt-1 text-sm text-slate-500">
-              Добавьте транспортное средство, чтобы затем проводить осмотры и учитывать дефекты.
+            <Link href="/vehicles" className="mb-2 inline-block text-sm text-primary hover:underline">
+              Назад к списку техники
+            </Link>
+            <h1 className="page-title text-2xl">Новая техника</h1>
+            <p className="mt-1 max-w-2xl text-sm text-foreground-muted">
+              Добавьте транспортное средство, чтобы затем проводить осмотры, фиксировать дефекты и учитывать события ДТП.
             </p>
           </div>
-          <Link href="/vehicles" className="rounded-xl border border-slate-200 px-4 py-2 text-sm text-slate-600 hover:bg-slate-50">
-            Назад к списку
+          <Link href="/vehicles" className="btn btn-secondary">
+            Отмена
           </Link>
-        </div>
+        </header>
 
-        <div className="max-w-2xl rounded-2xl border border-slate-100 bg-white p-6 shadow-sm">
-          {error ? (
-            <div className="mb-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-              {error}
-            </div>
-          ) : null}
+        <div className="grid gap-6 lg:grid-cols-[minmax(0,42rem),minmax(18rem,1fr)]">
+          <section className="card p-6">
+            {error ? <div className="alert-danger mb-4 rounded-card px-4 py-3 text-sm">{error}</div> : null}
 
-          <form onSubmit={handleSubmit} className="space-y-5">
-            <div>
-              <label className="mb-1 block text-sm font-medium text-slate-700">Госномер</label>
-              <input
-                type="text"
-                value={formData.number}
-                onChange={(event) => setFormData({ ...formData, number: normalizeVehicleNumber(event.target.value) })}
-                autoCapitalize="characters"
-                inputMode="text"
-                maxLength={9}
-                spellCheck={false}
-                className="w-full rounded-lg border border-slate-200 px-3 py-2"
-                placeholder="A123BC77"
-                required
-              />
-              <p className="mt-1 text-sm text-slate-500">{VEHICLE_NUMBER_HELP}</p>
-              {formData.number && (
-                <p className="mt-1 text-sm text-slate-600">
-                  Сохранится как: <span className="font-medium text-blue-600">{normalizeVehicleNumber(formData.number)}</span>
-                </p>
-              )}
-            </div>
+            <form onSubmit={handleSubmit} className="space-y-5">
+              <label className="block">
+                <span className="label">Госномер</span>
+                <input
+                  type="text"
+                  value={formData.number}
+                  onChange={(event) => setFormData({ ...formData, number: normalizeVehicleNumber(event.target.value) })}
+                  autoCapitalize="characters"
+                  inputMode="text"
+                  maxLength={9}
+                  spellCheck={false}
+                  className="input"
+                  placeholder="А123ВС77"
+                  required
+                />
+                <span className="mt-1 block text-sm text-foreground-muted">{VEHICLE_NUMBER_HELP}</span>
+                {formData.number ? (
+                  <span className="mt-1 block text-sm text-foreground-secondary">
+                    Сохранится как: <span className="font-semibold text-primary">{normalizedNumber || 'номер не распознан'}</span>
+                  </span>
+                ) : null}
+              </label>
 
-            <div>
-              <label className="mb-1 block text-sm font-medium text-slate-700">Название</label>
-              <input
-                type="text"
-                value={formData.name}
-                onChange={(event) => setFormData({ ...formData, name: event.target.value })}
-                className="w-full rounded-lg border border-slate-200 px-3 py-2"
-                placeholder="ГАЗель Next"
-                required
-              />
-            </div>
+              <label className="block">
+                <span className="label">Название</span>
+                <input
+                  type="text"
+                  value={formData.name}
+                  onChange={(event) => setFormData({ ...formData, name: event.target.value })}
+                  className="input"
+                  placeholder="ГАЗель Next"
+                  required
+                />
+              </label>
 
-            <div className="grid gap-5 md:grid-cols-2">
-              <div>
-                <label className="mb-1 block text-sm font-medium text-slate-700">Статус</label>
-                <select
-                  value={formData.status}
-                  onChange={(event) => setFormData({ ...formData, status: event.target.value })}
-                  className="w-full rounded-lg border border-slate-200 px-3 py-2"
-                >
-                  <option value="active">В работе</option>
-                  <option value="repair">Ремонт</option>
-                </select>
+              <div className="grid gap-5 md:grid-cols-2">
+                <label className="block">
+                  <span className="label">Статус</span>
+                  <select
+                    value={formData.status}
+                    onChange={(event) => setFormData({ ...formData, status: event.target.value as VehicleStatus })}
+                    className="select"
+                  >
+                    <option value="active">В работе</option>
+                    <option value="repair">Ремонт</option>
+                  </select>
+                </label>
+
+                <label className="block">
+                  <span className="label">Регион</span>
+                  <select
+                    value={formData.region}
+                    onChange={(event) => setFormData({ ...formData, region: event.target.value })}
+                    className="select"
+                  >
+                    <option value="">Не выбран</option>
+                    {regions.map((region) => (
+                      <option key={region.id} value={region.name}>
+                        {region.name}
+                      </option>
+                    ))}
+                  </select>
+                  <span className="mt-1 block text-xs text-foreground-muted">
+                    Регионы редактируются администратором в настройках, здесь доступен только выбор из списка.
+                  </span>
+                </label>
               </div>
 
-              <div>
-                <label className="mb-1 block text-sm font-medium text-slate-700">Регион</label>
-                <select
-                  value={formData.region}
-                  onChange={(event) => setFormData({ ...formData, region: event.target.value })}
-                  className="w-full rounded-lg border border-slate-200 px-3 py-2"
-                >
-                  <option value="">Не выбран</option>
-                  {regions.map((region) => (
-                    <option key={region.id} value={region.name}>
-                      {region.name}
-                    </option>
-                  ))}
-                </select>
+              <div className="flex flex-wrap gap-3 pt-2">
+                <button type="submit" disabled={!canSubmit} className="btn btn-primary disabled:opacity-50">
+                  {saving ? 'Сохранение...' : 'Создать'}
+                </button>
+                <Link href="/vehicles" className="btn btn-secondary">
+                  Отмена
+                </Link>
+              </div>
+            </form>
+          </section>
+
+          <aside className="card h-fit p-6">
+            <h2 className="mb-3 text-lg font-semibold text-foreground">Правила заполнения</h2>
+            <div className="space-y-4 text-sm text-foreground-secondary">
+              <p>
+                Для российских госномеров используются только кириллические буквы с латинскими аналогами:
+                <span className="mt-2 block font-semibold text-foreground">А, В, Е, К, М, Н, О, Р, С, Т, У, Х</span>
+              </p>
+              <p>
+                Можно вводить латинские аналоги, например <span className="font-semibold text-foreground">A123BC77</span>.
+                Перед сохранением номер будет приведен к кириллической форме.
+              </p>
+              <div className="rounded-card bg-muted-surface p-4">
+                <div className="text-foreground-muted">Текущий статус</div>
+                <div className="mt-1 font-semibold text-foreground">{getVehicleStatusLabel(formData.status)}</div>
+              </div>
+              <div className="rounded-card bg-muted-surface p-4">
+                <div className="text-foreground-muted">Выбранный регион</div>
+                <div className="mt-1 font-semibold text-foreground">{formData.region || 'Не выбран'}</div>
               </div>
             </div>
-
-            <div>
-              <label className="mb-1 block text-sm font-medium text-slate-700">QR-код</label>
-              <input
-                type="text"
-                value={formData.qr_code}
-                onChange={(event) => setFormData({ ...formData, qr_code: event.target.value })}
-                className="w-full rounded-lg border border-slate-200 px-3 py-2"
-                placeholder="Внутренний код или тег"
-              />
-            </div>
-
-            <div className="flex gap-3 pt-2">
-              <button type="submit" disabled={saving} className="rounded-lg bg-blue-600 px-6 py-2 text-white hover:bg-blue-700 disabled:opacity-50">
-                {saving ? 'Сохранение...' : 'Создать'}
-              </button>
-              <Link href="/vehicles" className="rounded-lg border border-slate-200 px-6 py-2 text-slate-700 hover:bg-slate-50">
-                Отмена
-              </Link>
-            </div>
-          </form>
+          </aside>
         </div>
       </div>
     </Layout>

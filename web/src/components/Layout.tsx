@@ -79,35 +79,30 @@ export default function Layout({ children, currentPage }: LayoutProps) {
   ]
 
   const allMenuItems = menuItems
-  const userIsManager = !!(userReady && isManagerRole(currentUser?.role))
-  const visibleMenuItems = allMenuItems.filter((item) => {
-    if (!item.managerOnly) return true
-    if (!mounted) return false
-    return isManagerRole(currentUser?.role)
-  })
+  const visibleMenuItems = allMenuItems
 
   return (
-    <div className="flex min-h-screen bg-slate-50">
-      <aside className="flex w-64 flex-col border-r border-slate-200 bg-white shadow-sm">
-        <div className="border-b border-slate-200 p-5">
+    <div className="app-shell flex min-h-screen">
+      <aside className="flex w-64 flex-col border-r border-line bg-surface shadow-card">
+        <div className="border-b border-line p-5">
           <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-blue-600 text-sm font-semibold text-white">AT</div>
+            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary text-sm font-semibold text-foreground-inverse">AT</div>
             <div>
-              <h1 className="text-lg font-bold leading-tight text-slate-900">Audit Tech</h1>
-              <p className="text-xs text-slate-500">Контроль осмотров и дефектов</p>
+              <h1 className="text-lg font-bold leading-tight text-foreground">Audit Tech</h1>
+              <p className="text-xs text-foreground-muted">Контроль осмотров и дефектов</p>
             </div>
           </div>
         </div>
 
-        <form onSubmit={handleQuickSearch} className="border-b border-slate-100 p-4">
+        <form onSubmit={handleQuickSearch} className="border-b border-line-muted p-4">
           <div className="relative">
-            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400">Q</span>
+            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-foreground-muted">Q</span>
             <input
               type="text"
               placeholder="Поиск техники..."
               value={quickSearch}
               onChange={(event) => setQuickSearch(event.target.value)}
-              className="w-full rounded-xl border border-slate-200 bg-slate-50 py-2.5 pl-9 pr-3 text-sm transition-all focus:border-transparent focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="w-full rounded-xl border border-line bg-muted-surface py-2.5 pl-9 pr-3 text-sm text-foreground placeholder:text-foreground-muted focus:outline-none focus:ring-2 focus:ring-primary"
             />
           </div>
         </form>
@@ -116,12 +111,9 @@ export default function Layout({ children, currentPage }: LayoutProps) {
           <ul className="space-y-1">
             {visibleMenuItems.map((item) => {
               const isActive = currentPage === item.key
-              const linkClassName = [
-                'flex items-center gap-3 rounded-xl px-4 py-2.5 transition-all',
-                isActive
-                  ? 'bg-blue-600 text-white shadow-md shadow-blue-200'
-                  : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900',
-              ].join(' ')
+              const baseClass = 'flex items-center gap-3 rounded-xl px-4 py-2.5 transition-all'
+              const activeClass = isActive ? 'bg-primary text-foreground-inverse shadow-card' : 'text-foreground-secondary hover:bg-surface-hover hover:text-foreground'
+              const linkClassName = `${baseClass} ${activeClass}`
 
               return (
                 <li key={item.key}>
@@ -135,15 +127,15 @@ export default function Layout({ children, currentPage }: LayoutProps) {
           </ul>
         </nav>
 
-        <div className="border-t border-slate-200 p-3">
-          <button onClick={handleLogout} className="flex w-full items-center gap-3 rounded-xl px-4 py-2.5 text-red-600 transition-all hover:bg-red-50">
-            <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-red-100 text-[11px] font-semibold text-red-700">EX</span>
+        <div className="border-t border-line p-3">
+          <button onClick={handleLogout} className="flex w-full items-center gap-3 rounded-xl px-4 py-2.5 text-status-danger transition-all hover:bg-red-50">
+            <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-red-50 text-[11px] font-semibold text-status-danger">EX</span>
             <span className="font-medium">Выйти</span>
           </button>
         </div>
       </aside>
 
-      <main className="flex-1 overflow-auto">{children}</main>
+      <main className="page flex-1 overflow-auto">{children}</main>
     </div>
   )
 }

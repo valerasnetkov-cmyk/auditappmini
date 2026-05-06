@@ -24,22 +24,45 @@ type SortConfig = {
   direction: 'asc' | 'desc'
 }
 
+type ToastMessage = {
+  tone: 'success' | 'danger'
+  text: string
+}
+
+const PAGE_SIZE = 20
+
+const inspectionTypeTabs: Array<{ value: InspectionType | ''; label: string; className: string; activeClassName: string }> = [
+  { value: '', label: 'Все', className: 'btn btn-secondary btn-sm', activeClassName: 'btn btn-primary btn-sm' },
+  { value: 'accident', label: 'ДТП', className: 'badge badge-danger px-4 py-2', activeClassName: 'btn btn-danger btn-sm' },
+  { value: 'scheduled', label: 'Плановые', className: 'badge badge-warning px-4 py-2', activeClassName: 'btn btn-primary btn-sm bg-purple-600 border-purple-600' },
+  { value: 'quick', label: 'Быстрые', className: 'badge badge-info px-4 py-2', activeClassName: 'btn btn-primary btn-sm' },
+]
+
 function getTypeLabel(type: string) {
   if (type === 'quick') return 'Быстрый'
   if (type === 'scheduled') return 'Плановый'
   if (type === 'accident') return 'ДТП'
-  return type
+  return type || 'Не указано'
 }
 
 function getTypeBadgeClass(type: string) {
-  if (type === 'quick') return 'bg-blue-100 text-blue-700'
-  if (type === 'scheduled') return 'bg-purple-100 text-purple-700'
-  return 'bg-red-100 text-red-700'
+  if (type === 'quick') return 'badge badge-info'
+  if (type === 'scheduled') return 'badge badge-warning'
+  return 'badge badge-danger'
 }
 
 function formatDateTime(value?: string | null) {
   if (!value) return 'Не указано'
-  return new Date(value).toLocaleString('ru-RU')
+
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return 'Не указано'
+
+  return date.toLocaleString('ru-RU')
+}
+
+function getSortMarker(sortConfig: SortConfig, key: SortableInspectionKey) {
+  if (sortConfig.key !== key) return '↕'
+  return sortConfig.direction === 'asc' ? '↑' : '↓'
 }
 
 export default function InspectionsPage() {
@@ -49,7 +72,6 @@ export default function InspectionsPage() {
   const [loading, setLoading] = useState(true)
   const [page, setPage] = useState(1)
   const [totalCount, setTotalCount] = useState(0)
-  const [totalPages, setTotalPages] = useState(0)
   const [vehicleFilter, setVehicleFilter] = useState(searchParams.get('vehicle') || '')
   const [typeFilter, setTypeFilter] = useState<InspectionType | ''>((searchParams.get('type') as InspectionType | null) || '')
   const [regionFilter, setRegionFilter] = useState(searchParams.get('region') || '')
@@ -57,17 +79,12 @@ export default function InspectionsPage() {
   const [dateTo, setDateTo] = useState('')
   const [deletingId, setDeletingId] = useState<string | null>(null)
   const [sortConfig, setSortConfig] = useState<SortConfig>({ key: 'created_at', direction: 'desc' })
-  const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null)
+  const [toast, setToast] = useState<ToastMessage | null>(null)
 
-  const showToast = (message: string, type: 'success' | 'error' = 'success') => {
-    setToast({ message, type })
-    setTimeout(() => setToast(null), 3000)
+  const showToast = (text: string, tone: ToastMessage['tone'] = 'success') => {
+    setToast({ text, tone })
+    window.setTimeout(() => setToast(null), 3000)
   }
-
-  const uniqueRegions = useMemo(() => {
-    const regions = new Set(vehicles.map((vehicle) => vehicle.region).filter((region): region is string => Boolean(region)))
-    return Array.from(regions).sort()
-  }, [vehicles])
 
   const loadData = async () => {
     try {
@@ -85,13 +102,18 @@ export default function InspectionsPage() {
         api.getVehiclesList(),
       ])
 
+      if (inspectionsResponse.error) {
+        showToast(inspectionsResponse.error, 'danger')
+        return
+      }
+
+      if (vehiclesResponse.error) {
+        showToast(vehiclesResponse.error, 'danger')
+      }
+
       setInspections(inspectionsResponse.data || [])
       setVehicles(vehiclesResponse.data || [])
-
-      if (inspectionsResponse.pagination) {
-        setTotalCount(inspectionsResponse.pagination.total)
-        setTotalPages(inspectionsResponse.pagination.pages)
-      }
+      setTotalCount(inspectionsResponse.pagination?.total || inspectionsResponse.data?.length || 0)
     } finally {
       setLoading(false)
     }
@@ -101,6 +123,11 @@ export default function InspectionsPage() {
     if (!requireAuthToken()) return
     void loadData()
   }, [vehicleFilter, typeFilter, dateFrom, dateTo])
+
+  const uniqueRegions = useMemo(() => {
+    const regions = new Set(vehicles.map((vehicle) => vehicle.region).filter((region): region is string => Boolean(region)))
+    return Array.from(regions).sort((left, right) => left.localeCompare(right, 'ru'))
+  }, [vehicles])
 
   const sortedInspections = useMemo(() => {
     return [...inspections].sort((left, right) => {
@@ -122,23 +149,20 @@ export default function InspectionsPage() {
   }, [inspections, sortConfig])
 
   const filteredInspections = useMemo(() => {
-    let items = sortedInspections
-
-    if (regionFilter) {
-      items = items.filter((inspection) => inspection.vehicle_region === regionFilter)
-    }
-
-    return items
+    if (!regionFilter) return sortedInspections
+    return sortedInspections.filter((inspection) => inspection.vehicle_region === regionFilter)
   }, [sortedInspections, regionFilter])
 
-  const pagedInspections = useMemo(
-    () => filteredInspections.slice((page - 1) * 20, page * 20),
-    [filteredInspections, page],
-  )
-
+  const totalPages = Math.max(1, Math.ceil(filteredInspections.length / PAGE_SIZE))
+  const pagedInspections = filteredInspections.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE)
   const accidentCount = inspections.filter((inspection) => inspection.type === 'accident').length
   const scheduledCount = inspections.filter((inspection) => inspection.type === 'scheduled').length
   const quickCount = inspections.filter((inspection) => inspection.type === 'quick').length
+  const typeCounts: Record<string, number> = {
+    accident: accidentCount,
+    scheduled: scheduledCount,
+    quick: quickCount,
+  }
 
   const handleSort = (key: SortableInspectionKey) => {
     setSortConfig((current) => ({
@@ -154,71 +178,56 @@ export default function InspectionsPage() {
     try {
       const result = await api.deleteInspection(id)
       if (result.error) {
-        showToast(result.error, 'error')
+        showToast(result.error, 'danger')
         return
       }
 
       await loadData()
-      showToast('Осмотр удалён')
+      showToast('Осмотр удален')
     } finally {
       setDeletingId(null)
     }
   }
 
-  const renderSortMarker = (key: SortableInspectionKey) => {
-    if (sortConfig.key !== key) return <span className="ml-1 text-slate-300">↕</span>
-    return <span className="ml-1 text-blue-600">{sortConfig.direction === 'asc' ? '↑' : '↓'}</span>
+  const clearDateFilters = () => {
+    setDateFrom('')
+    setDateTo('')
+    setPage(1)
   }
 
   return (
     <Layout currentPage="inspections">
       <div className="p-6">
         {toast ? (
-          <div
-            className={`fixed right-4 top-4 z-50 rounded-lg px-6 py-3 shadow-lg ${
-              toast.type === 'success' ? 'bg-green-500 text-white' : 'bg-red-500 text-white'
-            }`}
-          >
-            {toast.message}
+          <div className={toast.tone === 'success' ? 'toast toast-success' : 'toast toast-error'}>
+            {toast.text}
           </div>
         ) : null}
 
-        <div className="mb-6 flex flex-wrap items-center justify-between gap-4">
+        <header className="mb-6 flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
           <div>
-            <h1 className="text-2xl font-bold text-slate-900">Осмотры</h1>
-            <p className="mt-1 text-sm text-slate-500">Журнал осмотров, ДТП и зафиксированных дефектов.</p>
+            <h1 className="page-title text-2xl">Осмотры</h1>
+            <p className="mt-1 text-sm text-foreground-muted">Журнал осмотров, ДТП и зафиксированных дефектов.</p>
           </div>
-          <Link href="/inspections/new" className="rounded-xl bg-blue-600 px-4 py-2.5 text-white hover:bg-blue-700">
+          <Link href="/inspections/new" className="btn btn-primary">
             + Новый осмотр
           </Link>
-        </div>
+        </header>
 
-        <div className="mb-6 rounded-2xl border border-slate-100 bg-white p-4 shadow-sm">
+        <section className="card mb-6 p-4">
           <div className="mb-4 flex flex-wrap gap-2">
-            <button
-              onClick={() => setTypeFilter('')}
-              className={`rounded-full px-4 py-1.5 text-sm font-medium ${!typeFilter ? 'bg-slate-900 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}
-            >
-              Все ({inspections.length})
-            </button>
-            <button
-              onClick={() => setTypeFilter('accident')}
-              className={`rounded-full px-4 py-1.5 text-sm font-medium ${typeFilter === 'accident' ? 'bg-red-600 text-white' : 'bg-red-100 text-red-700 hover:bg-red-200'}`}
-            >
-              ДТП ({accidentCount})
-            </button>
-            <button
-              onClick={() => setTypeFilter('scheduled')}
-              className={`rounded-full px-4 py-1.5 text-sm font-medium ${typeFilter === 'scheduled' ? 'bg-purple-600 text-white' : 'bg-purple-100 text-purple-700 hover:bg-purple-200'}`}
-            >
-              Плановые ({scheduledCount})
-            </button>
-            <button
-              onClick={() => setTypeFilter('quick')}
-              className={`rounded-full px-4 py-1.5 text-sm font-medium ${typeFilter === 'quick' ? 'bg-blue-600 text-white' : 'bg-blue-100 text-blue-700 hover:bg-blue-200'}`}
-            >
-              Быстрые ({quickCount})
-            </button>
+            {inspectionTypeTabs.map((tab) => (
+              <button
+                key={tab.value || 'all'}
+                onClick={() => {
+                  setTypeFilter(tab.value)
+                  setPage(1)
+                }}
+                className={typeFilter === tab.value ? tab.activeClassName : tab.className}
+              >
+                {tab.label} ({tab.value ? typeCounts[tab.value] || 0 : inspections.length})
+              </button>
+            ))}
           </div>
 
           <div className="flex flex-wrap items-center gap-4">
@@ -228,7 +237,7 @@ export default function InspectionsPage() {
                 setVehicleFilter(event.target.value)
                 setPage(1)
               }}
-              className="min-w-[220px] rounded-xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm"
+              className="select min-w-[220px]"
             >
               <option value="">Вся техника</option>
               {vehicles.map((vehicle) => (
@@ -244,7 +253,7 @@ export default function InspectionsPage() {
                 setRegionFilter(event.target.value)
                 setPage(1)
               }}
-              className="min-w-[180px] rounded-xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm"
+              className="select min-w-[180px]"
             >
               <option value="">Все регионы</option>
               {uniqueRegions.map((region) => (
@@ -254,150 +263,182 @@ export default function InspectionsPage() {
               ))}
             </select>
 
-            <div className="flex items-center gap-2 text-sm">
-              <span className="text-slate-500">С</span>
-              <input type="date" value={dateFrom} onChange={(event) => setDateFrom(event.target.value)} className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2" />
-              <span className="text-slate-500">по</span>
-              <input type="date" value={dateTo} onChange={(event) => setDateTo(event.target.value)} className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2" />
+            <div className="flex flex-wrap items-center gap-2 text-sm">
+              <span className="text-foreground-muted">С</span>
+              <input type="date" value={dateFrom} onChange={(event) => setDateFrom(event.target.value)} className="input w-auto" />
+              <span className="text-foreground-muted">по</span>
+              <input type="date" value={dateTo} onChange={(event) => setDateTo(event.target.value)} className="input w-auto" />
               {dateFrom || dateTo ? (
-                <button
-                  onClick={() => {
-                    setDateFrom('')
-                    setDateTo('')
-                  }}
-                  className="rounded-lg px-2 py-1 text-slate-500 hover:bg-slate-100 hover:text-slate-700"
-                >
+                <button onClick={clearDateFilters} className="btn btn-secondary btn-sm">
                   Сбросить
                 </button>
               ) : null}
             </div>
           </div>
-        </div>
+        </section>
 
-        <div className="mb-4 text-sm text-slate-500">Показано {filteredInspections.length} из {totalCount} осмотров</div>
+        <div className="mb-4 text-sm text-foreground-muted">
+          Показано {filteredInspections.length} из {totalCount} осмотров
+        </div>
 
         {loading ? (
           <div className="py-12 text-center">
-            <div className="mx-auto h-8 w-8 animate-spin rounded-full border-b-2 border-blue-600"></div>
+            <div className="mx-auto h-8 w-8 animate-spin rounded-full border-b-2 border-primary"></div>
+            <p className="mt-3 text-sm text-foreground-muted">Загрузка осмотров...</p>
           </div>
         ) : (
-          <div className="overflow-hidden rounded-2xl border border-slate-100 bg-white shadow-sm">
-            <div className="overflow-y-auto" style={{ maxHeight: 'calc(100vh - 320px)' }}>
-              <table className="min-w-full divide-y divide-slate-200">
-                <thead className="sticky top-0 z-10 bg-slate-50">
-                  <tr>
-                    <th className="cursor-pointer px-5 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-600" onClick={() => handleSort('created_at')}>
-                      Осмотр {renderSortMarker('created_at')}
-                    </th>
-                    <th className="cursor-pointer px-5 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-600" onClick={() => handleSort('accident_occurred_at')}>
-                      ДТП {renderSortMarker('accident_occurred_at')}
-                    </th>
-                    <th className="cursor-pointer px-5 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-600" onClick={() => handleSort('vehicle_number')}>
-                      Техника {renderSortMarker('vehicle_number')}
-                    </th>
-                    <th className="cursor-pointer px-5 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-600" onClick={() => handleSort('inspector_name')}>
-                      Инспектор {renderSortMarker('inspector_name')}
-                    </th>
-                    <th className="cursor-pointer px-5 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-600" onClick={() => handleSort('defects_count')}>
-                      Дефекты {renderSortMarker('defects_count')}
-                    </th>
-                    <th className="px-5 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-600">Действия</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-200">
-                  {pagedInspections.length === 0 ? (
-                    <tr>
-                      <td colSpan={6} className="px-6 py-12 text-center text-slate-500">
-                        Осмотры не найдены
-                      </td>
-                    </tr>
-                  ) : (
-                    pagedInspections.map((inspection) => (
-                      <tr key={inspection.id} className={inspection.type === 'accident' ? 'bg-red-50/50 hover:bg-red-50' : 'hover:bg-slate-50'}>
-                        <td className="px-5 py-4 align-top">
-                          <div className="font-medium text-slate-900">{formatDate(inspection.created_at)}</div>
-                          <div className="mt-1 text-xs text-slate-500">{formatDateTime(inspection.created_at)}</div>
-                          <div className="mt-2">
-                            <span className={`rounded-full px-2 py-1 text-xs font-medium ${getTypeBadgeClass(inspection.type)}`}>
-                              {getTypeLabel(inspection.type)}
-                            </span>
-                          </div>
-                        </td>
-                        <td className="px-5 py-4 align-top">
-                          {inspection.type === 'accident' ? (
-                            <>
-                              <div className="font-medium text-slate-900">{formatDateTime(inspection.accident_occurred_at)}</div>
-                              <div className="mt-1 max-w-[260px] text-sm text-slate-600">{inspection.accident_location || 'Место не указано'}</div>
-                            </>
-                          ) : (
-                            <span className="text-slate-400">Не применяется</span>
-                          )}
-                        </td>
-                        <td className="px-5 py-4 align-top">
-                          <Link href={`/vehicles/${inspection.vehicle_id}`} className="font-medium text-blue-600 hover:underline">
-                            {inspection.vehicle_number}
-                          </Link>
-                          <div className="mt-1 text-sm text-slate-700">{inspection.vehicle_name}</div>
-                          <div className="mt-1 text-xs text-slate-500">{inspection.vehicle_region || 'Регион не указан'}</div>
-                        </td>
-                        <td className="px-5 py-4 align-top">
-                          <div className="font-medium text-slate-900">{inspection.inspector_name}</div>
-                        </td>
-                        <td className="px-5 py-4 align-top">
-                          {inspection.defects_count > 0 ? (
-                            <span className="font-medium text-red-600">{inspection.defects_count}</span>
-                          ) : (
-                            <span className="font-medium text-green-600">0</span>
-                          )}
-                        </td>
-                        <td className="px-5 py-4 align-top">
-                          <div className="flex flex-col gap-2 text-sm">
-                            <Link href={`/inspections/${inspection.id}`} className="text-blue-600 hover:underline">
-                              Открыть осмотр
-                            </Link>
-                            {inspection.defects_count > 0 ? (
-                              <Link href={`/defects?vehicle=${inspection.vehicle_id}`} className="text-blue-600 hover:underline">
-                                Смотреть дефекты
-                              </Link>
-                            ) : null}
-                            <button
-                              onClick={() => handleDelete(inspection.id)}
-                              disabled={deletingId === inspection.id}
-                              className="text-left text-red-600 hover:underline disabled:opacity-50"
-                            >
-                              {deletingId === inspection.id ? 'Удаление...' : 'Удалить'}
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
-                    ))
-                  )}
-                </tbody>
-              </table>
-            </div>
-          </div>
+          <InspectionsTable
+            inspections={pagedInspections}
+            sortConfig={sortConfig}
+            deletingId={deletingId}
+            onSort={handleSort}
+            onDelete={handleDelete}
+          />
         )}
 
         {totalPages > 1 ? (
           <div className="mt-6 flex justify-center gap-2">
-            <button
-              onClick={() => setPage((value) => Math.max(1, value - 1))}
-              disabled={page === 1}
-              className="rounded border px-4 py-2 disabled:opacity-50"
-            >
+            <button onClick={() => setPage((value) => Math.max(1, value - 1))} disabled={page === 1} className="btn btn-secondary disabled:opacity-50">
               Назад
             </button>
-            <span className="px-4 py-2">Страница {page} из {totalPages}</span>
-            <button
-              onClick={() => setPage((value) => Math.min(totalPages, value + 1))}
-              disabled={page === totalPages}
-              className="rounded border px-4 py-2 disabled:opacity-50"
-            >
-              Вперёд
+            <span className="px-4 py-2 text-foreground-secondary">Страница {page} из {totalPages}</span>
+            <button onClick={() => setPage((value) => Math.min(totalPages, value + 1))} disabled={page === totalPages} className="btn btn-secondary disabled:opacity-50">
+              Вперед
             </button>
           </div>
         ) : null}
       </div>
     </Layout>
+  )
+}
+
+function InspectionsTable({
+  inspections,
+  sortConfig,
+  deletingId,
+  onSort,
+  onDelete,
+}: {
+  inspections: InspectionRecord[]
+  sortConfig: SortConfig
+  deletingId: string | null
+  onSort: (key: SortableInspectionKey) => void
+  onDelete: (id: string) => void
+}) {
+  return (
+    <div className="card overflow-hidden">
+      <div className="overflow-x-auto">
+        <table className="min-w-full divide-y divide-line">
+          <thead className="table-header">
+            <tr>
+              <SortableHeader label="Осмотр" sortKey="created_at" sortConfig={sortConfig} onSort={onSort} />
+              <SortableHeader label="ДТП" sortKey="accident_occurred_at" sortConfig={sortConfig} onSort={onSort} />
+              <SortableHeader label="Техника" sortKey="vehicle_number" sortConfig={sortConfig} onSort={onSort} />
+              <SortableHeader label="Инспектор" sortKey="inspector_name" sortConfig={sortConfig} onSort={onSort} />
+              <SortableHeader label="Дефекты" sortKey="defects_count" sortConfig={sortConfig} onSort={onSort} />
+              <th className="px-5 py-3 text-left text-xs font-semibold uppercase tracking-wider text-foreground-muted">Действия</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-line">
+            {inspections.length ? (
+              inspections.map((inspection) => (
+                <InspectionRow key={inspection.id} inspection={inspection} deletingId={deletingId} onDelete={onDelete} />
+              ))
+            ) : (
+              <tr>
+                <td colSpan={6} className="px-6 py-12 text-center text-foreground-muted">
+                  Осмотры не найдены
+                </td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  )
+}
+
+function SortableHeader({
+  label,
+  sortKey,
+  sortConfig,
+  onSort,
+}: {
+  label: string
+  sortKey: SortableInspectionKey
+  sortConfig: SortConfig
+  onSort: (key: SortableInspectionKey) => void
+}) {
+  return (
+    <th
+      className="cursor-pointer px-5 py-3 text-left text-xs font-semibold uppercase tracking-wider text-foreground-muted"
+      onClick={() => onSort(sortKey)}
+    >
+      {label} <span className={sortConfig.key === sortKey ? 'text-primary' : 'text-foreground-disabled'}>{getSortMarker(sortConfig, sortKey)}</span>
+    </th>
+  )
+}
+
+function InspectionRow({
+  inspection,
+  deletingId,
+  onDelete,
+}: {
+  inspection: InspectionRecord
+  deletingId: string | null
+  onDelete: (id: string) => void
+}) {
+  return (
+    <tr className={inspection.type === 'accident' ? 'alert-danger' : 'hover:bg-surface-hover'}>
+      <td className="px-5 py-4 align-top">
+        <div className="font-medium text-foreground">{formatDate(inspection.created_at)}</div>
+        <div className="mt-1 text-xs text-foreground-muted">{formatDateTime(inspection.created_at)}</div>
+        <div className="mt-2">
+          <span className={getTypeBadgeClass(inspection.type)}>{getTypeLabel(inspection.type)}</span>
+        </div>
+      </td>
+      <td className="px-5 py-4 align-top">
+        {inspection.type === 'accident' ? (
+          <>
+            <div className="font-medium text-foreground">{formatDateTime(inspection.accident_occurred_at)}</div>
+            <div className="mt-1 max-w-[260px] text-sm text-foreground-secondary">{inspection.accident_location || 'Место не указано'}</div>
+          </>
+        ) : (
+          <span className="text-foreground-muted">Не применяется</span>
+        )}
+      </td>
+      <td className="px-5 py-4 align-top">
+        <Link href={`/vehicles/${inspection.vehicle_id}`} className="font-medium text-primary hover:underline">
+          {inspection.vehicle_number}
+        </Link>
+        <div className="mt-1 text-sm text-foreground-secondary">{inspection.vehicle_name}</div>
+        <div className="mt-1 text-xs text-foreground-muted">{inspection.vehicle_region || 'Регион не указан'}</div>
+      </td>
+      <td className="px-5 py-4 align-top">
+        <div className="font-medium text-foreground">{inspection.inspector_name}</div>
+      </td>
+      <td className="px-5 py-4 align-top">
+        {inspection.defects_count > 0 ? (
+          <span className="font-medium text-status-danger">{inspection.defects_count}</span>
+        ) : (
+          <span className="font-medium text-status-success">0</span>
+        )}
+      </td>
+      <td className="px-5 py-4 align-top">
+        <div className="flex flex-col gap-2 text-sm">
+          <Link href={`/inspections/${inspection.id}`} className="text-primary hover:underline">
+            Открыть осмотр
+          </Link>
+          {inspection.defects_count > 0 ? (
+            <Link href={`/defects?vehicle=${inspection.vehicle_id}`} className="text-primary hover:underline">
+              Смотреть дефекты
+            </Link>
+          ) : null}
+          <button onClick={() => onDelete(inspection.id)} disabled={deletingId === inspection.id} className="text-left text-status-danger hover:underline disabled:opacity-50">
+            {deletingId === inspection.id ? 'Удаление...' : 'Удалить'}
+          </button>
+        </div>
+      </td>
+    </tr>
   )
 }

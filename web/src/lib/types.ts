@@ -79,6 +79,9 @@ export type RegionRecord = {
   name: string
   created_at?: string
   vehicle_count?: number
+  vehicleCount?: number
+  merged_from?: string
+  merged_into?: string
 }
 
 export type CreateRegionPayload = {
@@ -106,7 +109,6 @@ export type VehicleListItem = {
 }
 
 export type VehicleRecord = VehicleListItem & {
-  qr_code?: string | null
   created_at?: string
   defectsCount?: number
   lastInspection?: {
@@ -116,7 +118,6 @@ export type VehicleRecord = VehicleListItem & {
 }
 
 export type VehicleDetail = VehicleListItem & {
-  qr_code?: string | null
   last_scheduled_inspection?: string | null
 }
 
@@ -134,7 +135,6 @@ export type CreateVehiclePayload = {
   number: string
   name: string
   status?: VehicleStatus
-  qr_code?: string
   region?: string
 }
 
@@ -142,7 +142,6 @@ export type UpdateVehiclePayload = {
   number: string
   name: string
   status: VehicleStatus
-  qr_code?: string
   region?: string
   reason?: string
 }

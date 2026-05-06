@@ -98,6 +98,9 @@ async function run() {
     const suffix = Date.now()
     const plateNumber = `А${String(suffix % 1000).padStart(3, '0')}ВС${String((suffix % 900) + 100)}`
     const regionName = `Smoke Region ${suffix}`
+    const mergedRegionName = `Smoke Region Merged ${suffix}`
+    const fallbackRegionName = `Smoke Region Fallback ${suffix}`
+    const fallbackRenamedRegionName = `Smoke Region Fallback Renamed ${suffix}`
 
     const createdRegion = await request('/api/regions', {
       method: 'POST',
@@ -105,11 +108,32 @@ async function run() {
       body: JSON.stringify({ name: regionName }),
     })
 
+    const mergeTargetRegion = await request('/api/regions', {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ name: mergedRegionName }),
+    })
+
+    await request('/api/regions', {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ name: fallbackRegionName }),
+    })
+
+    const fallbackUpdatedRegion = await request(`/api/regions/missing-${suffix}`, {
+      method: 'PUT',
+      headers,
+      body: JSON.stringify({ name: fallbackRenamedRegionName, currentName: fallbackRegionName }),
+    })
+
+    const regionsAfterFallbackUpdate = await request('/api/regions?includeEmpty=1', {
+      headers: { Authorization: `Bearer ${login.token}` },
+    })
+
     const createPayload = {
       number: plateNumber,
       name: `Smoke Vehicle ${suffix}`,
       status: 'active',
-      qr_code: `SMOKE-${suffix}`,
       region: regionName,
     }
 
@@ -156,17 +180,35 @@ async function run() {
       headers: { Authorization: `Bearer ${login.token}` },
     })
 
-    const regionDeleteBlocked = await expectStatus(`/api/regions/${createdRegion.id}`, 400, {
+    const mergedRegion = await request(`/api/regions/${createdRegion.id}`, {
+      method: 'PUT',
+      headers,
+      body: JSON.stringify({ name: mergedRegionName }),
+    })
+
+    const vehicleAfterRegionMerge = await request(`/api/vehicles/${created.id}`, {
+      headers: { Authorization: `Bearer ${login.token}` },
+    })
+
+    const regionsAfterMerge = await request('/api/regions?includeEmpty=1', {
+      headers: { Authorization: `Bearer ${login.token}` },
+    })
+
+    await expectStatus(`/api/regions/${mergeTargetRegion.id}`, 204, {
       method: 'DELETE',
+      headers: { Authorization: `Bearer ${login.token}` },
+    })
+
+    await expectStatus(`/api/regions/${fallbackUpdatedRegion.id}`, 204, {
+      method: 'DELETE',
+      headers: { Authorization: `Bearer ${login.token}` },
+    })
+
+    const vehicleAfterRegionDelete = await request(`/api/vehicles/${created.id}`, {
       headers: { Authorization: `Bearer ${login.token}` },
     })
 
     await request(`/api/vehicles/${created.id}`, {
-      method: 'DELETE',
-      headers: { Authorization: `Bearer ${login.token}` },
-    })
-
-    await expectStatus(`/api/regions/${createdRegion.id}`, 204, {
       method: 'DELETE',
       headers: { Authorization: `Bearer ${login.token}` },
     })
@@ -180,7 +222,12 @@ async function run() {
           createdRegion: created.region,
           updatedStatus: updated.status,
           duplicateError: duplicateCreate.error ?? null,
-          regionDeleteBlocked: regionDeleteBlocked.error ?? null,
+          regionMergedIntoExisting: mergedRegion.id === mergeTargetRegion.id,
+          oldRegionRemovedAfterMerge: !regionsAfterMerge.some((region) => region.id === createdRegion.id),
+          vehicleMovedToMergedRegion: vehicleAfterRegionMerge.region === mergedRegionName,
+          regionClearedOnDelete: vehicleAfterRegionDelete.region === null,
+          staleRegionIdFallbackUpdated: fallbackUpdatedRegion.name === fallbackRenamedRegionName,
+          staleRegionIdOldNameRemoved: !regionsAfterFallbackUpdate.some((region) => region.name === fallbackRegionName),
           inspectionId: inspection.id,
           listedInspections: Array.isArray(vehicleInspections?.data) ? vehicleInspections.data.length : 0,
           listedDefects: vehicleInspections?.data?.[0]?.defects_count ?? null,

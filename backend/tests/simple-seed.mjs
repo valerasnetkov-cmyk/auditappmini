@@ -32,7 +32,6 @@ db.run(`
     number TEXT,
     name TEXT,
     status TEXT,
-    qr_code TEXT,
     region TEXT,
     company_id TEXT DEFAULT 'default',
     created_at TEXT DEFAULT CURRENT_TIMESTAMP,
@@ -63,8 +62,8 @@ for (let i = 0; i < 5; i++) {
   const region = String(10 + Math.floor(Math.random() * 190)).padStart(2, '0');
   const num = `${letter1}${num3}${letter2}${letter3}${region}`;
   
-  db.run(`INSERT INTO vehicles (id, number, name, status, qr_code, region, company_id, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-    [uuidv4(), num, cars[i % cars.length], 'active', cars[i % cars.length], 'Москва', 'default', new Date().toISOString()]);
+  db.run(`INSERT INTO vehicles (id, number, name, status, region, company_id, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+    [uuidv4(), num, cars[i % cars.length], 'active', 'Москва', 'default', new Date().toISOString()]);
 }
 
 // Save

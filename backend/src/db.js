@@ -207,6 +207,62 @@ function ensureColumn(table, column, definition) {
   }
 }
 
+function tableHasColumn(table, column) {
+  const existingColumns = db.exec(`PRAGMA table_info(${table})`)?.[0]?.values || []
+  return existingColumns.some((row) => row[1] === column)
+}
+
+function dropVehicleQrCodeColumn() {
+  if (!tableHasColumn('vehicles', 'qr_code')) return
+
+  db.run('BEGIN TRANSACTION')
+  try {
+    db.run(`
+      CREATE TABLE vehicles_without_qr (
+        id TEXT PRIMARY KEY,
+        number TEXT NOT NULL,
+        name TEXT NOT NULL,
+        status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'repair')),
+        company_id TEXT DEFAULT 'default',
+        region TEXT,
+        last_scheduled_inspection TEXT,
+        created_at TEXT DEFAULT (datetime('now'))
+      )
+    `)
+
+    db.run(`
+      INSERT INTO vehicles_without_qr (
+        id,
+        number,
+        name,
+        status,
+        company_id,
+        region,
+        last_scheduled_inspection,
+        created_at
+      )
+      SELECT
+        id,
+        COALESCE(NULLIF(TRIM(number), ''), id),
+        COALESCE(NULLIF(TRIM(name), ''), 'Без названия'),
+        CASE WHEN status IN ('active', 'repair') THEN status ELSE 'active' END,
+        COALESCE(company_id, 'default'),
+        region,
+        last_scheduled_inspection,
+        COALESCE(created_at, datetime('now'))
+      FROM vehicles
+    `)
+
+    db.run('DROP TABLE vehicles')
+    db.run('ALTER TABLE vehicles_without_qr RENAME TO vehicles')
+    db.run('COMMIT')
+    console.log('Removed legacy vehicles.qr_code column')
+  } catch (error) {
+    db.run('ROLLBACK')
+    throw error
+  }
+}
+
 function applySchemaMigrations() {
   ensureColumn('users', 'company_id', "TEXT DEFAULT 'default'")
   ensureColumn('users', 'mfa_enabled', 'INTEGER NOT NULL DEFAULT 0')
@@ -215,9 +271,9 @@ function applySchemaMigrations() {
 
   ensureColumn('vehicles', 'company_id', "TEXT DEFAULT 'default'")
   ensureColumn('vehicles', 'region', 'TEXT')
-  ensureColumn('vehicles', 'qr_code', 'TEXT')
   ensureColumn('vehicles', 'last_scheduled_inspection', 'TEXT')
   ensureColumn('vehicles', 'created_at', 'TEXT')
+  dropVehicleQrCodeColumn()
 
   ensureColumn('inspections', 'company_id', "TEXT DEFAULT 'default'")
   ensureColumn('inspections', 'completed', 'INTEGER NOT NULL DEFAULT 0')
@@ -308,7 +364,6 @@ export async function initDatabase() {
       status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'repair')),
       company_id TEXT DEFAULT 'default',
       region TEXT,
-      qr_code TEXT,
       last_scheduled_inspection TEXT,
       created_at TEXT DEFAULT (datetime('now'))
     )

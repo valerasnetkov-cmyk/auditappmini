@@ -27,8 +27,8 @@ if (existingVehicles < 5) {
     const letter3 = 'ABEKMHOPCTYX'[Math.floor(Math.random() * 12)];
     const reg = String(Math.floor(Math.random() * 190) + 10).padStart(2, '0');
     const num = `${letter1}${num3}${letter2}${letter3}${reg}`;
-    db.run(`INSERT INTO vehicles (id, number, name, status, qr_code, region, company_id, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-      [uuidv4(), num, cars[i % 5], 'active', cars[i % 5], 'Москва', 'default', new Date().toISOString()]);
+    db.run(`INSERT INTO vehicles (id, number, name, status, region, company_id, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      [uuidv4(), num, cars[i % 5], 'active', 'Москва', 'default', new Date().toISOString()]);
   }
   console.log('Added vehicles');
 }

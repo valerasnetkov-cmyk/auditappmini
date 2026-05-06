@@ -24,7 +24,6 @@ db.run(`
     number TEXT,
     name TEXT,
     status TEXT,
-    qr_code TEXT,
     region TEXT,
     company_id TEXT DEFAULT 'default',
     created_at TEXT
@@ -36,7 +35,7 @@ const hash = bcrypt.hashSync('admin123', 10);
 db.run(`INSERT INTO users VALUES (?, ?, ?, ?, ?, ?)`, [uuidv4(), 'admin@example.com', hash, 'Admin', 'manager', 'default']);
 
 // Create test vehicle - Latin only!
-db.run(`INSERT INTO vehicles VALUES (?, ?, ?, ?, ?, ?, ?, ?)`, [uuidv4(), 'K569MH28', 'Соболь', 'repair', 'Соболь', 'Московская обл.', 'default', new Date().toISOString()]);
+db.run(`INSERT INTO vehicles VALUES (?, ?, ?, ?, ?, ?, ?)`, [uuidv4(), 'K569MH28', 'Соболь', 'repair', 'Московская обл.', 'default', new Date().toISOString()]);
 
 // Save
 fs.writeFileSync('./src/database.sqlite', db.export());

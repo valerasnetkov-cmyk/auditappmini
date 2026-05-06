@@ -158,11 +158,19 @@ function getUserRecordById(id) {
 }
 
 function getVehicleById(id) {
-  return db.prepare('SELECT * FROM vehicles WHERE id = ?').get(id)
+  return db.prepare(`
+    SELECT id, number, name, status, region, company_id, created_at, last_scheduled_inspection
+    FROM vehicles
+    WHERE id = ?
+  `).get(id)
 }
 
 function getVehicleByNumber(number) {
-  return db.prepare('SELECT * FROM vehicles WHERE number = ?').get(number)
+  return db.prepare(`
+    SELECT id, number, name, status, region, company_id, created_at, last_scheduled_inspection
+    FROM vehicles
+    WHERE number = ?
+  `).get(number)
 }
 
 function getRegionByName(name) {
@@ -213,18 +221,18 @@ function updateUserRecord(id, { email, name, role, passwordHash }) {
   }
 }
 
-function createVehicleRecord({ id, number, name, status, qrCode, region, companyId = 'default' }) {
+function createVehicleRecord({ id, number, name, status, region, companyId = 'default' }) {
   return db.prepare(`
-    INSERT INTO vehicles (id, number, name, status, qr_code, region, company_id)
-    VALUES (?, ?, ?, ?, ?, ?, ?)
-  `).run(id, number, name, status, qrCode, region, companyId)
+    INSERT INTO vehicles (id, number, name, status, region, company_id)
+    VALUES (?, ?, ?, ?, ?, ?)
+  `).run(id, number, name, status, region, companyId)
 }
 
-function updateVehicleRecord(id, { number, name, status, qrCode, region }) {
+function updateVehicleRecord(id, { number, name, status, region }) {
   return db.prepare(`
-    UPDATE vehicles SET number = ?, name = ?, status = ?, qr_code = ?, region = ?
+    UPDATE vehicles SET number = ?, name = ?, status = ?, region = ?
     WHERE id = ?
-  `).run(number.toUpperCase(), name, status, qrCode || null, region || null, id)
+  `).run(number.toUpperCase(), name, status, region || null, id)
 }
 
 function recordVehicleStatusChange({ vehicleId, oldStatus, newStatus, reason, changedBy }) {
@@ -247,6 +255,24 @@ function createRegionRecord(name) {
 
 function deleteRegionRecord(id) {
   return db.prepare('DELETE FROM regions WHERE id = ?').run(id)
+}
+
+function ensureRegionRecordByName(name) {
+  const regionName = normalizeRegionName(name)
+  if (!regionName) return null
+
+  const existing = getRegionByName(regionName)
+  if (existing) return existing
+
+  const vehicleCount = db.prepare('SELECT COUNT(*) as count FROM vehicles WHERE region = ?').get(regionName)
+  if (Number(vehicleCount?.count || 0) === 0) return null
+
+  createRegionRecord(regionName)
+  return getRegionByName(regionName)
+}
+
+function getRegionForMutation(id, fallbackName) {
+  return getRegionById(id) || ensureRegionRecordByName(fallbackName)
 }
 
 function randomInteger(maxExclusive) {
@@ -584,7 +610,15 @@ app.delete('/api/users/:id', authenticate, (req, res) => {
 // ============ REGIONS ============
 
 app.get('/api/regions', authenticate, (req, res) => {
-  res.json(listRegions())
+  const includeEmpty = req.query.includeEmpty === '1' || req.query.includeEmpty === 'true'
+  const regions = listRegions()
+  const normalizedRegions = regions.map((region) => ({
+    ...region,
+    vehicle_count: Number(region.vehicle_count || 0),
+    vehicleCount: Number(region.vehicle_count || 0),
+  }))
+
+  res.json(includeEmpty ? normalizedRegions : normalizedRegions.filter((region) => region.vehicle_count > 0))
 })
 
 app.post('/api/regions', authenticate, (req, res) => {
@@ -601,7 +635,45 @@ app.post('/api/regions', authenticate, (req, res) => {
 
   createRegionRecord(regionName)
   const region = getRegionByName(regionName)
-  res.status(201).json(region)
+  res.status(201).json({ ...region, vehicle_count: 0, vehicleCount: 0 })
+})
+
+app.put('/api/regions/:id', authenticate, (req, res) => {
+  if (!ensureManager(req, res)) return
+  
+  const region = getRegionForMutation(req.params.id, req.body?.currentName)
+  if (!region) {
+    return sendError(res, 404, API_MESSAGES.regionNotFound)
+  }
+  
+  const newName = normalizeRegionName(req.body?.name)
+  if (!newName) {
+    return sendError(res, 400, API_MESSAGES.regionNameRequired)
+  }
+  
+  const existing = getRegionByName(newName)
+  if (existing && existing.id !== region.id) {
+    db.prepare('UPDATE vehicles SET region = ? WHERE region = ?').run(existing.name, region.name)
+    deleteRegionRecord(region.id)
+
+    const count = db.prepare('SELECT COUNT(*) as count FROM vehicles WHERE region = ?').get(existing.name)
+    const vehicleCount = Number(count?.count || 0)
+    return res.json({
+      id: existing.id,
+      name: existing.name,
+      vehicle_count: vehicleCount,
+      vehicleCount,
+      merged_from: region.name,
+      merged_into: existing.name,
+    })
+  }
+  
+  db.prepare('UPDATE vehicles SET region = ? WHERE region = ?').run(newName, region.name)
+  db.prepare('UPDATE regions SET name = ? WHERE id = ?').run(newName, region.id)
+  
+  const count = db.prepare('SELECT COUNT(*) as count FROM vehicles WHERE region = ?').get(newName)
+  const vehicleCount = Number(count?.count || 0)
+  res.json({ id: region.id, name: newName, vehicle_count: vehicleCount, vehicleCount })
 })
 
 app.delete('/api/regions/:id', authenticate, (req, res) => {
@@ -612,11 +684,7 @@ app.delete('/api/regions/:id', authenticate, (req, res) => {
     return sendError(res, 404, API_MESSAGES.regionNotFound)
   }
 
-  const vehicleUsage = db.prepare('SELECT COUNT(*) as count FROM vehicles WHERE region = ?').get(region.name)
-  if (Number(vehicleUsage?.count || 0) > 0) {
-    return sendError(res, 400, API_MESSAGES.regionInUse)
-  }
-
+  db.prepare('UPDATE vehicles SET region = NULL WHERE region = ?').run(region.name)
   deleteRegionRecord(req.params.id)
   res.status(204).send()
 })
@@ -644,7 +712,8 @@ app.get('/api/vehicles', authenticate, (req, res) => {
   const { count } = countQuery.get(...params)
 
   const query = db.prepare(`
-    SELECT * FROM vehicles 
+    SELECT id, number, name, status, region, company_id, created_at, last_scheduled_inspection
+    FROM vehicles
     WHERE ${whereClause}
     ORDER BY created_at DESC 
     LIMIT ? OFFSET ?
@@ -738,7 +807,7 @@ app.get('/api/vehicles/:id', authenticate, (req, res) => {
 })
 
 app.post('/api/vehicles', authenticate, (req, res) => {
-  const { number, name, status = 'active', qr_code, region } = req.body
+  const { number, name, status = 'active', region } = req.body
   const validated = validateVehiclePayload({ number, name, region })
   if (validated.error) {
     return sendError(res, 400, validated.error)
@@ -755,16 +824,74 @@ app.post('/api/vehicles', authenticate, (req, res) => {
     number: validated.number,
     name: validated.name,
     status,
-    qrCode: qr_code,
     region: validated.region,
   })
 
-  const vehicle = getVehicleById(id)
+const vehicle = getVehicleById(id)
   res.status(201).json(vehicle)
 })
 
+// POST /api/vehicles/import - bulk import vehicles from CSV
+app.post('/api/vehicles/import', authenticate, (req, res) => {
+  if (!ensureManager(req, res)) return
+  
+  const { vehicles } = req.body
+  if (!Array.isArray(vehicles)) {
+    return sendError(res, 400, 'Требуется массив vehicles')
+  }
+  
+  const imported = []
+  const errors = []
+  const regionsAdded = []
+  
+  // First pass: collect all unique regions and auto-create them
+  const regions = new Set()
+  vehicles.forEach(v => {
+    if (v.region) regions.add(v.region)
+  })
+  
+  regions.forEach(regionName => {
+    const normalized = normalizeRegionName(regionName)
+    if (normalized && !getRegionByName(normalized)) {
+      createRegionRecord(normalized)
+      regionsAdded.push(normalized)
+    }
+  })
+  
+  vehicles.forEach((v, idx) => {
+    const { number, name, region } = v
+    
+    // Use normalized region name if provided, otherwise empty
+    const normalizedRegion = region ? normalizeRegionName(region) : ''
+    
+    const validated = validateVehiclePayload({ number, name, region: normalizedRegion })
+    if (validated.error) {
+      errors.push({ row: idx + 1, error: validated.error })
+      return
+    }
+    
+    const duplicateError = ensureVehicleNumberAvailable(validated.number)
+    if (duplicateError) {
+      errors.push({ row: idx + 1, error: duplicateError })
+      return
+    }
+    
+    const id = uuidv4()
+    createVehicleRecord({
+      id,
+      number: validated.number,
+      name: validated.name,
+      status: 'active',
+      region: validated.region,
+    })
+    imported.push({ number: validated.number })
+  })
+  
+  res.json({ imported: imported.length, errors, vehicles: imported, regionsAdded: regionsAdded.length })
+})
+
 app.put('/api/vehicles/:id', authenticate, (req, res) => {
-  const { number, name, status, qr_code, region, reason } = req.body
+  const { number, name, status, region, reason } = req.body
 
   const oldVehicle = getVehicleById(req.params.id)
   if (!oldVehicle) {
@@ -785,7 +912,6 @@ app.put('/api/vehicles/:id', authenticate, (req, res) => {
     number: validated.number,
     name: validated.name,
     status,
-    qrCode: qr_code,
     region: validated.region,
   })
 
@@ -1389,8 +1515,8 @@ app.post('/api/seed', authenticate, (req, res) => {
   const vehicleRecords = []
   const latestScheduledInspectionByVehicle = new Map()
   const insertVehicle = db.prepare(`
-    INSERT INTO vehicles (id, number, name, status, qr_code, region, company_id, created_at, last_scheduled_inspection)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO vehicles (id, number, name, status, region, company_id, created_at, last_scheduled_inspection)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
   `)
 
   const carNames = ['ГАЗель Next', 'ГАЗель Бизнес', 'Соболь', 'Ford Transit', 'Mercedes Sprinter', 'Volkswagen Crafter']
@@ -1406,7 +1532,7 @@ app.post('/api/seed', authenticate, (req, res) => {
     const region = randomItem(regions)
     const createdAt = randomDateBetween(new Date(now.getTime() - 180 * 24 * 60 * 60 * 1000), now).toISOString()
 
-    insertVehicle.run(id, number, name, status, name.split(' ')[0], region, companyId, createdAt, null)
+    insertVehicle.run(id, number, name, status, region, companyId, createdAt, null)
     vehicleRecords.push({ id, createdAt })
   }
 
@@ -1611,7 +1737,7 @@ app.get('/api/analytics/export/excel', authenticate, (req, res) => {
 
   if (type === 'vehicles') {
     data = db.prepare(`
-      SELECT v.number, v.name, v.status, v.region, v.qr_code, v.created_at,
+      SELECT v.number, v.name, v.status, v.region, v.created_at,
              (SELECT COUNT(*) FROM inspections WHERE vehicle_id = v.id) as inspections_count,
              (SELECT COUNT(*) FROM defects d JOIN inspections i ON d.inspection_id = i.id WHERE i.vehicle_id = v.id) as defects_count
       FROM vehicles v

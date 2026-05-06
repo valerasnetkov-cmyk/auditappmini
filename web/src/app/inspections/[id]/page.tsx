@@ -16,13 +16,13 @@ type ChecklistItem = {
 
 type StatusTone = 'success' | 'error'
 
-const QUICK_CHECKLIST = ['Внешний вид', 'Повреждения кузова', 'Колёса', 'Стёкла', 'Госномер']
+const QUICK_CHECKLIST = ['Внешний вид', 'Повреждения кузова', 'Колеса', 'Стекла', 'Госномер']
 const SCHEDULED_CHECKLIST = [
   'Внешний вид',
   'Повреждения кузова',
   'Лакокрасочное покрытие',
-  'Колёса',
-  'Стёкла',
+  'Колеса',
+  'Стекла',
   'Фары',
   'Зеркала',
   'Двери',
@@ -33,39 +33,42 @@ const SCHEDULED_CHECKLIST = [
 ]
 const ACCIDENT_CHECKLIST = ['Повреждения кузова', 'Остекление', 'Ходовая', 'Кузов', 'Безопасность']
 
-const CHECKLIST_SECTIONS = {
+const CHECKLIST_SECTIONS: Record<string, Record<string, string[]>> = {
   quick: {
-    'Кузов': ['Внешний вид', 'Повреждения кузова'],
-    'Ходовая': ['Колёса'],
-    'Прочее': ['Стёкла', 'Госномер'],
+    Кузов: ['Внешний вид', 'Повреждения кузова'],
+    Ходовая: ['Колеса'],
+    Прочее: ['Стекла', 'Госномер'],
   },
   scheduled: {
-    'Кузов': ['Внешний вид', 'Повреждения кузова', 'Лакокрасочное покрытие', 'Стёкла', 'Фары', 'Зеркала', 'Двери', 'Госномер'],
-    'Ходовая': ['Колёса'],
-    'Двигатель': ['Двигатель'],
-    'Салон': ['Салон', 'Приборная панель'],
+    Кузов: ['Внешний вид', 'Повреждения кузова', 'Лакокрасочное покрытие', 'Стекла', 'Фары', 'Зеркала', 'Двери', 'Госномер'],
+    Ходовая: ['Колеса'],
+    Двигатель: ['Двигатель'],
+    Салон: ['Салон', 'Приборная панель'],
   },
   accident: {
-    'Кузов': ['Повреждения кузова', 'Кузов'],
-    'Ходовая': ['Ходовая'],
-    'Безопасность': ['Остекление', 'Безопасность'],
+    Кузов: ['Повреждения кузова', 'Кузов'],
+    Ходовая: ['Ходовая'],
+    Безопасность: ['Остекление', 'Безопасность'],
   },
 }
 
-function getItemSection(type: InspectionType, title: string): string {
-  const sections = CHECKLIST_SECTIONS[type as keyof typeof CHECKLIST_SECTIONS]
-  if (!sections) return 'Прочее'
-  for (const [section, items] of Object.entries(sections)) {
-    if ((items as string[]).includes(title)) return section
-  }
-  return 'Прочее'
-}
-
-function getTypeLabel(type: string) {
+function getTypeLabel(type?: string) {
   if (type === 'quick') return 'Быстрый'
   if (type === 'scheduled') return 'Плановый'
   if (type === 'accident') return 'ДТП'
-  return type
+  return type || 'Не указан'
+}
+
+function getTypeStyle(type?: string) {
+  if (type === 'accident') return 'bg-red-100 text-red-800'
+  if (type === 'scheduled') return 'bg-purple-100 text-purple-800'
+  return 'bg-blue-100 text-blue-800'
+}
+
+function getTypeSelectedStyle(type?: string) {
+  if (type === 'accident') return 'border-red-500 bg-red-100 text-red-800'
+  if (type === 'scheduled') return 'border-purple-500 bg-purple-100 text-purple-800'
+  return 'border-blue-500 bg-blue-100 text-blue-800'
 }
 
 function getChecklistTemplate(type: InspectionType) {
@@ -74,12 +77,41 @@ function getChecklistTemplate(type: InspectionType) {
   return QUICK_CHECKLIST
 }
 
+function getItemSection(type: InspectionType, title: string) {
+  const sections = CHECKLIST_SECTIONS[type] || CHECKLIST_SECTIONS.quick
+  for (const [section, items] of Object.entries(sections)) {
+    if (items.includes(title)) return section
+  }
+  return 'Прочее'
+}
+
 function formatDateTime(value?: string | null) {
   if (!value) return 'Не указано'
   return new Date(value).toLocaleString('ru-RU')
 }
 
-export default function InspectionFormPage() {
+function toDatetimeLocalValue(value?: string | null) {
+  if (!value) return ''
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return ''
+  const offsetMs = date.getTimezoneOffset() * 60 * 1000
+  return new Date(date.getTime() - offsetMs).toISOString().slice(0, 16)
+}
+
+function groupChecklist(type: InspectionType, items: ChecklistItem[]) {
+  return items.reduce<Record<string, Array<ChecklistItem & { index: number }>>>((groups, item, index) => {
+    const section = getItemSection(type, item.title)
+    groups[section] = groups[section] || []
+    groups[section].push({ ...item, index })
+    return groups
+  }, {})
+}
+
+function getPhotoCount(defects: InspectionDetail['defects']) {
+  return defects.reduce((sum, defect) => sum + (defect.photos?.length || 0), 0)
+}
+
+export default function InspectionDetailPage() {
   const params = useParams<{ id: string }>()
   const inspectionId = params.id
 
@@ -92,11 +124,10 @@ export default function InspectionFormPage() {
   const [defectPhotos, setDefectPhotos] = useState<Record<string, PhotoRecord[]>>({})
   const [accidentOccurredAt, setAccidentOccurredAt] = useState('')
   const [accidentLocation, setAccidentLocation] = useState('')
-  const [odometerValue, setOdometerValue] = useState<string>('')
-  const [odometerUnit, setOdometerUnit] = useState<string>('km')
+  const [odometerValue, setOdometerValue] = useState('')
+  const [odometerUnit, setOdometerUnit] = useState('km')
   const [uploadingPhoto, setUploadingPhoto] = useState<string | null>(null)
   const [deletingPhoto, setDeletingPhoto] = useState<string | null>(null)
-  const [showQR, setShowQR] = useState(false)
   const [statusMessage, setStatusMessage] = useState('')
   const [statusTone, setStatusTone] = useState<StatusTone>('success')
 
@@ -110,12 +141,10 @@ export default function InspectionFormPage() {
     setStatusMessage(message)
   }
 
-  const clearStatus = () => {
-    setStatusMessage('')
-  }
+  const clearStatus = () => setStatusMessage('')
 
   const initChecklist = (type: InspectionType, existingItems?: ChecklistItemResponse[]) => {
-    if (existingItems && existingItems.length > 0) {
+    if (existingItems?.length) {
       setChecklist(
         existingItems.map((item) => ({
           title: item.title,
@@ -140,26 +169,21 @@ export default function InspectionFormPage() {
       }
 
       const result = await api.getInspection(inspectionId)
-      if (result.error) {
-        setError(result.error)
-        return
-      }
-
-      if (!result.data) {
-        setError('Осмотр не найден')
+      if (result.error || !result.data) {
+        setError(result.error || 'Осмотр не найден')
         return
       }
 
       setInspection(result.data)
       initChecklist(result.data.type, result.data.checklist_items)
-      setAccidentOccurredAt(result.data.accident_occurred_at ? result.data.accident_occurred_at.slice(0, 16) : '')
+      setAccidentOccurredAt(toDatetimeLocalValue(result.data.accident_occurred_at))
       setAccidentLocation(result.data.accident_location || '')
       setOdometerValue(result.data.odometer_value ? String(result.data.odometer_value) : '')
       setOdometerUnit(result.data.odometer_unit || 'km')
 
       const photosByTitle: Record<string, PhotoRecord[]> = {}
       result.data.defects.forEach((defect) => {
-        photosByTitle[defect.title] = defect.photos
+        photosByTitle[defect.title] = defect.photos || []
       })
       setDefectPhotos(photosByTitle)
     } catch {
@@ -208,7 +232,7 @@ export default function InspectionFormPage() {
   const handlePhotoUpload = async (defectTitle: string, file: File) => {
     const defect = inspection?.defects.find((item) => item.title === defectTitle)
     if (!defect) {
-      showStatus('error', 'Сначала сохраните осмотр, затем можно добавлять фото дефекта')
+      showStatus('error', 'Сначала сохраните осмотр, затем можно добавить фото дефекта')
       return
     }
 
@@ -224,7 +248,7 @@ export default function InspectionFormPage() {
 
       setDefectPhotos((prev) => ({
         ...prev,
-        [defectTitle]: [...(prev[defectTitle] || []), { url: result.data.url || '', id: result.data.id, geo: result.data.geo }],
+        [defectTitle]: [...(prev[defectTitle] || []), { url: result.data?.url || '', id: result.data?.id, geo: result.data?.geo }],
       }))
       showStatus('success', 'Фото добавлено')
     } catch {
@@ -252,7 +276,7 @@ export default function InspectionFormPage() {
 
       setDefectPhotos((prev) => ({
         ...prev,
-        [defectTitle]: prev[defectTitle].filter((_, index) => index !== photoIndex),
+        [defectTitle]: (prev[defectTitle] || []).filter((_, index) => index !== photoIndex),
       }))
       showStatus('success', 'Фото удалено')
     } catch {
@@ -271,14 +295,16 @@ export default function InspectionFormPage() {
       if (!accidentLocation.trim()) warnings.push('Укажите место ДТП')
     }
 
-    if (inspection.type === 'quick' || inspection.type === 'scheduled') {
-      if (!odometerValue.trim()) warnings.push('Укажите пробег')
+    if ((inspection.type === 'quick' || inspection.type === 'scheduled') && !odometerValue.trim()) {
+      warnings.push('Укажите пробег')
     }
 
-    const uncheckedItems = checklist.filter(item => !item.result)
-    if (uncheckedItems.length > 0) {
-      warnings.push(`Не проверено пунктов: ${uncheckedItems.length}`)
-    }
+    checklist
+      .filter((item) => !item.result)
+      .forEach((item) => {
+        const photos = defectPhotos[item.title] || []
+        if (photos.length === 0) warnings.push(`Добавьте фото дефекта: ${item.title}`)
+      })
 
     return warnings
   }
@@ -314,23 +340,12 @@ export default function InspectionFormPage() {
       }
 
       await loadInspection()
-      showStatus('success', 'Осмотр сохранён')
+      showStatus('success', 'Осмотр сохранен')
     } catch {
       showStatus('error', 'Ошибка сохранения')
     } finally {
       setSaving(false)
     }
-  }
-
-  const getQRCodeUrl = () => {
-    const data = JSON.stringify({
-      id: inspection?.id,
-      vehicle: inspection?.vehicle_number,
-      type: inspection?.type,
-      date: inspection?.created_at,
-    })
-    const encoded = btoa(data)
-    return `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encoded}`
   }
 
   const handlePrintIncidentCard = () => {
@@ -341,20 +356,16 @@ export default function InspectionFormPage() {
           .map(
             (defect, index) => `
               <tr>
-                <td style="padding:8px;border:1px solid #dbe2ea;">${index + 1}</td>
-                <td style="padding:8px;border:1px solid #dbe2ea;">${defect.title}</td>
-                <td style="padding:8px;border:1px solid #dbe2ea;">${defect.comment || 'Без описания'}</td>
-                <td style="padding:8px;border:1px solid #dbe2ea;">${formatDateTime(defect.created_at)}</td>
-                <td style="padding:8px;border:1px solid #dbe2ea;">${defect.photos.length}</td>
+                <td>${index + 1}</td>
+                <td>${defect.title}</td>
+                <td>${defect.comment || 'Без описания'}</td>
+                <td>${formatDateTime(defect.created_at)}</td>
+                <td>${defect.photos.length}</td>
               </tr>
             `,
           )
           .join('')
-      : `
-          <tr>
-            <td colspan="5" style="padding:12px;border:1px solid #dbe2ea;text-align:center;">Дефекты не зафиксированы</td>
-          </tr>
-        `
+      : '<tr><td colspan="5">Дефекты не зафиксированы</td></tr>'
 
     const printWindow = window.open('', '_blank', 'width=1100,height=900')
     if (!printWindow) return
@@ -374,7 +385,7 @@ export default function InspectionFormPage() {
             .value { font-size: 15px; font-weight: 600; }
             table { width: 100%; border-collapse: collapse; margin-top: 16px; }
             th { text-align: left; background: #eff6ff; }
-            th, td { font-size: 13px; }
+            th, td { font-size: 13px; padding: 8px; border: 1px solid #dbe2ea; }
           </style>
         </head>
         <body>
@@ -390,15 +401,7 @@ export default function InspectionFormPage() {
           </div>
           <h2>Дефекты</h2>
           <table>
-            <thead>
-              <tr>
-                <th style="padding:8px;border:1px solid #dbe2ea;">№</th>
-                <th style="padding:8px;border:1px solid #dbe2ea;">Дефект</th>
-                <th style="padding:8px;border:1px solid #dbe2ea;">Описание</th>
-                <th style="padding:8px;border:1px solid #dbe2ea;">Зафиксирован</th>
-                <th style="padding:8px;border:1px solid #dbe2ea;">Фото</th>
-              </tr>
-            </thead>
+            <thead><tr><th>№</th><th>Дефект</th><th>Описание</th><th>Зафиксирован</th><th>Фото</th></tr></thead>
             <tbody>${defectsMarkup}</tbody>
           </table>
         </body>
@@ -410,25 +413,18 @@ export default function InspectionFormPage() {
     printWindow.print()
   }
 
+  const groupedChecklist = useMemo(
+    () => (inspection ? groupChecklist(inspection.type, checklist) : {}),
+    [inspection, checklist],
+  )
   const defectsCount = checklist.filter((item) => !item.result).length
-  const accidentSummary = useMemo(() => {
-    if (!inspection || inspection.type !== 'accident') return []
-
-    return [
-      { label: 'Время ДТП', value: formatDateTime(inspection.accident_occurred_at) },
-      { label: 'Время осмотра', value: formatDateTime(inspection.created_at) },
-      { label: 'Место ДТП', value: inspection.accident_location || 'Не указано' },
-      { label: 'Инспектор', value: inspection.inspector_name || 'Не указано' },
-      { label: 'Дефектов зафиксировано', value: String(inspection.defects.length) },
-      { label: 'Фото по дефектам', value: String(inspection.defects.reduce((sum, defect) => sum + defect.photos.length, 0)) },
-    ]
-  }, [inspection])
+  const warnings = getIncompleteWarnings()
 
   if (loading) {
     return (
-      <div className="flex min-h-screen items-center justify-center">
-        <div className="h-8 w-8 animate-spin rounded-full border-b-2 border-blue-600"></div>
-      </div>
+      <Layout currentPage="inspections">
+        <div className="flex min-h-[60vh] items-center justify-center p-6 text-slate-500">Загрузка...</div>
+      </Layout>
     )
   }
 
@@ -459,56 +455,23 @@ export default function InspectionFormPage() {
             <Link href="/inspections" className="mb-1 block text-sm text-blue-600 hover:underline">
               Назад к осмотрам
             </Link>
-            <h1 className="text-xl font-bold text-slate-900">Осмотр техники</h1>
-            <p className="mt-1 text-sm text-slate-500">
+            <h1 className="text-2xl font-bold text-slate-900">Осмотр техники</h1>
+            <p className="mt-1 text-slate-500">
               {inspection?.vehicle_number} · {inspection?.vehicle_name}
             </p>
           </div>
 
-          <div className="text-right">
-            <span
-              className={`inline-block rounded px-2 py-1 text-xs ${
-                inspection?.type === 'accident'
-                  ? 'bg-red-100 text-red-800'
-                  : inspection?.type === 'scheduled'
-                    ? 'bg-purple-100 text-purple-800'
-                    : 'bg-blue-100 text-blue-800'
-              }`}
-            >
-              {getTypeLabel(inspection?.type || '')}
+          <div className="flex flex-col items-end gap-2">
+            <span className={`inline-block rounded px-2 py-1 text-xs ${getTypeStyle(inspection?.type)}`}>
+              {getTypeLabel(inspection?.type)}
             </span>
-            <div className="mt-2 flex flex-col items-end gap-2">
-              <button onClick={() => setShowQR((value) => !value)} className="rounded border bg-slate-100 px-3 py-1 text-xs hover:bg-slate-200">
-                {showQR ? 'Скрыть QR' : 'Показать QR'}
+            {inspection?.type === 'accident' ? (
+              <button onClick={handlePrintIncidentCard} className="rounded border border-red-200 bg-red-50 px-3 py-1 text-xs text-red-700 hover:bg-red-100">
+                Печать карточки ДТП
               </button>
-              {inspection?.type === 'accident' ? (
-                <button onClick={handlePrintIncidentCard} className="rounded border border-red-200 bg-red-50 px-3 py-1 text-xs text-red-700 hover:bg-red-100">
-                  Печать карточки ДТП
-                </button>
-              ) : null}
-            </div>
+            ) : null}
           </div>
         </div>
-
-        {showQR ? (
-          <div className="mb-6 rounded-2xl border border-blue-200 bg-blue-50 p-4">
-            <div className="flex flex-wrap items-center gap-6">
-              <div className="text-center">
-                <img src={getQRCodeUrl()} alt="QR-код" className="mx-auto h-32 w-32" />
-                <p className="mt-1 text-xs text-slate-500">Сканируйте для быстрого доступа</p>
-              </div>
-              <div>
-                <h3 className="font-semibold text-blue-900">Осмотр #{inspection?.id}</h3>
-                <p className="text-sm text-blue-700">
-                  {inspection?.vehicle_number} · {inspection?.vehicle_name}
-                </p>
-                <p className="mt-1 text-xs text-blue-600">
-                  {getTypeLabel(inspection?.type || '')} · {inspection?.created_at ? new Date(inspection.created_at).toLocaleString('ru-RU') : ''}
-                </p>
-              </div>
-            </div>
-          </div>
-        ) : null}
 
         {statusMessage ? (
           <div className={`mb-4 rounded-lg px-4 py-3 text-sm ${statusTone === 'success' ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-700'}`}>
@@ -516,18 +479,33 @@ export default function InspectionFormPage() {
           </div>
         ) : null}
 
-        {(() => {
-          const warnings = getIncompleteWarnings()
-          if (warnings.length === 0 || inspection?.completed) return null
-          return (
-            <div className="mb-4 rounded-lg border border-yellow-200 bg-yellow-50 px-4 py-3 text-sm text-yellow-800">
-              <strong className="font-medium">Неполные данные:</strong>
-              <ul className="mt-1 list-inside list-disc">
-                {warnings.map((w, i) => <li key={i}>{w}</li>)}
-              </ul>
-            </div>
-          )
-        })()}
+        {warnings.length > 0 && !inspection?.completed ? (
+          <div className="mb-4 rounded-lg border border-yellow-200 bg-yellow-50 px-4 py-3 text-sm text-yellow-800">
+            <strong className="font-medium">Неполные данные:</strong>
+            <ul className="mt-1 list-inside list-disc">
+              {warnings.map((warning) => <li key={warning}>{warning}</li>)}
+            </ul>
+          </div>
+        ) : null}
+
+        <div className="mb-6 grid gap-4 md:grid-cols-4">
+          <div className="rounded-2xl bg-white p-4 shadow-sm">
+            <div className="text-sm text-slate-500">Время осмотра</div>
+            <div className="mt-1 font-semibold text-slate-900">{formatDateTime(inspection?.created_at)}</div>
+          </div>
+          <div className="rounded-2xl bg-white p-4 shadow-sm">
+            <div className="text-sm text-slate-500">Инспектор</div>
+            <div className="mt-1 font-semibold text-slate-900">{inspection?.inspector_name || 'Не указано'}</div>
+          </div>
+          <div className="rounded-2xl bg-white p-4 shadow-sm">
+            <div className="text-sm text-slate-500">Дефекты</div>
+            <div className="mt-1 text-2xl font-bold text-red-600">{defectsCount}</div>
+          </div>
+          <div className="rounded-2xl bg-white p-4 shadow-sm">
+            <div className="text-sm text-slate-500">Фото дефектов</div>
+            <div className="mt-1 text-2xl font-bold text-blue-600">{getPhotoCount(inspection?.defects || [])}</div>
+          </div>
+        </div>
 
         <div className="mb-6 rounded-2xl bg-white p-6 shadow-sm">
           {inspection?.type === 'accident' ? (
@@ -545,7 +523,7 @@ export default function InspectionFormPage() {
                 </div>
                 <div>
                   <label className="mb-1 block text-sm font-medium text-slate-700">Место ДТП</label>
-<input
+                  <input
                     type="text"
                     value={accidentLocation}
                     onChange={(event) => setAccidentLocation(event.target.value)}
@@ -554,28 +532,22 @@ export default function InspectionFormPage() {
                   />
                 </div>
               </div>
-              <p className="mt-3 text-xs text-slate-500">Время осмотра: {formatDateTime(inspection?.created_at)}</p>
+              <p className="mt-3 text-xs text-slate-500">Время осмотра: {formatDateTime(inspection.created_at)}</p>
             </div>
           ) : (inspection?.type === 'quick' || inspection?.type === 'scheduled') ? (
             <div className="mb-6 rounded-xl border border-slate-200 bg-slate-50 p-4">
               <h2 className="mb-3 text-base font-semibold text-slate-900">Одометр</h2>
               <div className="flex items-center gap-3">
-                <div className="flex-1">
-                  <input
-                    type="number"
-                    value={odometerValue}
-                    onChange={(event) => setOdometerValue(event.target.value)}
-                    placeholder="Пробег"
-                    className="w-full rounded-lg border px-3 py-2 text-sm"
-                  />
-                </div>
-                <select
-                  value={odometerUnit}
-                  onChange={(event) => setOdometerUnit(event.target.value)}
-                  className="rounded-lg border px-3 py-2 text-sm"
-                >
+                <input
+                  type="number"
+                  value={odometerValue}
+                  onChange={(event) => setOdometerValue(event.target.value)}
+                  placeholder="Пробег"
+                  className="w-full rounded-lg border px-3 py-2 text-sm"
+                />
+                <select value={odometerUnit} onChange={(event) => setOdometerUnit(event.target.value)} className="rounded-lg border px-3 py-2 text-sm">
                   <option value="km">км</option>
-                  <option value="miles">миль</option>
+                  <option value="mi">мили</option>
                 </select>
               </div>
             </div>
@@ -586,92 +558,104 @@ export default function InspectionFormPage() {
             {defectsCount > 0 ? <span className="ml-2 text-sm text-red-600">({defectsCount} деф.)</span> : null}
           </h2>
 
-          <div className="space-y-3">
-            {checklist.map((item, index) => {
-              const existingDefect = inspection?.defects.find((defect) => defect.title === item.title)
-              return (
-                <div key={item.title} className={`rounded-lg border p-4 ${!item.result ? 'border-red-200 bg-red-50' : 'border-slate-200 bg-slate-50'}`}>
-                  <div className="mb-2 flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <span className="font-medium text-slate-900">{item.title}</span>
-                      {!item.result && <span className="rounded bg-red-100 px-1.5 py-0.5 text-xs text-red-700">ДЕФЕКТ</span>}
-                    </div>
-                    <div className="flex gap-2">
-                      <button
-                        type="button"
-                        onClick={() => handleResultChange(index, true)}
-                        className={`rounded px-3 py-1 text-sm ${item.result ? 'bg-green-500 text-white' : 'bg-slate-200 text-slate-600'}`}
-                      >
-                        OK
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => handleResultChange(index, false)}
-                        className={`rounded px-3 py-1 text-sm ${!item.result ? 'bg-red-500 text-white' : 'bg-slate-200 text-slate-600'}`}
-                      >
-                        Дефект
-                      </button>
-                    </div>
-                  </div>
+          <div className="space-y-5">
+            {Object.entries(groupedChecklist).map(([section, sectionItems]) => (
+              <section key={section} className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+                <h3 className="mb-3 font-semibold text-slate-900">{section}</h3>
+                <div className="space-y-3">
+                  {sectionItems.map((item) => {
+                    const existingDefect = inspection?.defects.find((defect) => defect.title === item.title)
+                    const photos = defectPhotos[item.title] || []
 
-                  {!item.result ? (
-                    <div className="space-y-3">
-                      {existingDefect?.id ? (
-                        <div className="rounded-lg border border-blue-100 bg-blue-50 px-3 py-2 text-xs text-blue-700">
-                          <Link href={`/defects/${existingDefect.id}`} className="font-medium hover:underline">
-                            Открыть карточку дефекта
-                          </Link>
+                    return (
+                      <div key={item.title} className={`rounded-lg border p-4 ${!item.result ? 'border-red-200 bg-red-50' : 'border-slate-200 bg-white'}`}>
+                        <div className="mb-2 flex flex-wrap items-center justify-between gap-3">
+                          <div className="flex items-center gap-2">
+                            <span className="font-medium text-slate-900">{item.title}</span>
+                            {!item.result ? <span className="rounded bg-red-100 px-1.5 py-0.5 text-xs text-red-700">Дефект</span> : null}
+                          </div>
+                          <div className="flex gap-2">
+                            <button
+                              type="button"
+                              onClick={() => handleResultChange(item.index, true)}
+                              className={`rounded px-3 py-1 text-sm ${item.result ? 'bg-green-500 text-white' : 'bg-slate-200 text-slate-600'}`}
+                            >
+                              OK
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleResultChange(item.index, false)}
+                              className={`rounded px-3 py-1 text-sm ${!item.result ? 'bg-red-500 text-white' : 'bg-slate-200 text-slate-600'}`}
+                            >
+                              Дефект
+                            </button>
+                          </div>
                         </div>
-                      ) : null}
 
-                      <textarea
-                        placeholder="Описание дефекта..."
-                        value={item.comment}
-                        onChange={(event) => handleCommentChange(index, event.target.value)}
-                        className="w-full resize-none rounded-lg border px-3 py-2 text-sm"
-                        rows={2}
-                      />
+                        {!item.result ? (
+                          <div className="space-y-3">
+                            {existingDefect?.id ? (
+                              <div className="rounded-lg border border-blue-100 bg-blue-50 px-3 py-2 text-xs text-blue-700">
+                                <Link href={`/defects/${existingDefect.id}`} className="font-medium hover:underline">
+                                  Открыть карточку дефекта
+                                </Link>
+                              </div>
+                            ) : null}
 
-                      <div>
-                        <label className="mb-2 block text-sm font-medium text-slate-600">Фотографии дефекта</label>
-                        <div className="flex flex-wrap items-center gap-2">
-                          {defectPhotos[item.title]?.map((photo, photoIndex) => (
-                            <div key={`${photo.url}-${photoIndex}`} className="group relative">
-                              <img src={buildApiUrl(photo.url)} alt="Дефект" className="h-20 w-20 rounded border object-cover" />
-                              <button
-                                onClick={() => handlePhotoDelete(item.title, photoIndex)}
-                                disabled={deletingPhoto === `${item.title}-${photoIndex}`}
-                                className="absolute -right-2 -top-2 flex h-6 w-6 items-center justify-center rounded-full bg-red-500 text-xs text-white opacity-0 transition-opacity group-hover:opacity-100"
-                              >
-                                {deletingPhoto === `${item.title}-${photoIndex}` ? '...' : '×'}
-                              </button>
-                            </div>
-                          ))}
-
-                          <label className="flex h-20 w-20 cursor-pointer items-center justify-center rounded border-2 border-dashed border-slate-300 transition-colors hover:border-blue-400 hover:bg-blue-50">
-                            {uploadingPhoto === item.title ? (
-                              <div className="h-6 w-6 animate-spin rounded-full border-b-2 border-blue-600"></div>
-                            ) : (
-                              <span className="text-2xl text-slate-400">+</span>
-                            )}
-                            <input
-                              type="file"
-                              accept="image/*"
-                              className="hidden"
-                              onChange={(event) => {
-                                if (event.target.files?.[0]) {
-                                  void handlePhotoUpload(item.title, event.target.files[0])
-                                }
-                              }}
+                            <textarea
+                              placeholder="Описание дефекта..."
+                              value={item.comment}
+                              onChange={(event) => handleCommentChange(item.index, event.target.value)}
+                              className="w-full resize-none rounded-lg border px-3 py-2 text-sm"
+                              rows={2}
                             />
-                          </label>
-                        </div>
+
+                            <div>
+                              <label className="mb-2 block text-sm font-medium text-slate-600">Фотографии дефекта</label>
+                              <div className="flex flex-wrap items-center gap-2">
+                                {photos.map((photo, photoIndex) => (
+                                  <div key={`${photo.url}-${photoIndex}`} className="group relative">
+                                    <button type="button" onClick={() => window.open(buildApiUrl(photo.url), '_blank')}>
+                                      <img src={buildApiUrl(photo.url)} alt="Дефект" className="h-20 w-20 rounded border object-cover" />
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => handlePhotoDelete(item.title, photoIndex)}
+                                      disabled={deletingPhoto === `${item.title}-${photoIndex}`}
+                                      className="absolute -right-2 -top-2 flex h-6 w-6 items-center justify-center rounded-full bg-red-500 text-xs text-white opacity-0 transition-opacity group-hover:opacity-100"
+                                    >
+                                      {deletingPhoto === `${item.title}-${photoIndex}` ? '...' : 'x'}
+                                    </button>
+                                  </div>
+                                ))}
+
+                                <label className="flex h-20 w-20 cursor-pointer items-center justify-center rounded border-2 border-dashed border-slate-300 transition-colors hover:border-blue-400 hover:bg-blue-50">
+                                  {uploadingPhoto === item.title ? (
+                                    <div className="h-6 w-6 animate-spin rounded-full border-b-2 border-blue-600"></div>
+                                  ) : (
+                                    <span className="text-2xl text-slate-400">+</span>
+                                  )}
+                                  <input
+                                    type="file"
+                                    accept="image/*"
+                                    className="hidden"
+                                    onChange={(event) => {
+                                      if (event.target.files?.[0]) {
+                                        void handlePhotoUpload(item.title, event.target.files[0])
+                                      }
+                                    }}
+                                  />
+                                </label>
+                              </div>
+                            </div>
+                          </div>
+                        ) : null}
                       </div>
-                    </div>
-                  ) : null}
+                    )
+                  })}
                 </div>
-              )
-            })}
+              </section>
+            ))}
           </div>
         </div>
 
@@ -701,19 +685,15 @@ export default function InspectionFormPage() {
                   ) : null}
 
                   {defect.photos.length ? (
-                    <div className="mt-2 flex gap-2 flex-wrap">
+                    <div className="mt-2 flex flex-wrap gap-2">
                       {defect.photos.map((photo, index) => (
-                        <img
-                          key={`${photo.url}-${index}`}
-                          src={buildApiUrl(photo.url)}
-                          alt="Фото дефекта"
-                          className="h-24 w-24 cursor-pointer rounded border object-cover hover:opacity-80"
-                          onClick={() => window.open(buildApiUrl(photo.url), '_blank')}
-                        />
+                        <button key={`${photo.url}-${index}`} type="button" onClick={() => window.open(buildApiUrl(photo.url), '_blank')}>
+                          <img src={buildApiUrl(photo.url)} alt="Фото дефекта" className="h-24 w-24 rounded border object-cover hover:opacity-80" />
+                        </button>
                       ))}
                     </div>
                   ) : (
-                    <span className="text-xs text-gray-400">Нет фото</span>
+                    <span className="text-xs text-slate-400">Нет фото</span>
                   )}
                 </div>
               ))}
@@ -757,10 +737,7 @@ function NewInspectionForm({
   const handleSubmit = (event: React.FormEvent) => {
     event.preventDefault()
     if (!selectedVehicle) return
-
-    if (selectedType === 'accident' && (!accidentOccurredAt.trim() || !accidentLocation.trim())) {
-      return
-    }
+    if (selectedType === 'accident' && (!accidentOccurredAt.trim() || !accidentLocation.trim())) return
 
     onCreate(selectedVehicle, selectedType, {
       occurredAt: accidentOccurredAt,
@@ -807,13 +784,7 @@ function NewInspectionForm({
                     type="button"
                     onClick={() => setSelectedType(type)}
                     className={`rounded-lg border px-4 py-3 text-center ${
-                      selectedType === type
-                        ? type === 'accident'
-                          ? 'border-red-500 bg-red-100'
-                          : type === 'scheduled'
-                            ? 'border-purple-500 bg-purple-100'
-                            : 'border-blue-500 bg-blue-100'
-                        : 'border-slate-300'
+                      selectedType === type ? getTypeSelectedStyle(type) : 'border-slate-300'
                     }`}
                   >
                     {getTypeLabel(type)}

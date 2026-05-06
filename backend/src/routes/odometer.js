@@ -76,7 +76,11 @@ export function registerVehicleNumberRecognitionRoutes({ app, db, authenticate, 
 
     const normalized = normalizeVehicleNumberToCyrillic(number)
     const companyId = req.user.company_id || 'default'
-    const vehicle = db.prepare('SELECT * FROM vehicles WHERE number = ? AND (company_id = ? OR company_id IS NULL)').get([normalized, companyId])
+    const vehicle = db.prepare(`
+      SELECT id, number, name, status, region, company_id
+      FROM vehicles
+      WHERE number = ? AND (company_id = ? OR company_id IS NULL)
+    `).get([normalized, companyId])
 
     if (vehicle) {
       return res.json({
@@ -87,7 +91,6 @@ export function registerVehicleNumberRecognitionRoutes({ app, db, authenticate, 
           number: vehicle.number,
           name: vehicle.name,
           status: vehicle.status,
-          qr_code: vehicle.qr_code,
           region: vehicle.region,
           company_id: vehicle.company_id,
         },

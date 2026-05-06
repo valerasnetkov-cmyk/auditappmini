@@ -208,6 +208,13 @@ class ApiClient {
     })
   }
 
+  async importVehicles(vehicles: { number: string; name: string; region: string }[]) {
+    return this.request<{ imported: number; errors: { row: number; error: string }[]; regionsAdded?: number }>('/vehicles/import', {
+      method: 'POST',
+      body: JSON.stringify({ vehicles }),
+    })
+  }
+
   async updateVehicle(id: string, data: UpdateVehiclePayload) {
     return this.request<VehicleDetail>(`/vehicles/${id}`, {
       method: 'PUT',
@@ -225,8 +232,9 @@ class ApiClient {
     })
   }
 
-  async getRegions() {
-    return this.request<RegionRecord[]>('/regions')
+  async getRegions(params?: { includeEmpty?: boolean }) {
+    const query = params?.includeEmpty ? '?includeEmpty=1' : ''
+    return this.request<RegionRecord[]>(`/regions${query}`)
   }
 
   async createRegion(data: CreateRegionPayload) {
@@ -239,6 +247,13 @@ class ApiClient {
   async deleteRegion(id: string) {
     return this.request<void>(`/regions/${id}`, {
       method: 'DELETE',
+    })
+  }
+
+  async updateRegion(id: string, name: string, currentName?: string) {
+    return this.request<RegionRecord>(`/regions/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify({ name, currentName }),
     })
   }
 

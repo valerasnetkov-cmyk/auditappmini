@@ -15,8 +15,8 @@ for (let i = 0; i < 5; i++) {
   const letter3 = 'ABEKMHOPCTYX'[Math.floor(Math.random() * 12)];
   const reg = String(Math.floor(Math.random() * 190) + 10).padStart(2, '0');
   const num = `${letter1}${num3}${letter2}${letter3}${reg}`;
-  db.run(`INSERT INTO vehicles (id, number, name, status, qr_code, region, company_id, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-    [uuidv4(), num, cars[i % 3], 'active', cars[i % 3], 'Москва', 'default', new Date().toISOString()]);
+  db.run(`INSERT INTO vehicles (id, number, name, status, region, company_id, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+    [uuidv4(), num, cars[i % 3], 'active', 'Москва', 'default', new Date().toISOString()]);
 }
 
 fs.writeFileSync('./src/database.sqlite', db.export());
