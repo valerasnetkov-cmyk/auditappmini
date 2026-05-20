@@ -4,9 +4,11 @@ import speakeasy from 'speakeasy'
 import cors from 'cors'
 import jwt from 'jsonwebtoken'
 import bcrypt from 'bcryptjs'
+import crypto from 'crypto'
 import { v4 as uuidv4 } from 'uuid'
 import multer from 'multer'
 import path from 'path'
+import sharp from 'sharp'
 import {
   LICENSE_PLATE_ALLOWED_CYRILLIC,
   normalizeVehicleNumberToCyrillic,
@@ -18,11 +20,14 @@ import { initDatabase, getDb } from './db.js'
 import registerCompleteInspectionRoutes from './routes/completeInspection.js'
 import registerCompanyRoutes from './routes/companies.js'
 import registerDirectusIntegrationRoutes from './routes/directus.js'
+import registerSaasAdminRoutes from './routes/adminSaas.js'
 import { registerOdometerRoutes, registerVehicleNumberRecognitionRoutes } from './routes/odometer.js'
 import { photoRequirements, photoTypeLabels, defectCategories } from './routes/photo-requirements.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
-const uploadsDir = path.join(__dirname, '../uploads')
+const uploadsDir = process.env.UPLOAD_DIR
+  ? path.resolve(process.cwd(), process.env.UPLOAD_DIR)
+  : path.join(__dirname, '../uploads')
 
 if (!fs.existsSync(uploadsDir)) {
   fs.mkdirSync(uploadsDir, { recursive: true })
@@ -39,9 +44,44 @@ const corsOrigins = (process.env.CORS_ORIGINS || 'http://localhost:3000,http://l
   .filter(Boolean)
 const allowAllCorsOrigins = corsOrigins.includes('*')
 
-if (isProduction && JWT_SECRET === DEFAULT_JWT_SECRET) {
-  throw new Error('JWT_SECRET must be set in production')
+function assertProductionConfig() {
+  if (!isProduction) return
+
+  const unsafeJwtSecrets = new Set([DEFAULT_JWT_SECRET, 'dev-secret-change-in-production'])
+
+  if (!process.env.JWT_SECRET || unsafeJwtSecrets.has(JWT_SECRET) || JWT_SECRET.length < 32) {
+    throw new Error('JWT_SECRET must be set to a strong production value')
+  }
+
+  if (allowAllCorsOrigins) {
+    throw new Error('CORS_ORIGINS cannot include "*" in production')
+  }
+
+  if (!process.env.DATABASE_PATH) {
+    throw new Error('DATABASE_PATH must point to persistent storage in production')
+  }
+
+  if (!process.env.UPLOAD_DIR) {
+    throw new Error('UPLOAD_DIR must point to persistent storage in production')
+  }
+
+  if (!process.env.BACKUP_DIR) {
+    throw new Error('BACKUP_DIR must be configured in production')
+  }
+
+  if (process.env.ADMIN_EMAIL) {
+    const adminPassword = process.env.ADMIN_PASSWORD || ''
+    if (!adminPassword || adminPassword === 'admin123' || adminPassword.length < 12) {
+      throw new Error('ADMIN_PASSWORD must be changed before production admin seeding')
+    }
+  }
+
+  if (process.env.DIRECTUS_TOKEN && process.env.DIRECTUS_TOKEN.includes('change-me')) {
+    throw new Error('DIRECTUS_TOKEN cannot use a placeholder value in production')
+  }
 }
+
+assertProductionConfig()
 
 if (!isProduction && JWT_SECRET === DEFAULT_JWT_SECRET) {
   console.warn('[config] Using fallback JWT_SECRET for local development')
@@ -54,7 +94,36 @@ const storage = multer.diskStorage({
     cb(null, uniqueName)
   }
 })
-const upload = multer({ storage })
+const MAX_FILE_SIZE = Number(process.env.MAX_FILE_SIZE || 15 * 1024 * 1024)
+const JSON_BODY_LIMIT = process.env.JSON_BODY_LIMIT || '2mb'
+const ALLOWED_UPLOAD_MIME_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp'])
+const upload = multer({
+  storage,
+  limits: { fileSize: MAX_FILE_SIZE },
+  fileFilter: (req, file, cb) => {
+    if (ALLOWED_UPLOAD_MIME_TYPES.has(file.mimetype)) {
+      cb(null, true)
+      return
+    }
+
+    cb(new Error('Only image uploads are allowed'))
+  },
+})
+
+function uploadPhoto(req, res, next) {
+  upload.single('photo')(req, res, (err) => {
+    if (!err) {
+      next()
+      return
+    }
+
+    if (err.code === 'LIMIT_FILE_SIZE') {
+      return sendError(res, 413, `Photo exceeds ${MAX_FILE_SIZE} bytes`)
+    }
+
+    return sendError(res, 400, 'Only JPG, PNG and WebP uploads are allowed')
+  })
+}
 
 app.use(cors({
   origin: (origin, callback) => {
@@ -69,7 +138,7 @@ app.use(cors({
   allowedHeaders: ['Content-Type', 'Authorization']
 }))
 
-app.use(express.json())
+app.use(express.json({ limit: JSON_BODY_LIMIT }))
 
 function sendError(res, status, message) {
   return res.status(status).json({ error: message })
@@ -100,7 +169,36 @@ const authenticate = (req, res, next) => {
   const token = authHeader.split(' ')[1]
   try {
     const decoded = jwt.verify(token, JWT_SECRET)
-    req.user = decoded
+
+    if (decoded?.purpose || !decoded?.id) {
+      return sendError(res, 401, API_MESSAGES.invalidToken)
+    }
+
+    const user = db.prepare(`
+      SELECT id, email, name, role, status, company_id
+      FROM users
+      WHERE id = ?
+    `).get(decoded.id)
+
+    if (!user) {
+      return sendError(res, 401, API_MESSAGES.invalidToken)
+    }
+
+    if (user.status === 'inactive') {
+      return sendError(res, 403, API_MESSAGES.userInactive)
+    }
+
+    if (decoded.email && decoded.email !== user.email) {
+      return sendError(res, 401, API_MESSAGES.invalidToken)
+    }
+
+    req.user = {
+      id: user.id,
+      email: user.email,
+      name: user.name,
+      role: user.role,
+      company_id: user.company_id || 'default',
+    }
     next()
   } catch (err) {
     return sendError(res, 401, API_MESSAGES.invalidToken)
@@ -113,23 +211,148 @@ const getMimeType = (filename) => {
   return types[ext] || 'application/octet-stream'
 }
 
-// Public uploads for login page demo (no auth required)
-app.use('/uploads/demo', express.static(uploadsDir, {
-  setHeaders: (res, path) => {
-    const mime = getMimeType(path)
-    res.setHeader('Content-Type', mime)
-    res.setHeader('Cache-Control', 'public, max-age=31536000')
-  }
-}))
+const PHOTO_SELECT_COLUMNS = `
+  id, inspection_id, defect_id, company_id, photo_type, url, original_url, webp_url, thumb_url,
+  original_mime, original_name, width, height, size_original, size_webp, size_thumb, hash,
+  geo, is_required, created_at
+`
 
-// Protected uploads - require authentication
-app.use('/uploads', authenticate, express.static(uploadsDir, {
-  setHeaders: (res, path) => {
-    const mime = getMimeType(path)
-    res.setHeader('Content-Type', mime)
-    res.setHeader('Cache-Control', 'public, max-age=31536000')
+function mimeToExtension(mimetype) {
+  if (mimetype === 'image/jpeg') return 'jpg'
+  if (mimetype === 'image/png') return 'png'
+  if (mimetype === 'image/webp') return 'webp'
+  return null
+}
+
+function normalizeStorageSegment(value) {
+  return String(value || 'unknown').replace(/[^a-zA-Z0-9_.-]/g, '_') || 'unknown'
+}
+
+function buildUploadUrl(relativePath) {
+  return `/uploads/${relativePath.replace(/\\/g, '/')}`
+}
+
+function resolveUploadPath(relativePath) {
+  const input = String(relativePath || '').replace(/\\/g, '/')
+  if (!input || input.includes('\0')) return null
+
+  const normalized = path.normalize(input).replace(/\\/g, '/')
+  if (!normalized || normalized === '.' || normalized.startsWith('..') || path.isAbsolute(normalized)) return null
+
+  const uploadsRoot = path.resolve(uploadsDir)
+  const filePath = path.resolve(uploadsRoot, normalized)
+  if (filePath !== uploadsRoot && !filePath.startsWith(`${uploadsRoot}${path.sep}`)) return null
+
+  return { relativePath: normalized, filePath }
+}
+
+async function removeFileIfExists(filePath) {
+  if (!filePath) return
+  try {
+    await fs.promises.unlink(filePath)
+  } catch (err) {
+    if (err?.code !== 'ENOENT') {
+      console.warn(`[uploads] Failed to remove file ${filePath}:`, err.message)
+    }
   }
-}))
+}
+
+async function removePhotoFiles(photo) {
+  const urls = new Set([photo?.url, photo?.original_url, photo?.webp_url, photo?.thumb_url].filter(Boolean))
+  await Promise.all(Array.from(urls).map(async (url) => {
+    if (!url.startsWith('/uploads/')) return
+    const resolved = resolveUploadPath(url.slice('/uploads/'.length))
+    if (resolved) await removeFileIfExists(resolved.filePath)
+  }))
+}
+
+async function processUploadedPhoto({ tempPath, originalName, mimetype, inspectionId, photoId }) {
+  const extension = mimeToExtension(mimetype)
+  if (!extension) {
+    throw new Error('Unsupported photo format')
+  }
+
+  const inspectionSegment = normalizeStorageSegment(inspectionId)
+  const photoSegment = normalizeStorageSegment(photoId)
+  const relativeDir = `inspections/${inspectionSegment}/photos/${photoSegment}`
+  const targetDir = path.join(uploadsDir, relativeDir)
+  const originalPath = path.join(targetDir, `original.${extension}`)
+  const mainPath = path.join(targetDir, 'main.webp')
+  const thumbPath = path.join(targetDir, 'thumb.webp')
+
+  await fs.promises.mkdir(targetDir, { recursive: true })
+  await fs.promises.rename(tempPath, originalPath)
+
+  try {
+    const originalBuffer = await fs.promises.readFile(originalPath)
+    const metadata = await sharp(originalBuffer, { failOn: 'error' }).metadata()
+    await sharp(originalBuffer, { failOn: 'error' })
+      .rotate()
+      .resize({ width: 2048, height: 2048, fit: 'inside', withoutEnlargement: true })
+      .webp({ quality: 82 })
+      .toFile(mainPath)
+
+    await sharp(originalBuffer, { failOn: 'error' })
+      .rotate()
+      .resize({ width: 480, height: 480, fit: 'inside', withoutEnlargement: true })
+      .webp({ quality: 76 })
+      .toFile(thumbPath)
+
+    const [originalStat, mainStat, thumbStat] = await Promise.all([
+      fs.promises.stat(originalPath),
+      fs.promises.stat(mainPath),
+      fs.promises.stat(thumbPath),
+    ])
+
+    return {
+      url: buildUploadUrl(`${relativeDir}/main.webp`),
+      original_url: buildUploadUrl(`${relativeDir}/original.${extension}`),
+      webp_url: buildUploadUrl(`${relativeDir}/main.webp`),
+      thumb_url: buildUploadUrl(`${relativeDir}/thumb.webp`),
+      original_mime: mimetype,
+      original_name: originalName || null,
+      width: Number.isFinite(metadata.width) ? metadata.width : null,
+      height: Number.isFinite(metadata.height) ? metadata.height : null,
+      size_original: originalStat.size,
+      size_webp: mainStat.size,
+      size_thumb: thumbStat.size,
+      hash: crypto.createHash('sha256').update(originalBuffer).digest('hex'),
+    }
+  } catch (err) {
+    await fs.promises.rm(targetDir, { recursive: true, force: true })
+    throw err
+  }
+}
+
+// Protected uploads - require authentication and tenant ownership.
+app.get('/uploads/*', authenticate, (req, res) => {
+  const resolved = resolveUploadPath(req.params[0])
+  if (!resolved) {
+    return sendError(res, 400, 'Invalid upload path')
+  }
+
+  const url = buildUploadUrl(resolved.relativePath)
+  const companyId = req.user.company_id || 'default'
+  const photo = db.prepare(`
+    SELECT id
+    FROM photos
+    WHERE company_id = ?
+      AND (url = ? OR original_url = ? OR webp_url = ? OR thumb_url = ?)
+  `).get(companyId, url, url, url, url)
+
+  if (!photo) {
+    return sendError(res, 404, 'Photo not found')
+  }
+
+  const filePath = resolved.filePath
+  if (!fs.existsSync(filePath)) {
+    return sendError(res, 404, 'Photo file not found')
+  }
+
+  res.setHeader('Content-Type', getMimeType(filePath))
+  res.setHeader('Cache-Control', 'private, max-age=31536000')
+  res.sendFile(filePath)
+})
 
 const db = getDb()
 const NUMERIC_SETTING_KEYS = new Set(['scheduled_inspection_days', 'notification_days_before', 'timezone_offset'])
@@ -145,8 +368,12 @@ function readSettings() {
   return result
 }
 
-function getUserSummaryById(id) {
-  return db.prepare('SELECT id, email, name, role, company_id FROM users WHERE id = ?').get(id)
+function getUserSummaryById(id, companyId = null) {
+  const query = companyId
+    ? db.prepare('SELECT id, email, name, role, status, company_id FROM users WHERE id = ? AND company_id = ?')
+    : db.prepare('SELECT id, email, name, role, status, company_id FROM users WHERE id = ?')
+
+  return companyId ? query.get(id, companyId) : query.get(id)
 }
 
 function getUserIdByEmail(email) {
@@ -154,24 +381,170 @@ function getUserIdByEmail(email) {
   return user?.id ?? null
 }
 
-function getUserRecordById(id) {
-  return db.prepare('SELECT id, email, name, role, created_at FROM users WHERE id = ?').get(id)
+function getUserRecordById(id, companyId = null) {
+  const query = companyId
+    ? db.prepare('SELECT id, email, name, role, status, company_id, created_at FROM users WHERE id = ? AND company_id = ?')
+    : db.prepare('SELECT id, email, name, role, status, company_id, created_at FROM users WHERE id = ?')
+
+  return companyId ? query.get(id, companyId) : query.get(id)
 }
 
-function getVehicleById(id) {
-  return db.prepare(`
+function getVehicleById(id, companyId = null) {
+  const query = companyId
+    ? db.prepare(`
+      SELECT id, number, name, status, region, company_id, created_at, last_scheduled_inspection
+      FROM vehicles
+      WHERE id = ? AND company_id = ?
+    `)
+    : db.prepare(`
     SELECT id, number, name, status, region, company_id, created_at, last_scheduled_inspection
     FROM vehicles
     WHERE id = ?
-  `).get(id)
+  `)
+
+  return companyId ? query.get(id, companyId) : query.get(id)
 }
 
-function getVehicleByNumber(number) {
-  return db.prepare(`
+function getVehicleByNumber(number, companyId = null) {
+  const query = companyId
+    ? db.prepare(`
+      SELECT id, number, name, status, region, company_id, created_at, last_scheduled_inspection
+      FROM vehicles
+      WHERE number = ? AND company_id = ?
+    `)
+    : db.prepare(`
     SELECT id, number, name, status, region, company_id, created_at, last_scheduled_inspection
     FROM vehicles
     WHERE number = ?
-  `).get(number)
+  `)
+
+  return companyId ? query.get(number, companyId) : query.get(number)
+}
+
+function normalizeCompanyLimit(value) {
+  if (value === null || value === undefined || value === '') return null
+  const numeric = Number(value)
+  if (!Number.isFinite(numeric) || numeric < 0) return null
+  return Math.floor(numeric)
+}
+
+function normalizeCompanyFeatureFlag(value) {
+  if (value === null || value === undefined || value === '') return null
+  if (typeof value === 'boolean') return value
+  if (typeof value === 'number') return value !== 0
+
+  const normalized = String(value).trim().toLowerCase()
+  if (['0', 'false', 'off', 'no', 'disabled'].includes(normalized)) return false
+  if (['1', 'true', 'on', 'yes', 'enabled'].includes(normalized)) return true
+
+  return null
+}
+
+function getCompanyLimits(companyId) {
+  return db.prepare(`
+    SELECT *
+    FROM company_limits
+    WHERE company_id = ?
+  `).get(companyId)
+}
+
+function getCompanyResourceUsage(companyId, resource) {
+  if (resource === 'vehicles') {
+    return Number(db.prepare('SELECT COUNT(*) as count FROM vehicles WHERE company_id = ?').get(companyId)?.count || 0)
+  }
+
+  if (resource === 'users') {
+    return Number(db.prepare(`
+      SELECT COUNT(*) as count
+      FROM users
+      WHERE company_id = ? AND role != 'admin'
+    `).get(companyId)?.count || 0)
+  }
+
+  return 0
+}
+
+function getCompanyResourceLimitState(companyId, resource) {
+  const limits = getCompanyLimits(companyId)
+  const field = resource === 'vehicles' ? 'max_vehicles' : resource === 'users' ? 'max_users' : null
+  if (!field) return null
+
+  const max = normalizeCompanyLimit(limits?.[field])
+  if (max === null) return null
+
+  return {
+    resource,
+    max,
+    current: getCompanyResourceUsage(companyId, resource),
+  }
+}
+
+function buildCompanyResourceUsage(companyId, resource) {
+  const limits = getCompanyLimits(companyId)
+  const field = resource === 'vehicles' ? 'max_vehicles' : resource === 'users' ? 'max_users' : null
+  const current = getCompanyResourceUsage(companyId, resource)
+  const max = field ? normalizeCompanyLimit(limits?.[field]) : null
+  const remaining = max === null ? null : Math.max(max - current, 0)
+  const percent = max === null || max <= 0 ? null : Math.min(100, Math.round((current / max) * 100))
+
+  return {
+    current,
+    max,
+    remaining,
+    percent,
+    unlimited: max === null,
+    exceeded: max !== null && current > max,
+  }
+}
+
+function getCompanyLimitViolation(companyId, resource, increment = 1) {
+  const state = getCompanyResourceLimitState(companyId, resource)
+  if (!state || state.current + increment <= state.max) return null
+
+  return {
+    ...state,
+    requested: increment,
+    message: resource === 'vehicles'
+      ? API_MESSAGES.vehicleLimitExceeded
+      : API_MESSAGES.userLimitExceeded,
+  }
+}
+
+function sendCompanyLimitViolation(res, violation) {
+  return sendError(res, 409, `${violation.message}. Текущее значение: ${violation.current}/${violation.max}.`)
+}
+
+function isCompanyFeatureEnabled(companyId, featureField) {
+  const limits = getCompanyLimits(companyId)
+  const flag = normalizeCompanyFeatureFlag(limits?.[featureField])
+
+  // Backward-compatible default: missing limits or unset flags mean "enabled".
+  return flag !== false
+}
+
+function buildCompanyFeatureAccess(limits, featureField) {
+  const configured = normalizeCompanyFeatureFlag(limits?.[featureField])
+
+  return {
+    enabled: configured !== false,
+    configured,
+  }
+}
+
+function getCompanyFeatureDisabledMessage(featureField) {
+  if (featureField === 'ocr_enabled') return API_MESSAGES.ocrFeatureDisabled
+  if (featureField === 'analytics_enabled') return API_MESSAGES.analyticsFeatureDisabled
+  if (featureField === 'accident_module_enabled') return API_MESSAGES.accidentModuleDisabled
+
+  return API_MESSAGES.companyFeatureDisabled
+}
+
+function ensureCompanyFeatureEnabled(req, res, featureField, message = null) {
+  const companyId = req.user?.company_id || 'default'
+  if (isCompanyFeatureEnabled(companyId, featureField)) return true
+
+  sendError(res, 403, message || getCompanyFeatureDisabledMessage(featureField))
+  return false
 }
 
 function getRegionByName(name) {
@@ -182,7 +555,26 @@ function getRegionById(id) {
   return db.prepare('SELECT id, name, created_at FROM regions WHERE id = ?').get(id)
 }
 
-function listRegions() {
+function countVehiclesByRegion(regionName, companyId = null) {
+  const query = companyId
+    ? db.prepare('SELECT COUNT(*) as count FROM vehicles WHERE region = ? AND company_id = ?')
+    : db.prepare('SELECT COUNT(*) as count FROM vehicles WHERE region = ?')
+
+  const result = companyId ? query.get(regionName, companyId) : query.get(regionName)
+  return Number(result?.count || 0)
+}
+
+function listRegions(companyId = null) {
+  if (companyId) {
+    return db.prepare(`
+      SELECT r.id, r.name, r.created_at, COUNT(v.id) as vehicle_count
+      FROM regions r
+      LEFT JOIN vehicles v ON v.region = r.name AND v.company_id = ?
+      GROUP BY r.id, r.name, r.created_at
+      ORDER BY r.name
+    `).all(companyId)
+  }
+
   return db.prepare(`
     SELECT r.id, r.name, r.created_at, COUNT(v.id) as vehicle_count
     FROM regions r
@@ -192,33 +584,85 @@ function listRegions() {
   `).all()
 }
 
-function getInspectionById(id) {
-  return db.prepare('SELECT * FROM inspections WHERE id = ?').get(id)
+function getInspectionById(id, companyId = null) {
+  const query = companyId
+    ? db.prepare('SELECT * FROM inspections WHERE id = ? AND company_id = ?')
+    : db.prepare('SELECT * FROM inspections WHERE id = ?')
+
+  return companyId ? query.get(id, companyId) : query.get(id)
 }
 
-function createUserRecord({ id, email, passwordHash, name, role, companyId = 'default', ignoreExisting = false }) {
+function getInspectionPhotos(inspectionId, companyId) {
+  return db.prepare(`
+    SELECT ${PHOTO_SELECT_COLUMNS}
+    FROM photos
+    WHERE inspection_id = ? AND company_id = ? AND defect_id IS NULL
+    ORDER BY created_at ASC
+  `).all(inspectionId, companyId)
+}
+
+function getDefectsWithPhotos(inspectionId, companyId) {
+  const defects = db.prepare(`
+    SELECT *
+    FROM defects
+    WHERE inspection_id = ? AND company_id = ?
+    ORDER BY created_at ASC
+  `).all(inspectionId, companyId)
+
+  const photos = db.prepare(`
+    SELECT ${PHOTO_SELECT_COLUMNS}
+    FROM photos
+    WHERE inspection_id = ? AND company_id = ? AND defect_id IS NOT NULL
+    ORDER BY created_at ASC
+  `).all(inspectionId, companyId)
+
+  const photosByDefectId = photos.reduce((acc, photo) => {
+    acc[photo.defect_id] = acc[photo.defect_id] || []
+    acc[photo.defect_id].push(photo)
+    return acc
+  }, {})
+
+  return defects.map((defect) => ({
+    ...defect,
+    photos: photosByDefectId[defect.id] || [],
+  }))
+}
+
+function createUserRecord({ id, email, passwordHash, name, role, status = 'active', companyId = 'default', ignoreExisting = false }) {
   const statement = ignoreExisting
-    ? db.prepare('INSERT OR IGNORE INTO users (id, email, password, name, role, company_id) VALUES (?, ?, ?, ?, ?, ?)')
-    : db.prepare('INSERT INTO users (id, email, password, name, role, company_id) VALUES (?, ?, ?, ?, ?, ?)')
+    ? db.prepare('INSERT OR IGNORE INTO users (id, email, password, name, role, status, company_id) VALUES (?, ?, ?, ?, ?, ?, ?)')
+    : db.prepare('INSERT INTO users (id, email, password, name, role, status, company_id) VALUES (?, ?, ?, ?, ?, ?, ?)')
 
-  return statement.run(id, email, passwordHash, name, role, companyId)
+  return statement.run(id, email, passwordHash, name, role, status, companyId)
 }
 
-function updateUserRecord(id, { email, name, role, passwordHash }) {
+function updateUserRecord(id, { email, name, role, status, passwordHash, companyId = null }) {
+  const update = (sql, params) => {
+    if (!companyId) {
+      return db.prepare(sql).run(...params)
+    }
+
+    return db.prepare(`${sql} AND company_id = ?`).run(...params, companyId)
+  }
+
   if (email !== undefined) {
-    db.prepare('UPDATE users SET email = ? WHERE id = ?').run(email, id)
+    update('UPDATE users SET email = ? WHERE id = ?', [email, id])
   }
 
   if (name !== undefined) {
-    db.prepare('UPDATE users SET name = ? WHERE id = ?').run(name, id)
+    update('UPDATE users SET name = ? WHERE id = ?', [name, id])
   }
 
   if (role !== undefined) {
-    db.prepare('UPDATE users SET role = ? WHERE id = ?').run(role, id)
+    update('UPDATE users SET role = ? WHERE id = ?', [role, id])
+  }
+
+  if (status !== undefined) {
+    update('UPDATE users SET status = ? WHERE id = ?', [status, id])
   }
 
   if (passwordHash !== undefined) {
-    db.prepare('UPDATE users SET password = ? WHERE id = ?').run(passwordHash, id)
+    update('UPDATE users SET password = ? WHERE id = ?', [passwordHash, id])
   }
 }
 
@@ -229,11 +673,20 @@ function createVehicleRecord({ id, number, name, status, region, companyId = 'de
   `).run(id, number, name, status, region, companyId)
 }
 
-function updateVehicleRecord(id, { number, name, status, region }) {
-  return db.prepare(`
+function updateVehicleRecord(id, { number, name, status, region, companyId = null }) {
+  const query = companyId
+    ? db.prepare(`
+      UPDATE vehicles SET number = ?, name = ?, status = ?, region = ?
+      WHERE id = ? AND company_id = ?
+    `)
+    : db.prepare(`
     UPDATE vehicles SET number = ?, name = ?, status = ?, region = ?
     WHERE id = ?
-  `).run(number.toUpperCase(), name, status, region || null, id)
+  `)
+
+  return companyId
+    ? query.run(number.toUpperCase(), name, status, region || null, id, companyId)
+    : query.run(number.toUpperCase(), name, status, region || null, id)
 }
 
 function recordVehicleStatusChange({ vehicleId, oldStatus, newStatus, reason, changedBy }) {
@@ -258,22 +711,21 @@ function deleteRegionRecord(id) {
   return db.prepare('DELETE FROM regions WHERE id = ?').run(id)
 }
 
-function ensureRegionRecordByName(name) {
+function ensureRegionRecordByName(name, companyId = null) {
   const regionName = normalizeRegionName(name)
   if (!regionName) return null
 
   const existing = getRegionByName(regionName)
   if (existing) return existing
 
-  const vehicleCount = db.prepare('SELECT COUNT(*) as count FROM vehicles WHERE region = ?').get(regionName)
-  if (Number(vehicleCount?.count || 0) === 0) return null
+  if (countVehiclesByRegion(regionName, companyId) === 0) return null
 
   createRegionRecord(regionName)
   return getRegionByName(regionName)
 }
 
-function getRegionForMutation(id, fallbackName) {
-  return getRegionById(id) || ensureRegionRecordByName(fallbackName)
+function getRegionForMutation(id, fallbackName, companyId = null) {
+  return getRegionById(id) || ensureRegionRecordByName(fallbackName, companyId)
 }
 
 function randomInteger(maxExclusive) {
@@ -303,13 +755,16 @@ const API_MESSAGES = {
   invalidToken: 'Invalid token',
   loginCredentialsRequired: 'Enter email and password',
   userNotFound: 'User not found',
-  invalidPassword: 'Invalid password',
+    invalidPassword: 'Invalid password',
+    userInactive: 'User is inactive',
   accessDenied: 'Access denied',
   mfaNotConfigured: 'MFA not configured',
   invalidMfaCode: 'Invalid MFA code',
   registerFieldsRequired: 'Enter email, password and name',
   userEmailExists: 'User with this email already exists',
-  managersOnly: 'Access only for managers',
+    managersOnly: 'Access only for managers',
+    companyOwnersOnly: 'Access only for company owners',
+    adminsOnly: 'Access only for admins',
   allFieldsRequired: 'Fill in all fields',
   emailAlreadyUsed: 'Email already used',
   noAccess: 'No access',
@@ -318,15 +773,28 @@ const API_MESSAGES = {
   vehicleNumberExists: 'Vehicle with this number already exists',
   invalidVehicleNumber: 'Некорректный номер. Используйте формат А123ВС77 или А123ВС177. Разрешены только А, В, Е, К, М, Н, О, Р, С, Т, У, Х',
   vehicleNotFound: 'Vehicle not found',
+  vehicleLimitExceeded: 'Лимит техники компании исчерпан. Обратитесь к администратору ресурса',
+  userLimitExceeded: 'Лимит пользователей компании исчерпан. Обратитесь к администратору ресурса',
+  companyFeatureDisabled: 'Функция отключена для тарифа компании. Обратитесь к администратору ресурса',
+  ocrFeatureDisabled: 'OCR отключен для тарифа компании. Обратитесь к администратору ресурса',
+  analyticsFeatureDisabled: 'Аналитика отключена для тарифа компании. Обратитесь к администратору ресурса',
+  accidentModuleDisabled: 'Модуль ДТП отключен для тарифа компании. Обратитесь к администратору ресурса',
   regionNameRequired: 'Enter region name',
   regionNotFound: 'Region not found',
   regionInUse: 'Cannot delete region while it is used in vehicle cards',
   invalidRegion: 'Select region from directory',
   inspectionNotFound: 'Inspection not found',
+  defectNotFound: 'Defect not found',
+  invalidPhotoType: 'Invalid photo type',
+  photosRequiredForInspection: 'Upload all required inspection photos',
   accidentDetailsRequired: 'Укажите время и место ДТП',
   demoDataCreated: 'Demo data created',
   odometerValueRequired: 'Enter correct odometer value',
+  odometerPhotoRequired: 'Фото одометра обязательно',
+  odometerRequiresManualConfirmation: 'Требуется ручное подтверждение показаний',
   vehicleNumberRequired: 'Enter vehicle number',
+  vehicleNumberPhotoRequired: 'Фото номера обязательно',
+  vehicleNumberRequiresConfirmation: 'Требуется подтверждение номера инспектором',
   internalServerError: 'Internal server error',
 }
 
@@ -334,11 +802,11 @@ const API_MESSAGES = {
 registerCompleteInspectionRoutes({ app, db, API_MESSAGES, getInspectionById, authenticate, photoRequirements })
 
 // Register company routes
-registerCompanyRoutes({ app, db, authenticate })
+registerCompanyRoutes({ app, db, authenticate, isAdmin })
 
 // Register odometer and vehicle number recognition routes
-registerOdometerRoutes({ app, db, authenticate, API_MESSAGES, upload })
-registerVehicleNumberRecognitionRoutes({ app, db, authenticate, API_MESSAGES, upload })
+registerOdometerRoutes({ app, db, authenticate, API_MESSAGES, upload, ensureFeatureEnabled: ensureCompanyFeatureEnabled })
+registerVehicleNumberRecognitionRoutes({ app, db, authenticate, API_MESSAGES, upload, ensureFeatureEnabled: ensureCompanyFeatureEnabled })
 
 function sendInternalError(res, scope, err) {
   console.error(`${scope}:`, err)
@@ -379,15 +847,25 @@ function validateVehiclePayload({ number, name, region }) {
   }
 }
 
-function ensureVehicleNumberAvailable(number, currentVehicleId = null) {
-  const existingVehicle = getVehicleByNumber(number)
+function ensureVehicleNumberAvailable(number, currentVehicleId = null, companyId = null) {
+  const existingVehicle = getVehicleByNumber(number, companyId)
   if (!existingVehicle) return null
   if (currentVehicleId && existingVehicle.id === currentVehicleId) return null
   return API_MESSAGES.vehicleNumberExists
 }
 
+const ASSIGNABLE_USER_ROLES = new Set(['inspector', 'manager'])
+
 function isManager(req) {
-  return req.user?.role === 'manager'
+  return req.user?.role === 'manager' || req.user?.role === 'owner' || req.user?.role === 'admin'
+}
+
+function isAdmin(req) {
+  return req.user?.role === 'admin'
+}
+
+function isCompanyOwner(req) {
+  return req.user?.role === 'owner' || isAdmin(req)
 }
 
 function isSelf(req, userId) {
@@ -406,7 +884,78 @@ function ensureManagerOrSelf(req, res, userId, message = API_MESSAGES.noAccess) 
   return false
 }
 
-registerDirectusIntegrationRoutes({ app, db, authenticate, ensureManager, sendError, API_MESSAGES })
+function ensureCompanyOwner(req, res, message = API_MESSAGES.companyOwnersOnly) {
+  if (isCompanyOwner(req)) return true
+  sendError(res, 403, message)
+  return false
+}
+
+function ensureCompanyOwnerOrSelf(req, res, userId, message = API_MESSAGES.noAccess) {
+  if (isCompanyOwner(req) || isSelf(req, userId)) return true
+  sendError(res, 403, message)
+  return false
+}
+
+function ensureAdmin(req, res, message = API_MESSAGES.adminsOnly) {
+  if (isAdmin(req)) return true
+  sendError(res, 403, message)
+  return false
+}
+
+function canAssignRole(req, role) {
+  if (!role || !ASSIGNABLE_USER_ROLES.has(role)) return false
+  return isCompanyOwner(req)
+}
+
+function isAssignableCompanyUserRole(role) {
+  return ASSIGNABLE_USER_ROLES.has(role)
+}
+
+function getWebAppUrl() {
+  return (process.env.WEB_APP_URL || process.env.FRONTEND_URL || 'http://localhost:3002').replace(/\/+$/, '')
+}
+
+function getOwnerSetupFingerprint(passwordHash) {
+  return crypto
+    .createHmac('sha256', JWT_SECRET)
+    .update(String(passwordHash || ''))
+    .digest('hex')
+}
+
+function createOwnerSetupInvitation(user) {
+  const expiresIn = process.env.OWNER_SETUP_TOKEN_TTL || '7d'
+  const owner = db.prepare(`
+    SELECT id, email, password, role, status, company_id
+    FROM users
+    WHERE id = ?
+  `).get(user.id)
+
+  if (!owner || owner.role !== 'owner' || owner.status === 'inactive') {
+    throw new Error('Owner setup invitation requires an active owner user')
+  }
+
+  const token = jwt.sign(
+    {
+      purpose: 'owner_setup',
+      id: owner.id,
+      email: owner.email,
+      company_id: owner.company_id || 'default',
+      setup_fingerprint: getOwnerSetupFingerprint(owner.password),
+      setup_nonce: uuidv4(),
+    },
+    JWT_SECRET,
+    { expiresIn },
+  )
+
+  return {
+    token,
+    setup_url: `${getWebAppUrl()}/owner-setup?token=${encodeURIComponent(token)}`,
+    expires_in: expiresIn,
+  }
+}
+
+registerDirectusIntegrationRoutes({ app, db, authenticate, ensureAdmin, sendError, API_MESSAGES, createOwnerSetupInvitation })
+registerSaasAdminRoutes({ app, db, authenticate, ensureAdmin, sendError, API_MESSAGES })
 
 function validateAccidentDetails(type, accidentOccurredAt, accidentLocation) {
   if (type !== 'accident') {
@@ -429,6 +978,12 @@ function validateAccidentDetails(type, accidentOccurredAt, accidentLocation) {
   }
 }
 
+function getAllowedPhotoTypes(inspectionType) {
+  const requirements = photoRequirements[inspectionType]
+  if (!requirements) return new Set()
+  return new Set([...(requirements.required || []), ...(requirements.optional || [])])
+}
+
 // ============ AUTH ============
 
 app.post('/api/auth/login', (req, res) => {
@@ -438,10 +993,14 @@ app.post('/api/auth/login', (req, res) => {
     return sendError(res, 400, API_MESSAGES.loginCredentialsRequired)
   }
 
-  const user = db.prepare('SELECT id, email, password, name, role, mfa_enabled, mfa_secret FROM users WHERE email = ?').get(email)
+  const user = db.prepare('SELECT id, email, password, name, role, status, company_id, mfa_enabled, mfa_secret FROM users WHERE email = ?').get(email)
 
   if (!user) {
     return sendError(res, 401, API_MESSAGES.userNotFound)
+  }
+
+  if (user.status === 'inactive') {
+    return sendError(res, 403, API_MESSAGES.userInactive)
   }
 
   const passwordOk = bcrypt.compareSync(password, user.password)
@@ -467,34 +1026,111 @@ app.post('/api/auth/login', (req, res) => {
   })
 })
 
-// MFA: setup for admin to configure per-user
+app.post('/api/auth/owner-setup', (req, res) => {
+  const { token, password } = req.body || {}
+
+  if (!token || typeof password !== 'string') {
+    return sendError(res, 400, API_MESSAGES.registerFieldsRequired)
+  }
+
+  if (password.length < 8) {
+    return sendError(res, 400, 'Password must contain at least 8 characters')
+  }
+
+  let decoded
+  try {
+    decoded = jwt.verify(token, JWT_SECRET)
+  } catch {
+    return sendError(res, 401, API_MESSAGES.invalidToken)
+  }
+
+  if (decoded?.purpose !== 'owner_setup' || !decoded.id || !decoded.company_id) {
+    return sendError(res, 401, API_MESSAGES.invalidToken)
+  }
+
+  const user = db.prepare(`
+    SELECT id, email, password, name, role, status, company_id, created_at
+    FROM users
+    WHERE id = ? AND company_id = ?
+  `).get(decoded.id, decoded.company_id)
+
+  if (!user || user.role !== 'owner') {
+    return sendError(res, 404, API_MESSAGES.userNotFound)
+  }
+
+  if (user.status === 'inactive') {
+    return sendError(res, 403, API_MESSAGES.userInactive)
+  }
+
+  if (
+    decoded.email !== user.email ||
+    !decoded.setup_fingerprint ||
+    decoded.setup_fingerprint !== getOwnerSetupFingerprint(user.password)
+  ) {
+    return sendError(res, 401, API_MESSAGES.invalidToken)
+  }
+
+  const passwordHash = bcrypt.hashSync(password, 10)
+  updateUserRecord(user.id, { passwordHash, status: 'active', companyId: user.company_id })
+
+  const updatedUser = getUserSummaryById(user.id, user.company_id)
+  const authToken = jwt.sign(
+    { id: updatedUser.id, email: updatedUser.email, role: updatedUser.role, name: updatedUser.name, company_id: updatedUser.company_id },
+    JWT_SECRET,
+    { expiresIn: '7d' },
+  )
+
+  res.json({ token: authToken, user: updatedUser })
+})
+
+// MFA: setup for company owners to configure managed users; self-service is also allowed.
 app.post('/api/users/:id/mfa/setup', authenticate, (req, res) => {
   const userId = req.params.id
-  // Only managers can set MFA for others; allow self as well
-  if (!ensureManagerOrSelf(req, res, userId, API_MESSAGES.accessDenied)) return
+  const companyId = req.user.company_id || 'default'
+  // Company owners can set MFA for managed users; self-service is allowed for everyone.
+  if (!ensureCompanyOwnerOrSelf(req, res, userId, API_MESSAGES.accessDenied)) return
+
+  const user = getUserRecordById(userId, isSelf(req, userId) ? null : companyId)
+  if (!user) {
+    return sendError(res, 404, API_MESSAGES.userNotFound)
+  }
+  if (!isSelf(req, userId) && !isAssignableCompanyUserRole(user.role)) {
+    return sendError(res, 403, API_MESSAGES.accessDenied)
+  }
+
   const secret = speakeasy.generateSecret({ length: 20 })
   // Save secret into user row
-  db.prepare('UPDATE users SET mfa_secret = ? WHERE id = ?').run(secret.base32, userId)
+  db.prepare('UPDATE users SET mfa_secret = ? WHERE id = ? AND company_id = ?').run(secret.base32, userId, user.company_id || companyId)
   res.json({ otpauth_url: secret.otpauth_url, secret: secret.base32 })
 })
 
 app.post('/api/users/:id/mfa/verify', authenticate, (req, res) => {
   const userId = req.params.id
   const { token } = req.body
-  const user = db.prepare('SELECT id, email, name, role, mfa_secret FROM users WHERE id = ?').get(userId)
+  const companyId = req.user.company_id || 'default'
+  if (!ensureCompanyOwnerOrSelf(req, res, userId, API_MESSAGES.accessDenied)) return
+
+  const user = db.prepare(`
+    SELECT id, email, name, role, company_id, mfa_secret
+    FROM users
+    WHERE id = ? AND company_id = ?
+  `).get(userId, companyId)
   if (!user) return sendError(res, 404, API_MESSAGES.userNotFound)
+  if (!isSelf(req, userId) && !isAssignableCompanyUserRole(user.role)) {
+    return sendError(res, 403, API_MESSAGES.accessDenied)
+  }
   if (!user.mfa_secret) return sendError(res, 400, API_MESSAGES.mfaNotConfigured)
   const verified = speakeasy.totp.verify({ secret: user.mfa_secret, encoding: 'base32', token })
   if (!verified) return sendError(res, 401, API_MESSAGES.invalidMfaCode)
   // Activate MFA for user
-  db.prepare('UPDATE users SET mfa_enabled = 1 WHERE id = ?').run(userId)
+  db.prepare('UPDATE users SET mfa_enabled = 1 WHERE id = ? AND company_id = ?').run(userId, companyId)
   // Issue new token as if login successful
   const tokenJwt = jwt.sign(
-    { id: user.id, email: user.email, name: user.name, role: user.role },
+    { id: user.id, email: user.email, name: user.name, role: user.role, company_id: user.company_id || companyId },
     JWT_SECRET,
     { expiresIn: '7d' }
   )
-  res.json({ token: tokenJwt, user: { id: user.id, email: user.email, name: user.name, role: user.role } })
+  res.json({ token: tokenJwt, user: { id: user.id, email: user.email, name: user.name, role: user.role, company_id: user.company_id || companyId } })
 })
 
 // Registration endpoint for mobile app
@@ -516,7 +1152,7 @@ app.post('/api/auth/register', (req, res) => {
 
   const user = getUserSummaryById(id)
   const token = jwt.sign(
-    { id: user.id, email: user.email, name: user.name, role: user.role },
+    { id: user.id, email: user.email, name: user.name, role: user.role, company_id: user.company_id },
     JWT_SECRET,
     { expiresIn: '7d' }
   )
@@ -528,21 +1164,60 @@ app.get('/api/auth/me', authenticate, (req, res) => {
   res.json(user)
 })
 
+app.get('/api/company/usage', authenticate, (req, res) => {
+  const companyId = req.user.company_id || 'default'
+  const company = db.prepare(`
+    SELECT id, slug, name, status
+    FROM companies
+    WHERE id = ?
+  `).get(companyId) || {
+    id: companyId,
+    slug: companyId,
+    name: 'Компания',
+    status: 'active',
+  }
+  const limits = getCompanyLimits(companyId)
+
+  res.json({
+    company,
+    plan: {
+      code: limits?.plan_code || null,
+    },
+    usage: {
+      vehicles: buildCompanyResourceUsage(companyId, 'vehicles'),
+      users: buildCompanyResourceUsage(companyId, 'users'),
+    },
+    limits: {
+      maxStorageMb: normalizeCompanyLimit(limits?.max_storage_mb),
+    },
+    features: {
+      ocr: buildCompanyFeatureAccess(limits, 'ocr_enabled'),
+      accidentModule: buildCompanyFeatureAccess(limits, 'accident_module_enabled'),
+      analytics: buildCompanyFeatureAccess(limits, 'analytics_enabled'),
+      apiAccess: buildCompanyFeatureAccess(limits, 'api_access_enabled'),
+    },
+    updatedAt: limits?.updated_at || null,
+  })
+})
+
 // ============ USERS ============
 
 app.get('/api/users', authenticate, (req, res) => {
-  if (!ensureManager(req, res)) return
+  if (!ensureCompanyOwner(req, res)) return
   const companyId = req.user.company_id || 'default'
   
   const users = db.prepare(`
-    SELECT id, email, name, role, company_id, created_at, mfa_enabled FROM users WHERE company_id = ? ORDER BY created_at DESC
+    SELECT id, email, name, role, status, company_id, created_at, mfa_enabled FROM users WHERE company_id = ? ORDER BY created_at DESC
   `).all(companyId)
   
   res.json(users)
 })
 
 app.get('/api/users/:id', authenticate, (req, res) => {
-  const user = getUserRecordById(req.params.id)
+  if (!ensureCompanyOwnerOrSelf(req, res, req.params.id)) return
+
+  const companyId = req.user.company_id || 'default'
+  const user = getUserRecordById(req.params.id, isSelf(req, req.params.id) ? null : companyId)
   if (!user) {
     return sendError(res, 404, API_MESSAGES.userNotFound)
   }
@@ -550,40 +1225,67 @@ app.get('/api/users/:id', authenticate, (req, res) => {
 })
 
 app.post('/api/users', authenticate, (req, res) => {
-  if (!ensureManager(req, res)) return
+  if (!ensureCompanyOwner(req, res)) return
+  const companyId = req.user.company_id || 'default'
   
   const { email, password, name, role = 'inspector' } = req.body
   
   if (!email || !password || !name) {
     return sendError(res, 400, API_MESSAGES.allFieldsRequired)
   }
+
+  if (!canAssignRole(req, role)) {
+    return sendError(res, 403, API_MESSAGES.accessDenied)
+  }
   
   const existing = getUserIdByEmail(email)
   if (existing) {
     return sendError(res, 400, API_MESSAGES.emailAlreadyUsed)
   }
+
+  const limitViolation = getCompanyLimitViolation(companyId, 'users')
+  if (limitViolation) {
+    return sendCompanyLimitViolation(res, limitViolation)
+  }
   
   const id = uuidv4()
   const hashedPassword = bcrypt.hashSync(password, 10)
 
-  createUserRecord({ id, email, passwordHash: hashedPassword, name, role })
+  createUserRecord({ id, email, passwordHash: hashedPassword, name, role, companyId })
   
-  const user = getUserRecordById(id)
+  const user = getUserRecordById(id, companyId)
   res.status(201).json(user)
 })
 
 app.put('/api/users/:id', authenticate, (req, res) => {
-  if (!ensureManagerOrSelf(req, res, req.params.id)) return
+  if (!ensureCompanyOwnerOrSelf(req, res, req.params.id)) return
+  const companyId = req.user.company_id || 'default'
+  const targetUser = getUserRecordById(req.params.id, isSelf(req, req.params.id) ? null : companyId)
+  if (!targetUser) {
+    return sendError(res, 404, API_MESSAGES.userNotFound)
+  }
   
   const { email, name, role, password } = req.body
   
-  if (!isManager(req)) {
+  if (!isCompanyOwner(req)) {
     // Users can only update their own name
     if (name) {
-      updateUserRecord(req.params.id, { name })
+      updateUserRecord(req.params.id, { name, companyId: targetUser.company_id })
     }
   } else {
-    // Managers can update name and role
+    // Company owners can manage managers and inspectors in their own company.
+    if (!isSelf(req, req.params.id) && !isAssignableCompanyUserRole(targetUser.role)) {
+      return sendError(res, 403, API_MESSAGES.accessDenied)
+    }
+
+    const requestedRole = role === targetUser.role ? undefined : role
+    if (isSelf(req, req.params.id) && !isAssignableCompanyUserRole(targetUser.role) && requestedRole !== undefined) {
+      return sendError(res, 403, API_MESSAGES.accessDenied)
+    }
+    if (requestedRole !== undefined && !canAssignRole(req, requestedRole)) {
+      return sendError(res, 403, API_MESSAGES.accessDenied)
+    }
+
     if (email) {
       const existing = getUserIdByEmail(email)
       if (existing && existing !== req.params.id) {
@@ -592,21 +1294,30 @@ app.put('/api/users/:id', authenticate, (req, res) => {
     }
 
     const passwordHash = password ? bcrypt.hashSync(password, 10) : undefined
-    updateUserRecord(req.params.id, { email, name, role, passwordHash })
+    updateUserRecord(req.params.id, { email, name, role: requestedRole, passwordHash, companyId: targetUser.company_id })
   }
   
-  const user = getUserRecordById(req.params.id)
+  const user = getUserRecordById(req.params.id, targetUser.company_id)
   res.json(user)
 })
 
 app.delete('/api/users/:id', authenticate, (req, res) => {
-  if (!ensureManager(req, res)) return
+  if (!ensureCompanyOwner(req, res)) return
   
   if (isSelf(req, req.params.id)) {
     return sendError(res, 400, API_MESSAGES.selfDeleteForbidden)
   }
+
+  const companyId = req.user.company_id || 'default'
+  const user = getUserRecordById(req.params.id, companyId)
+  if (!user) {
+    return sendError(res, 404, API_MESSAGES.userNotFound)
+  }
+  if (!isAssignableCompanyUserRole(user.role)) {
+    return sendError(res, 403, API_MESSAGES.accessDenied)
+  }
   
-  db.prepare('DELETE FROM users WHERE id = ?').run(req.params.id)
+  db.prepare('DELETE FROM users WHERE id = ? AND company_id = ?').run(req.params.id, companyId)
   res.status(204).send()
 })
 
@@ -614,7 +1325,8 @@ app.delete('/api/users/:id', authenticate, (req, res) => {
 
 app.get('/api/regions', authenticate, (req, res) => {
   const includeEmpty = req.query.includeEmpty === '1' || req.query.includeEmpty === 'true'
-  const regions = listRegions()
+  const companyId = req.user.company_id || 'default'
+  const regions = listRegions(companyId)
   const normalizedRegions = regions.map((region) => ({
     ...region,
     vehicle_count: Number(region.vehicle_count || 0),
@@ -643,8 +1355,9 @@ app.post('/api/regions', authenticate, (req, res) => {
 
 app.put('/api/regions/:id', authenticate, (req, res) => {
   if (!ensureManager(req, res)) return
+  const companyId = req.user.company_id || 'default'
   
-  const region = getRegionForMutation(req.params.id, req.body?.currentName)
+  const region = getRegionForMutation(req.params.id, req.body?.currentName, companyId)
   if (!region) {
     return sendError(res, 404, API_MESSAGES.regionNotFound)
   }
@@ -656,11 +1369,12 @@ app.put('/api/regions/:id', authenticate, (req, res) => {
   
   const existing = getRegionByName(newName)
   if (existing && existing.id !== region.id) {
-    db.prepare('UPDATE vehicles SET region = ? WHERE region = ?').run(existing.name, region.name)
-    deleteRegionRecord(region.id)
+    db.prepare('UPDATE vehicles SET region = ? WHERE region = ? AND company_id = ?').run(existing.name, region.name, companyId)
+    if (countVehiclesByRegion(region.name) === 0) {
+      deleteRegionRecord(region.id)
+    }
 
-    const count = db.prepare('SELECT COUNT(*) as count FROM vehicles WHERE region = ?').get(existing.name)
-    const vehicleCount = Number(count?.count || 0)
+    const vehicleCount = countVehiclesByRegion(existing.name, companyId)
     return res.json({
       id: existing.id,
       name: existing.name,
@@ -671,24 +1385,31 @@ app.put('/api/regions/:id', authenticate, (req, res) => {
     })
   }
   
-  db.prepare('UPDATE vehicles SET region = ? WHERE region = ?').run(newName, region.name)
-  db.prepare('UPDATE regions SET name = ? WHERE id = ?').run(newName, region.id)
+  db.prepare('UPDATE vehicles SET region = ? WHERE region = ? AND company_id = ?').run(newName, region.name, companyId)
+  if (countVehiclesByRegion(region.name) === 0) {
+    db.prepare('UPDATE regions SET name = ? WHERE id = ?').run(newName, region.id)
+  } else if (!getRegionByName(newName)) {
+    createRegionRecord(newName)
+  }
   
-  const count = db.prepare('SELECT COUNT(*) as count FROM vehicles WHERE region = ?').get(newName)
-  const vehicleCount = Number(count?.count || 0)
-  res.json({ id: region.id, name: newName, vehicle_count: vehicleCount, vehicleCount })
+  const updatedRegion = getRegionByName(newName)
+  const vehicleCount = countVehiclesByRegion(newName, companyId)
+  res.json({ id: updatedRegion?.id || region.id, name: newName, vehicle_count: vehicleCount, vehicleCount })
 })
 
 app.delete('/api/regions/:id', authenticate, (req, res) => {
   if (!ensureManager(req, res)) return
+  const companyId = req.user.company_id || 'default'
 
   const region = getRegionById(req.params.id)
   if (!region) {
     return sendError(res, 404, API_MESSAGES.regionNotFound)
   }
 
-  db.prepare('UPDATE vehicles SET region = NULL WHERE region = ?').run(region.name)
-  deleteRegionRecord(req.params.id)
+  db.prepare('UPDATE vehicles SET region = NULL WHERE region = ? AND company_id = ?').run(region.name, companyId)
+  if (countVehiclesByRegion(region.name) === 0) {
+    deleteRegionRecord(req.params.id)
+  }
   res.status(204).send()
 })
 
@@ -697,9 +1418,10 @@ app.delete('/api/regions/:id', authenticate, (req, res) => {
 app.get('/api/vehicles', authenticate, (req, res) => {
   const { page = 1, limit = 20, search = '', status = 'all' } = req.query
   const offset = (page - 1) * limit
+  const companyId = req.user.company_id || 'default'
 
-  let whereClause = '1=1'
-  const params = []
+  let whereClause = 'company_id = ?'
+  const params = [companyId]
 
   if (search) {
     whereClause += ' AND (number LIKE ? OR name LIKE ?)'
@@ -752,7 +1474,8 @@ app.get('/api/vehicles', authenticate, (req, res) => {
 
 app.get('/api/vehicles/list', authenticate, (req, res) => {
   try {
-    const vehicles = db.prepare('SELECT id, number, name, status, region FROM vehicles ORDER BY number').all()
+    const companyId = req.user.company_id || 'default'
+    const vehicles = db.prepare('SELECT id, number, name, status, region FROM vehicles WHERE company_id = ? ORDER BY number').all(companyId)
     res.json(vehicles)
   } catch (err) {
     console.error('Vehicles list error:', err)
@@ -761,6 +1484,12 @@ app.get('/api/vehicles/list', authenticate, (req, res) => {
 })
 
 app.get('/api/vehicles/:id/history', authenticate, (req, res) => {
+  const companyId = req.user.company_id || 'default'
+  const vehicle = getVehicleById(req.params.id, companyId)
+  if (!vehicle) {
+    return sendError(res, 404, API_MESSAGES.vehicleNotFound)
+  }
+
   const history = db.prepare(`
     SELECT h.*, u.name as changed_by_name
     FROM vehicle_status_history h
@@ -772,7 +1501,8 @@ app.get('/api/vehicles/:id/history', authenticate, (req, res) => {
 })
 
 app.get('/api/vehicles/:id/defects', authenticate, (req, res) => {
-  const vehicle = getVehicleById(req.params.id)
+  const companyId = req.user.company_id || 'default'
+  const vehicle = getVehicleById(req.params.id, companyId)
   if (!vehicle) {
     return sendError(res, 404, API_MESSAGES.vehicleNotFound)
   }
@@ -788,13 +1518,13 @@ app.get('/api/vehicles/:id/defects', authenticate, (req, res) => {
     JOIN inspections i ON d.inspection_id = i.id
     JOIN vehicles v ON i.vehicle_id = v.id
     JOIN users u ON i.inspector_id = u.id
-    WHERE v.id = ?
+    WHERE v.id = ? AND v.company_id = ?
     ORDER BY d.created_at DESC
     LIMIT ?
-  `).all(req.params.id, limit)
+  `).all(req.params.id, companyId, limit)
 
   const defectsWithPhotos = defects.map((defect) => {
-    const photos = db.prepare('SELECT id, url, geo FROM photos WHERE defect_id = ? ORDER BY created_at ASC').all(defect.id)
+    const photos = db.prepare(`SELECT ${PHOTO_SELECT_COLUMNS} FROM photos WHERE defect_id = ? AND company_id = ? ORDER BY created_at ASC`).all(defect.id, companyId)
     return { ...defect, photos }
   })
 
@@ -802,7 +1532,8 @@ app.get('/api/vehicles/:id/defects', authenticate, (req, res) => {
 })
 
 app.get('/api/vehicles/:id', authenticate, (req, res) => {
-  const vehicle = getVehicleById(req.params.id)
+  const companyId = req.user.company_id || 'default'
+  const vehicle = getVehicleById(req.params.id, companyId)
   if (!vehicle) {
     return sendError(res, 404, API_MESSAGES.vehicleNotFound)
   }
@@ -811,15 +1542,22 @@ app.get('/api/vehicles/:id', authenticate, (req, res) => {
 
 app.post('/api/vehicles', authenticate, (req, res) => {
   const { number, name, status = 'active', region } = req.body
+  const companyId = req.user.company_id || 'default'
   const validated = validateVehiclePayload({ number, name, region })
   if (validated.error) {
     return sendError(res, 400, validated.error)
   }
 
-  const duplicateError = ensureVehicleNumberAvailable(validated.number)
+  const duplicateError = ensureVehicleNumberAvailable(validated.number, null, companyId)
   if (duplicateError) {
     return sendError(res, 400, duplicateError)
   }
+
+  const limitViolation = getCompanyLimitViolation(companyId, 'vehicles')
+  if (limitViolation) {
+    return sendCompanyLimitViolation(res, limitViolation)
+  }
+
   const id = uuidv4()
 
   createVehicleRecord({
@@ -828,15 +1566,17 @@ app.post('/api/vehicles', authenticate, (req, res) => {
     name: validated.name,
     status,
     region: validated.region,
+    companyId,
   })
 
-const vehicle = getVehicleById(id)
+  const vehicle = getVehicleById(id, companyId)
   res.status(201).json(vehicle)
 })
 
 // POST /api/vehicles/import - bulk import vehicles from CSV
 app.post('/api/vehicles/import', authenticate, (req, res) => {
   if (!ensureManager(req, res)) return
+  const companyId = req.user.company_id || 'default'
   
   const { vehicles } = req.body
   if (!Array.isArray(vehicles)) {
@@ -846,6 +1586,7 @@ app.post('/api/vehicles/import', authenticate, (req, res) => {
   const imported = []
   const errors = []
   const regionsAdded = []
+  const vehicleLimitState = getCompanyResourceLimitState(companyId, 'vehicles')
   
   // First pass: collect all unique regions and auto-create them
   const regions = new Set()
@@ -873,9 +1614,17 @@ app.post('/api/vehicles/import', authenticate, (req, res) => {
       return
     }
     
-    const duplicateError = ensureVehicleNumberAvailable(validated.number)
+    const duplicateError = ensureVehicleNumberAvailable(validated.number, null, companyId)
     if (duplicateError) {
       errors.push({ row: idx + 1, error: duplicateError })
+      return
+    }
+
+    if (vehicleLimitState && vehicleLimitState.current + imported.length + 1 > vehicleLimitState.max) {
+      errors.push({
+        row: idx + 1,
+        error: `${API_MESSAGES.vehicleLimitExceeded}. Текущее значение: ${vehicleLimitState.current + imported.length}/${vehicleLimitState.max}.`,
+      })
       return
     }
     
@@ -886,6 +1635,7 @@ app.post('/api/vehicles/import', authenticate, (req, res) => {
       name: validated.name,
       status: 'active',
       region: validated.region,
+      companyId,
     })
     imported.push({ number: validated.number })
   })
@@ -895,8 +1645,9 @@ app.post('/api/vehicles/import', authenticate, (req, res) => {
 
 app.put('/api/vehicles/:id', authenticate, (req, res) => {
   const { number, name, status, region, reason } = req.body
+  const companyId = req.user.company_id || 'default'
 
-  const oldVehicle = getVehicleById(req.params.id)
+  const oldVehicle = getVehicleById(req.params.id, companyId)
   if (!oldVehicle) {
     return sendError(res, 404, API_MESSAGES.vehicleNotFound)
   }
@@ -906,7 +1657,7 @@ app.put('/api/vehicles/:id', authenticate, (req, res) => {
     return sendError(res, 400, validated.error)
   }
 
-  const duplicateError = ensureVehicleNumberAvailable(validated.number, req.params.id)
+  const duplicateError = ensureVehicleNumberAvailable(validated.number, req.params.id, companyId)
   if (duplicateError) {
     return sendError(res, 400, duplicateError)
   }
@@ -916,6 +1667,7 @@ app.put('/api/vehicles/:id', authenticate, (req, res) => {
     name: validated.name,
     status,
     region: validated.region,
+    companyId,
   })
 
   if (oldVehicle.status !== status) {
@@ -928,12 +1680,20 @@ app.put('/api/vehicles/:id', authenticate, (req, res) => {
     })
   }
 
-  const vehicle = getVehicleById(req.params.id)
+  const vehicle = getVehicleById(req.params.id, companyId)
   res.json(vehicle)
 })
 
 app.delete('/api/vehicles/:id', authenticate, (req, res) => {
-  db.prepare('DELETE FROM vehicles WHERE id = ?').run(req.params.id)
+  if (!ensureManager(req, res)) return
+
+  const companyId = req.user.company_id || 'default'
+  const vehicle = getVehicleById(req.params.id, companyId)
+  if (!vehicle) {
+    return sendError(res, 404, API_MESSAGES.vehicleNotFound)
+  }
+
+  db.prepare('DELETE FROM vehicles WHERE id = ? AND company_id = ?').run(req.params.id, companyId)
   res.status(204).send()
 })
 
@@ -997,9 +1757,15 @@ app.get('/api/inspections', authenticate, (req, res) => {
 app.get('/api/vehicles/:vehicleId/inspections', authenticate, (req, res) => {
   const { page = 1, limit = 5 } = req.query
   const offset = (page - 1) * limit
+  const companyId = req.user.company_id || 'default'
 
-  const countQuery = db.prepare('SELECT COUNT(*) as count FROM inspections WHERE vehicle_id = ?')
-  const { count } = countQuery.get(req.params.vehicleId)
+  const vehicle = getVehicleById(req.params.vehicleId, companyId)
+  if (!vehicle) {
+    return sendError(res, 404, API_MESSAGES.vehicleNotFound)
+  }
+
+  const countQuery = db.prepare('SELECT COUNT(*) as count FROM inspections WHERE vehicle_id = ? AND company_id = ?')
+  const { count } = countQuery.get(req.params.vehicleId, companyId)
 
   const query = db.prepare(`
     SELECT i.id, i.vehicle_id, i.type, i.completed, i.created_at,
@@ -1009,11 +1775,11 @@ app.get('/api/vehicles/:vehicleId/inspections', authenticate, (req, res) => {
     FROM inspections i
     JOIN vehicles v ON i.vehicle_id = v.id
     JOIN users u ON i.inspector_id = u.id
-    WHERE i.vehicle_id = ?
+    WHERE i.vehicle_id = ? AND i.company_id = ?
     ORDER BY i.created_at DESC 
     LIMIT ? OFFSET ?
   `)
-  const inspections = query.all(req.params.vehicleId, Number(limit), offset)
+  const inspections = query.all(req.params.vehicleId, companyId, Number(limit), offset)
 
   res.json({
     data: inspections,
@@ -1028,6 +1794,17 @@ app.get('/api/vehicles/:vehicleId/inspections', authenticate, (req, res) => {
 
 app.post('/api/inspections', authenticate, (req, res) => {
   const { vehicle_id, type = 'quick', checklist = [], accident_occurred_at = null, accident_location = null } = req.body
+  const companyId = req.user.company_id || 'default'
+
+  if (type === 'accident' && !ensureCompanyFeatureEnabled(req, res, 'accident_module_enabled', API_MESSAGES.accidentModuleDisabled)) {
+    return
+  }
+
+  const vehicle = getVehicleById(vehicle_id, companyId)
+  if (!vehicle) {
+    return sendError(res, 404, API_MESSAGES.vehicleNotFound)
+  }
+
   const accidentValidation = validateAccidentDetails(type, accident_occurred_at, accident_location)
   if (accidentValidation.error) {
     return sendError(res, 400, accidentValidation.error)
@@ -1035,12 +1812,12 @@ app.post('/api/inspections', authenticate, (req, res) => {
   const id = uuidv4()
 
   db.prepare(`
-    INSERT INTO inspections (id, vehicle_id, inspector_id, type, completed, accident_occurred_at, accident_location)
-    VALUES (?, ?, ?, ?, 0, ?, ?)
-  `).run(id, vehicle_id, req.user.id, type, accidentValidation.accidentOccurredAt, accidentValidation.accidentLocation)
+    INSERT INTO inspections (id, vehicle_id, inspector_id, type, completed, accident_occurred_at, accident_location, company_id)
+    VALUES (?, ?, ?, ?, 0, ?, ?, ?)
+  `).run(id, vehicle_id, req.user.id, type, accidentValidation.accidentOccurredAt, accidentValidation.accidentLocation, companyId)
 
   if (type === 'scheduled') {
-    db.prepare('UPDATE vehicles SET last_scheduled_inspection = datetime("now") WHERE id = ?').run(vehicle_id)
+    db.prepare('UPDATE vehicles SET last_scheduled_inspection = datetime("now") WHERE id = ? AND company_id = ?').run(vehicle_id, companyId)
   }
 
   const insertChecklist = db.prepare(`
@@ -1056,7 +1833,7 @@ app.post('/api/inspections', authenticate, (req, res) => {
 
   // Completion is deferred to /api/inspections/:id/complete
 
-  const inspection = getInspectionById(id)
+  const inspection = getInspectionById(id, companyId)
   res.status(201).json(inspection)
 })
 
@@ -1064,13 +1841,89 @@ app.post('/api/inspections', authenticate, (req, res) => {
 app.post('/api/inspections/:id/defects', authenticate, (req, res) => {
   const inspectionId = req.params.id
   const { title, comment } = req.body
+  const companyId = req.user.company_id || 'default'
   if (!title) return sendError(res, 400, API_MESSAGES.defectTitleRequired || 'Заголовок дефекта обязателен')
-  const inspection = getInspectionById(inspectionId)
+  const inspection = db.prepare('SELECT * FROM inspections WHERE id = ? AND company_id = ?').get(inspectionId, companyId)
   if (!inspection) return sendError(res, 404, API_MESSAGES.inspectionNotFound)
   const defectId = uuidv4()
-  db.prepare(`INSERT INTO defects (id, inspection_id, title, comment, status, created_at) VALUES (?, ?, ?, ?, 'open', datetime('now'))`).run(defectId, inspectionId, title, comment || null)
+  db.prepare(`INSERT INTO defects (id, inspection_id, title, comment, status, company_id, created_at) VALUES (?, ?, ?, ?, 'open', ?, datetime('now'))`).run(defectId, inspectionId, title, comment || null, companyId)
   const defect = db.prepare('SELECT * FROM defects WHERE id = ?').get(defectId)
   res.status(201).json(defect)
+})
+
+app.post('/api/inspections/:id/photos', authenticate, uploadPhoto, async (req, res) => {
+  const inspectionId = req.params.id
+  const companyId = req.user.company_id || 'default'
+  const inspection = db.prepare('SELECT id, type FROM inspections WHERE id = ? AND company_id = ?').get(inspectionId, companyId)
+  if (!inspection) {
+    await removeFileIfExists(req.file?.path)
+    return sendError(res, 404, API_MESSAGES.inspectionNotFound)
+  }
+
+  if (!req.file) {
+    return sendError(res, 400, 'Photo is required')
+  }
+
+  const photoType = String(req.body.photo_type || req.body.photoType || '').trim()
+  if (!getAllowedPhotoTypes(inspection.type).has(photoType)) {
+    await removeFileIfExists(req.file?.path)
+    return sendError(res, 400, API_MESSAGES.invalidPhotoType)
+  }
+
+  const id = uuidv4()
+  const geo = req.body.geo || null
+  const isRequired = (photoRequirements[inspection.type]?.required || []).includes(photoType) ? 1 : 0
+
+  try {
+    const processed = await processUploadedPhoto({
+      tempPath: req.file.path,
+      originalName: req.file.originalname,
+      mimetype: req.file.mimetype,
+      inspectionId,
+      photoId: id,
+    })
+
+    db.prepare(`
+      INSERT INTO photos (
+        id, inspection_id, defect_id, company_id, photo_type, url,
+        original_url, webp_url, thumb_url, original_mime, original_name,
+        width, height, size_original, size_webp, size_thumb, hash,
+        geo, is_required
+      )
+      VALUES (?, ?, NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(
+      id,
+      inspectionId,
+      companyId,
+      photoType,
+      processed.url,
+      processed.original_url,
+      processed.webp_url,
+      processed.thumb_url,
+      processed.original_mime,
+      processed.original_name,
+      processed.width,
+      processed.height,
+      processed.size_original,
+      processed.size_webp,
+      processed.size_thumb,
+      processed.hash,
+      geo,
+      isRequired,
+    )
+  } catch (err) {
+    await removeFileIfExists(req.file?.path)
+    console.warn('[uploads] Failed to process inspection photo:', err.message)
+    return sendError(res, 400, 'Photo could not be processed')
+  }
+
+  const photo = db.prepare(`
+    SELECT ${PHOTO_SELECT_COLUMNS}
+    FROM photos
+    WHERE id = ? AND company_id = ?
+  `).get(id, companyId)
+
+  res.status(201).json(photo)
 })
 
 // (Legacy duplicate complete route removed)
@@ -1078,32 +1931,29 @@ app.post('/api/inspections/:id/defects', authenticate, (req, res) => {
 // (Legacy duplicate complete route removed)
 
 app.get('/api/inspections/:id', authenticate, (req, res) => {
+  const companyId = req.user.company_id || 'default'
   const inspection = db.prepare(`
     SELECT i.*, v.number as vehicle_number, v.name as vehicle_name, u.name as inspector_name
     FROM inspections i
     JOIN vehicles v ON i.vehicle_id = v.id
     JOIN users u ON i.inspector_id = u.id
-    WHERE i.id = ?
-  `).get(req.params.id)
+    WHERE i.id = ? AND i.company_id = ?
+  `).get(req.params.id, companyId)
 
   if (!inspection) {
     return sendError(res, 404, API_MESSAGES.inspectionNotFound)
   }
 
   const checklist = db.prepare('SELECT * FROM checklist_items WHERE inspection_id = ?').all(req.params.id)
-  const defects = db.prepare(`
-    SELECT d.*, GROUP_CONCAT(p.url) as photos
-    FROM defects d
-    LEFT JOIN photos p ON p.defect_id = d.id
-    WHERE d.inspection_id = ?
-    GROUP BY d.id
-  `).all(req.params.id)
+  const defects = getDefectsWithPhotos(req.params.id, companyId)
+  const photos = getInspectionPhotos(req.params.id, companyId)
 
-  res.json({ ...inspection, checklist_items: checklist, defects })
+  res.json({ ...inspection, checklist_items: checklist, defects, photos })
 })
 
 app.put('/api/inspections/:id', authenticate, (req, res) => {
-  const inspection = getInspectionById(req.params.id)
+  const companyId = req.user.company_id || 'default'
+  const inspection = db.prepare('SELECT * FROM inspections WHERE id = ? AND company_id = ?').get(req.params.id, companyId)
   if (!inspection) {
     return sendError(res, 404, API_MESSAGES.inspectionNotFound)
   }
@@ -1116,33 +1966,104 @@ app.put('/api/inspections/:id', authenticate, (req, res) => {
 
   db.prepare(`
     UPDATE inspections
-    SET completed = 1, accident_occurred_at = ?, accident_location = ?
-    WHERE id = ?
-  `).run(accidentValidation.accidentOccurredAt, accidentValidation.accidentLocation, req.params.id)
+    SET accident_occurred_at = ?, accident_location = ?, odometer_value = ?, odometer_unit = ?
+    WHERE id = ? AND company_id = ?
+  `).run(
+    accidentValidation.accidentOccurredAt,
+    accidentValidation.accidentLocation,
+    req.body.odometer_value ?? inspection.odometer_value ?? null,
+    req.body.odometer_unit ?? inspection.odometer_unit ?? 'km',
+    req.params.id,
+    companyId,
+  )
 
-  const existingDefects = db.prepare('SELECT id FROM defects WHERE inspection_id = ?').all(req.params.id)
+  const existingChecklistItems = db.prepare(`
+    SELECT id, title
+    FROM checklist_items
+    WHERE inspection_id = ?
+  `).all(req.params.id)
+  const existingChecklistById = new Map(existingChecklistItems.map((item) => [item.id, item]))
+  const existingChecklistByTitle = new Map(existingChecklistItems.map((item) => [item.title, item]))
+  const existingDefects = db.prepare(`
+    SELECT id, title, checklist_item_id
+    FROM defects
+    WHERE inspection_id = ? AND company_id = ?
+    ORDER BY created_at ASC
+  `).all(req.params.id, companyId)
+  const existingDefectsByChecklistItemId = new Map()
+  const existingDefectsByTitle = new Map()
+
   existingDefects.forEach((defect) => {
-    db.prepare('DELETE FROM photos WHERE defect_id = ?').run(defect.id)
+    if (defect.checklist_item_id && !existingDefectsByChecklistItemId.has(defect.checklist_item_id)) {
+      existingDefectsByChecklistItemId.set(defect.checklist_item_id, defect)
+    }
+
+    if (!existingDefectsByTitle.has(defect.title)) {
+      existingDefectsByTitle.set(defect.title, defect)
+    }
   })
-  db.prepare('DELETE FROM checklist_items WHERE inspection_id = ?').run(req.params.id)
-  db.prepare('DELETE FROM defects WHERE inspection_id = ?').run(req.params.id)
 
   const insertChecklist = db.prepare(`
     INSERT INTO checklist_items (id, inspection_id, title, result, comment)
     VALUES (?, ?, ?, ?, ?)
   `)
+  const updateChecklist = db.prepare(`
+    UPDATE checklist_items
+    SET result = ?, comment = ?
+    WHERE id = ?
+  `)
+  const deleteChecklist = db.prepare('DELETE FROM checklist_items WHERE id = ?')
 
   const insertDefect = db.prepare(`
-    INSERT INTO defects (id, inspection_id, title, comment, created_at)
-    VALUES (?, ?, ?, ?, datetime('now'))
+    INSERT INTO defects (id, inspection_id, checklist_item_id, title, comment, company_id, created_at)
+    VALUES (?, ?, ?, ?, ?, ?, datetime('now'))
   `)
+  const updateDefect = db.prepare(`
+    UPDATE defects
+    SET checklist_item_id = ?, title = ?, comment = ?
+    WHERE id = ? AND company_id = ?
+  `)
+  const deleteDefectPhotos = db.prepare('DELETE FROM photos WHERE defect_id = ? AND company_id = ?')
+  const deleteDefect = db.prepare('DELETE FROM defects WHERE id = ? AND company_id = ?')
+  const retainedChecklistItemIds = new Set()
 
   checklist.forEach((item) => {
-    const itemId = uuidv4()
-    insertChecklist.run(itemId, req.params.id, item.title, item.result ? 1 : 0, item.comment || null)
+    const existingChecklistItem = (item.id && existingChecklistById.get(item.id)) || existingChecklistByTitle.get(item.title)
+    const checklistItemId = existingChecklistItem?.id || item.id || uuidv4()
+    retainedChecklistItemIds.add(checklistItemId)
 
+    if (existingChecklistItem) {
+      updateChecklist.run(item.result ? 1 : 0, item.comment || null, existingChecklistItem.id)
+    } else {
+      insertChecklist.run(checklistItemId, req.params.id, item.title, item.result ? 1 : 0, item.comment || null)
+    }
+
+    const existingDefect = existingDefectsByChecklistItemId.get(checklistItemId) || existingDefectsByTitle.get(item.title)
     if (!item.result) {
-      insertDefect.run(uuidv4(), req.params.id, item.title, item.comment || null)
+      if (existingDefect) {
+        updateDefect.run(checklistItemId, item.title, item.comment || null, existingDefect.id, companyId)
+      } else {
+        insertDefect.run(uuidv4(), req.params.id, checklistItemId, item.title, item.comment || null, companyId)
+      }
+      return
+    }
+
+    if (existingDefect) {
+      deleteDefectPhotos.run(existingDefect.id, companyId)
+      deleteDefect.run(existingDefect.id, companyId)
+    }
+  })
+
+  existingChecklistItems.forEach((item) => {
+    if (!retainedChecklistItemIds.has(item.id)) {
+      deleteChecklist.run(item.id)
+    }
+  })
+
+  existingDefects.forEach((defect) => {
+    if (defect.checklist_item_id && !retainedChecklistItemIds.has(defect.checklist_item_id)) {
+      deleteDefectPhotos.run(defect.id, companyId)
+      deleteDefect.run(defect.id, companyId)
     }
   })
 
@@ -1151,25 +2072,21 @@ app.put('/api/inspections/:id', authenticate, (req, res) => {
     FROM inspections i
     JOIN vehicles v ON i.vehicle_id = v.id
     JOIN users u ON i.inspector_id = u.id
-    WHERE i.id = ?
-  `).get(req.params.id)
+    WHERE i.id = ? AND i.company_id = ?
+  `).get(req.params.id, companyId)
 
   const updatedChecklist = db.prepare('SELECT * FROM checklist_items WHERE inspection_id = ?').all(req.params.id)
-  const updatedDefects = db.prepare(`
-    SELECT d.*, GROUP_CONCAT(p.url) as photos
-    FROM defects d
-    LEFT JOIN photos p ON p.defect_id = d.id
-    WHERE d.inspection_id = ?
-    GROUP BY d.id
-  `).all(req.params.id)
+  const updatedDefects = getDefectsWithPhotos(req.params.id, companyId)
+  const photos = getInspectionPhotos(req.params.id, companyId)
 
-  res.json({ ...updatedInspection, checklist_items: updatedChecklist, defects: updatedDefects })
+  res.json({ ...updatedInspection, checklist_items: updatedChecklist, defects: updatedDefects, photos })
 })
 
 app.delete('/api/inspections/:id', authenticate, (req, res) => {
   const { id } = req.params
+  const companyId = req.user.company_id || 'default'
   
-  const inspection = getInspectionById(id)
+  const inspection = db.prepare('SELECT * FROM inspections WHERE id = ? AND company_id = ?').get(id, companyId)
   if (!inspection) {
     return sendError(res, 404, API_MESSAGES.inspectionNotFound)
   }
@@ -1177,7 +2094,7 @@ app.delete('/api/inspections/:id', authenticate, (req, res) => {
   db.prepare('DELETE FROM checklist_items WHERE inspection_id = ?').run(id)
   db.prepare('DELETE FROM defects WHERE inspection_id = ?').run(id)
   db.prepare('DELETE FROM photos WHERE inspection_id = ?').run(id)
-  db.prepare('DELETE FROM inspections WHERE id = ?').run(id)
+  db.prepare('DELETE FROM inspections WHERE id = ? AND company_id = ?').run(id, companyId)
   
   res.status(204).send()
 })
@@ -1232,7 +2149,7 @@ app.get('/api/defects', authenticate, (req, res) => {
   const defects = query.all(...params, Number(limit), offset)
 
   const defectsWithPhotos = defects.map(defect => {
-    const photos = db.prepare('SELECT id, url, geo FROM photos WHERE defect_id = ?').all(defect.id)
+    const photos = db.prepare(`SELECT ${PHOTO_SELECT_COLUMNS} FROM photos WHERE defect_id = ? AND company_id = ?`).all(defect.id, companyId)
     return { ...defect, photos }
   })
 
@@ -1248,6 +2165,7 @@ app.get('/api/defects', authenticate, (req, res) => {
 })
 
 app.get('/api/defects/:id', authenticate, (req, res) => {
+  const companyId = req.user.company_id || 'default'
   const defect = db.prepare(`
     SELECT d.id, d.inspection_id, d.title, d.comment, d.created_at,
            i.type as inspection_type, i.created_at as inspection_date, i.created_at as inspection_time,
@@ -1258,93 +2176,161 @@ app.get('/api/defects/:id', authenticate, (req, res) => {
     JOIN inspections i ON d.inspection_id = i.id
     JOIN vehicles v ON i.vehicle_id = v.id
     JOIN users u ON i.inspector_id = u.id
-    WHERE d.id = ?
-  `).get(req.params.id)
+    WHERE d.id = ? AND d.company_id = ?
+  `).get(req.params.id, companyId)
 
   if (!defect) {
     return sendError(res, 404, API_MESSAGES.defectNotFound)
   }
 
-  const photos = db.prepare('SELECT id, url, geo FROM photos WHERE defect_id = ? ORDER BY created_at ASC').all(req.params.id)
+  const photos = db.prepare(`SELECT ${PHOTO_SELECT_COLUMNS} FROM photos WHERE defect_id = ? AND company_id = ? ORDER BY created_at ASC`).all(req.params.id, companyId)
   res.json({ ...defect, photos })
 })
 
 // Close a defect (set status to 'closed' and log history)
 app.post('/api/defects/:id/close', authenticate, (req, res) => {
   const defectId = req.params.id
-  const defect = db.prepare('SELECT id, status, closed_at FROM defects WHERE id = ?').get(defectId)
+  const companyId = req.user.company_id || 'default'
+  const defect = db.prepare('SELECT id, status, closed_at FROM defects WHERE id = ? AND company_id = ?').get(defectId, companyId)
   if (!defect) return sendError(res, 404, API_MESSAGES.defectNotFound)
   if (defect.status === 'closed') {
     return res.json({ id: defectId, status: 'closed', closed_at: defect.closed_at })
   }
 
   const now = new Date().toISOString()
-  db.prepare('UPDATE defects SET status = ?, closed_at = ? WHERE id = ?').run('closed', now, defectId)
+  db.prepare('UPDATE defects SET status = ?, closed_at = ? WHERE id = ? AND company_id = ?').run('closed', now, defectId, companyId)
   const historyId = uuidv4()
   db.prepare('INSERT INTO defect_history (id, defect_id, status, changed_at, changed_by) VALUES (?, ?, ?, ?, ?)').run(historyId, defectId, 'closed', now, req.user?.id ?? null)
-  const updated = db.prepare('SELECT id, inspection_id, title, comment, status, created_at, closed_at FROM defects WHERE id = ?').get(defectId)
+  const updated = db.prepare('SELECT id, inspection_id, title, comment, status, created_at, closed_at FROM defects WHERE id = ? AND company_id = ?').get(defectId, companyId)
   res.json(updated)
 })
 
 // Reopen a defect (set status to 'open', clear closed_at, add history)
 app.post('/api/defects/:id/reopen', authenticate, (req, res) => {
   const defectId = req.params.id
-  const defect = db.prepare('SELECT id, status FROM defects WHERE id = ?').get(defectId)
+  const companyId = req.user.company_id || 'default'
+  const defect = db.prepare('SELECT id, status FROM defects WHERE id = ? AND company_id = ?').get(defectId, companyId)
   if (!defect) return sendError(res, 404, API_MESSAGES.defectNotFound)
   if (defect.status !== 'closed') {
     return res.json({ id: defectId, status: defect.status })
   }
 
   const now = new Date().toISOString()
-  db.prepare('UPDATE defects SET status = ?, closed_at = NULL WHERE id = ?').run('open', defectId)
+  db.prepare('UPDATE defects SET status = ?, closed_at = NULL WHERE id = ? AND company_id = ?').run('open', defectId, companyId)
   const historyId = uuidv4()
   db.prepare('INSERT INTO defect_history (id, defect_id, status, changed_at, changed_by) VALUES (?, ?, ?, ?, ?)').run(historyId, defectId, 'open', now, req.user?.id ?? null)
-  const updated = db.prepare('SELECT id, inspection_id, title, comment, status, created_at, closed_at FROM defects WHERE id = ?').get(defectId)
+  const updated = db.prepare('SELECT id, inspection_id, title, comment, status, created_at, closed_at FROM defects WHERE id = ? AND company_id = ?').get(defectId, companyId)
   res.json(updated)
 })
 
 // Get defect history
 app.get('/api/defects/:id/history', authenticate, (req, res) => {
   const defectId = req.params.id
+  const companyId = req.user.company_id || 'default'
+  const defect = db.prepare('SELECT id FROM defects WHERE id = ? AND company_id = ?').get(defectId, companyId)
+  if (!defect) return sendError(res, 404, API_MESSAGES.defectNotFound)
+
   const history = db.prepare('SELECT id, defect_id, status, changed_at, changed_by FROM defect_history WHERE defect_id = ? ORDER BY changed_at DESC').all(defectId)
   res.json(history)
 })
 
-app.post('/api/defects/:id/photos', authenticate, upload.single('photo'), (req, res) => {
+app.post('/api/defects/:id/photos', authenticate, uploadPhoto, async (req, res) => {
   const { geo } = req.body
+  const companyId = req.user.company_id || 'default'
+  const defect = db.prepare('SELECT id, inspection_id FROM defects WHERE id = ? AND company_id = ?').get(req.params.id, companyId)
+  if (!defect) {
+    await removeFileIfExists(req.file?.path)
+    return sendError(res, 404, API_MESSAGES.defectNotFound)
+  }
+  if (!req.file) return sendError(res, 400, 'Photo is required')
+
   const id = uuidv4()
-  const url = `/uploads/${req.file.filename}`
 
-  db.prepare(`
-    INSERT INTO photos (id, inspection_id, defect_id, url, geo, is_required)
-    VALUES (?, (SELECT inspection_id FROM defects WHERE id = ?), ?, ?, ?, 0)
-  `).run(id, req.params.id, req.params.id, url, geo || null)
+  try {
+    const processed = await processUploadedPhoto({
+      tempPath: req.file.path,
+      originalName: req.file.originalname,
+      mimetype: req.file.mimetype,
+      inspectionId: defect.inspection_id,
+      photoId: id,
+    })
 
-  const photo = db.prepare('SELECT * FROM photos WHERE id = ?').get(id)
+    db.prepare(`
+      INSERT INTO photos (
+        id, inspection_id, defect_id, company_id, photo_type, url,
+        original_url, webp_url, thumb_url, original_mime, original_name,
+        width, height, size_original, size_webp, size_thumb, hash,
+        geo, is_required
+      )
+      VALUES (?, ?, ?, ?, NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)
+    `).run(
+      id,
+      defect.inspection_id,
+      req.params.id,
+      companyId,
+      processed.url,
+      processed.original_url,
+      processed.webp_url,
+      processed.thumb_url,
+      processed.original_mime,
+      processed.original_name,
+      processed.width,
+      processed.height,
+      processed.size_original,
+      processed.size_webp,
+      processed.size_thumb,
+      processed.hash,
+      geo || null,
+    )
+  } catch (err) {
+    await removeFileIfExists(req.file?.path)
+    console.warn('[uploads] Failed to process defect photo:', err.message)
+    return sendError(res, 400, 'Photo could not be processed')
+  }
+
+  const photo = db.prepare(`SELECT ${PHOTO_SELECT_COLUMNS} FROM photos WHERE id = ? AND company_id = ?`).get(id, companyId)
   res.status(201).json(photo)
 })
 
 app.delete('/api/photos/:id', authenticate, (req, res) => {
   const { id } = req.params
+  const companyId = req.user.company_id || 'default'
+  const photo = db.prepare(`
+    SELECT ${PHOTO_SELECT_COLUMNS}
+    FROM photos p
+    WHERE p.id = ? AND p.company_id = ?
+  `).get(id, companyId)
+
+  if (!photo) {
+    return sendError(res, 404, 'Photo not found')
+  }
+
   db.prepare('DELETE FROM photos WHERE id = ?').run(id)
+  removePhotoFiles(photo).catch((err) => console.warn('[uploads] Failed to remove photo files:', err.message))
   res.status(204).send()
 })
 
 app.put('/api/defects/:id', authenticate, (req, res) => {
   const { title, comment } = req.body
+  const companyId = req.user.company_id || 'default'
+  const defect = db.prepare('SELECT id FROM defects WHERE id = ? AND company_id = ?').get(req.params.id, companyId)
+  if (!defect) return sendError(res, 404, API_MESSAGES.defectNotFound)
   
-  db.prepare('UPDATE defects SET title = ?, comment = ? WHERE id = ?')
-    .run(title, comment || null, req.params.id)
+  db.prepare('UPDATE defects SET title = ?, comment = ? WHERE id = ? AND company_id = ?')
+    .run(title, comment || null, req.params.id, companyId)
   
-  const defect = db.prepare('SELECT * FROM defects WHERE id = ?').get(req.params.id)
-  res.json(defect)
+  const updatedDefect = db.prepare('SELECT * FROM defects WHERE id = ? AND company_id = ?').get(req.params.id, companyId)
+  res.json(updatedDefect)
 })
 
 app.delete('/api/defects/:id', authenticate, (req, res) => {
   const { id } = req.params
+  const companyId = req.user.company_id || 'default'
+  const defect = db.prepare('SELECT id FROM defects WHERE id = ? AND company_id = ?').get(id, companyId)
+  if (!defect) return sendError(res, 404, API_MESSAGES.defectNotFound)
   
   db.prepare('DELETE FROM photos WHERE defect_id = ?').run(id)
-  db.prepare('DELETE FROM defects WHERE id = ?').run(id)
+  db.prepare('DELETE FROM defects WHERE id = ? AND company_id = ?').run(id, companyId)
   
   res.status(204).send()
 })
@@ -1400,8 +2386,9 @@ app.get('/api/notifications', authenticate, (req, res) => {
     const settings = readSettings()
     const scheduledDays = Number(settings.scheduled_inspection_days ?? 30)
     const notifyDays = Number(settings.notification_days_before ?? 3)
+    const companyId = req.user.company_id || 'default'
     
-    const vehicles = db.prepare('SELECT id, number, name, last_scheduled_inspection FROM vehicles WHERE status = ?').all('active')
+    const vehicles = db.prepare('SELECT id, number, name, last_scheduled_inspection FROM vehicles WHERE status = ? AND company_id = ?').all('active', companyId)
 
     const now = new Date()
     const notifications = vehicles.map(v => {
@@ -1434,21 +2421,23 @@ app.get('/api/notifications', authenticate, (req, res) => {
 
 app.get('/api/dashboard/stats', authenticate, (req, res) => {
   const today = new Date().toISOString().split('T')[0]
+  const companyId = req.user.company_id || 'default'
 
-  const totalVehicles = db.prepare('SELECT COUNT(*) as count FROM vehicles').get().count
-  const totalInspections = db.prepare('SELECT COUNT(*) as count FROM inspections').get().count
+  const totalVehicles = db.prepare('SELECT COUNT(*) as count FROM vehicles WHERE company_id = ?').get(companyId).count
+  const totalInspections = db.prepare('SELECT COUNT(*) as count FROM inspections WHERE company_id = ?').get(companyId).count
   
   const todayInspections = db.prepare(`
     SELECT COUNT(*) as count FROM inspections 
-    WHERE date(created_at) = date(?)
-  `).get(today).count
+    WHERE company_id = ? AND date(created_at) = date(?)
+  `).get(companyId, today).count
 
   const vehiclesWithDefects = db.prepare(`
     SELECT COUNT(DISTINCT v.id) as count
     FROM vehicles v
     JOIN inspections i ON i.vehicle_id = v.id
     JOIN defects d ON d.inspection_id = i.id
-  `).get().count
+    WHERE v.company_id = ?
+  `).get(companyId).count
 
   res.json({
     totalVehicles,
@@ -1541,8 +2530,8 @@ app.post('/api/seed', authenticate, (req, res) => {
 
   // Create inspections
   const insertInspection = db.prepare(`
-    INSERT INTO inspections (id, vehicle_id, inspector_id, type, completed, accident_occurred_at, accident_location, created_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO inspections (id, vehicle_id, inspector_id, type, completed, accident_occurred_at, accident_location, company_id, created_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
   `)
 
   const insertChecklist = db.prepare(`
@@ -1551,8 +2540,8 @@ app.post('/api/seed', authenticate, (req, res) => {
   `)
 
   const insertDefect = db.prepare(`
-    INSERT INTO defects (id, inspection_id, title, comment, created_at)
-    VALUES (?, ?, ?, ?, ?)
+    INSERT INTO defects (id, inspection_id, title, comment, company_id, created_at)
+    VALUES (?, ?, ?, ?, ?, ?)
   `)
 
   const quickItems = ['Внешний вид', 'Повреждения кузова', 'Колёса', 'Стекла', 'Госномер']
@@ -1574,7 +2563,7 @@ app.post('/api/seed', authenticate, (req, res) => {
       : null
     const accidentLocation = type === 'accident' ? `${randomItem(regions)}, участок ${1 + randomInteger(25)}` : null
 
-    insertInspection.run(insId, vehicleId, userId, type, 1, accidentOccurredAt, accidentLocation, inspectionDateIso)
+    insertInspection.run(insId, vehicleId, userId, type, 1, accidentOccurredAt, accidentLocation, companyId, inspectionDateIso)
 
     if (type === 'scheduled') {
       const previousScheduledDate = latestScheduledInspectionByVehicle.get(vehicleId)
@@ -1591,7 +2580,7 @@ app.post('/api/seed', authenticate, (req, res) => {
       if (!result) {
         const defectId = uuidv4()
         const defectDateIso = new Date(inspectionDate.getTime() + randomInteger(4 * 60 * 60 * 1000)).toISOString()
-        insertDefect.run(defectId, insId, title, 'Зафиксировано при осмотре', defectDateIso)
+        insertDefect.run(defectId, insId, title, 'Зафиксировано при осмотре', companyId, defectDateIso)
       }
     })
   }
@@ -1610,6 +2599,10 @@ app.get('/api/analytics/overview', authenticate, (req, res) => {
   const { from = '', to = '' } = req.query
   const now = new Date()
   const companyId = req.user.company_id || 'default'
+
+  if (!ensureCompanyFeatureEnabled(req, res, 'analytics_enabled', API_MESSAGES.analyticsFeatureDisabled)) {
+    return
+  }
   
   let dateFrom = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000)
   let dateTo = now
@@ -1669,19 +2662,19 @@ app.get('/api/analytics/overview', authenticate, (req, res) => {
     FROM inspections i
     JOIN vehicles v ON i.vehicle_id = v.id
     JOIN users u ON i.inspector_id = u.id
-    WHERE i.type = 'accident'
+    WHERE i.company_id = ? AND i.type = 'accident'
     ORDER BY i.created_at DESC
     LIMIT 10
-  `).all()
+  `).all(companyId)
 
   // Daily inspections for date range
   const dailyInspections = db.prepare(`
     SELECT DATE(created_at) as date, COUNT(*) as count 
     FROM inspections 
-    WHERE created_at >= ? AND created_at <= ?
+    WHERE company_id = ? AND created_at >= ? AND created_at <= ?
     GROUP BY DATE(created_at)
     ORDER BY date
-  `).all(dateFrom.toISOString(), dateTo.toISOString())
+  `).all(companyId, dateFrom.toISOString(), dateTo.toISOString())
 
   // Top vehicles with defects
   const topDefectiveVehicles = db.prepare(`
@@ -1689,10 +2682,11 @@ app.get('/api/analytics/overview', authenticate, (req, res) => {
     FROM vehicles v
     JOIN inspections i ON i.vehicle_id = v.id
     JOIN defects d ON d.inspection_id = i.id
+    WHERE v.company_id = ?
     GROUP BY v.id
     ORDER BY defects_count DESC
     LIMIT 10
-  `).all()
+  `).all(companyId)
 
   res.json({
     total: { vehicles: totalVehicles, inspections: totalInspections, defects: totalDefects },
@@ -1710,30 +2704,37 @@ app.get('/api/analytics/overview', authenticate, (req, res) => {
     vehiclesByRegion: db.prepare(`
       SELECT COALESCE(region, 'Не указано') as region, COUNT(*) as count
       FROM vehicles
+      WHERE company_id = ?
       GROUP BY region
       ORDER BY count DESC
-    `).all(),
+    `).all(companyId),
     inspectionsByRegion: db.prepare(`
       SELECT COALESCE(v.region, 'Не указано') as region, COUNT(*) as count
       FROM inspections i
       JOIN vehicles v ON i.vehicle_id = v.id
+      WHERE i.company_id = ?
       GROUP BY v.region
       ORDER BY count DESC
-    `).all(),
+    `).all(companyId),
     defectsByRegion: db.prepare(`
       SELECT COALESCE(v.region, 'Не указано') as region, COUNT(d.id) as count
       FROM defects d
       JOIN inspections i ON d.inspection_id = i.id
       JOIN vehicles v ON i.vehicle_id = v.id
+      WHERE d.company_id = ?
       GROUP BY v.region
       ORDER BY count DESC
-    `).all()
+    `).all(companyId)
   })
 })
 
 app.get('/api/analytics/export/excel', authenticate, (req, res) => {
   const { type = 'vehicles' } = req.query
   const companyId = req.user.company_id || 'default'
+
+  if (!ensureCompanyFeatureEnabled(req, res, 'analytics_enabled', API_MESSAGES.analyticsFeatureDisabled)) {
+    return
+  }
 
   let data
   let filename
@@ -1780,6 +2781,26 @@ app.get('/api/analytics/export/excel', authenticate, (req, res) => {
   res.setHeader('Content-Type', 'application/json')
   res.setHeader('Content-Disposition', `attachment; filename=${filename}`)
   res.json({ data, exportedAt: new Date().toISOString() })
+})
+
+app.use((err, req, res, next) => {
+  if (err instanceof multer.MulterError) {
+    return sendError(res, 400, err.message)
+  }
+
+  if (err?.message === 'Only image uploads are allowed') {
+    return sendError(res, 400, 'Only image uploads are allowed')
+  }
+
+  if (err?.type === 'entity.too.large') {
+    return sendError(res, 413, 'Request body is too large')
+  }
+
+  if (err instanceof SyntaxError && 'body' in err) {
+    return sendError(res, 400, 'Invalid JSON body')
+  }
+
+  return next(err)
 })
 
 initDatabase().then(() => {

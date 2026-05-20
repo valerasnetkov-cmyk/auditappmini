@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react'
 import Layout from '@/components/Layout'
 import api from '@/lib/api/client'
 import { clearAuthToken, requireAuthToken } from '@/lib/auth'
-import type { AnalyticsOverview, AuthUser } from '@/lib/types'
+import type { AnalyticsOverview, AuthUser, DashboardStats } from '@/lib/types'
 
 type ProfileStats = {
   totalVehicles: number
@@ -31,6 +31,7 @@ export default function ProfilePage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [stats, setStats] = useState<ProfileStats | null>(null)
+  const [analyticsDisabled, setAnalyticsDisabled] = useState(false)
 
   useEffect(() => {
     if (!requireAuthToken()) return
@@ -41,16 +42,21 @@ export default function ProfilePage() {
     try {
       setLoading(true)
       setError('')
+      setAnalyticsDisabled(false)
 
-      const [authResult, analyticsResult] = await Promise.all([api.getAuth(), api.getAnalyticsOverview()])
+      const [authResult, usageResult, dashboardResult] = await Promise.all([
+        api.getAuth(),
+        api.getCompanyUsage(),
+        api.getDashboardStats(),
+      ])
 
-      if (authResult.error) {
-        setError(authResult.error)
+      if ([authResult, usageResult, dashboardResult].some((result) => result.error === 'AUTH_REQUIRED')) {
+        setError('AUTH_REQUIRED')
         return
       }
 
-      if (analyticsResult.error) {
-        setError(analyticsResult.error)
+      if (authResult.error) {
+        setError(authResult.error)
         return
       }
 
@@ -58,13 +64,31 @@ export default function ProfilePage() {
         setUser(authResult.data)
       }
 
-      if (analyticsResult.data) {
-        const overview: AnalyticsOverview = analyticsResult.data
+      const analyticsAllowed = usageResult.data?.features.analytics.enabled !== false
+      setAnalyticsDisabled(!analyticsAllowed)
+
+      if (analyticsAllowed) {
+        const analyticsResult = await api.getAnalyticsOverview()
+
+        if (analyticsResult.error) {
+          setError(analyticsResult.error)
+          return
+        }
+
+        const overview: AnalyticsOverview = analyticsResult.data || {}
         setStats({
           totalVehicles: overview.total?.vehicles || 0,
           totalInspections: overview.total?.inspections || 0,
           totalDefects: overview.total?.defects || 0,
           weekInspections: overview.week?.inspections || 0,
+        })
+      } else if (dashboardResult.data) {
+        const dashboard: Partial<DashboardStats> = dashboardResult.data
+        setStats({
+          totalVehicles: dashboard.totalVehicles || 0,
+          totalInspections: dashboard.totalInspections || 0,
+          totalDefects: dashboard.vehiclesWithDefects || 0,
+          weekInspections: dashboard.inspectionsToday || 0,
         })
       }
     } catch {
@@ -117,6 +141,11 @@ export default function ProfilePage() {
           {stats ? (
             <div className="mb-6 rounded-lg bg-white p-6 shadow">
               <h3 className="mb-4 font-semibold">Статистика системы</h3>
+              {analyticsDisabled ? (
+                <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+                  Аналитика отключена тарифом компании. Ниже показана краткая оперативная сводка без расширенной аналитики.
+                </div>
+              ) : null}
               <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
                 <div className="rounded-lg bg-blue-50 p-4 text-center">
                   <div className="text-2xl font-bold text-blue-600">{stats.totalVehicles}</div>
@@ -128,11 +157,11 @@ export default function ProfilePage() {
                 </div>
                 <div className="rounded-lg bg-orange-50 p-4 text-center">
                   <div className="text-2xl font-bold text-orange-600">{stats.totalDefects}</div>
-                  <div className="text-sm text-gray-600">Дефекты</div>
+                  <div className="text-sm text-gray-600">{analyticsDisabled ? 'Техника с дефектами' : 'Дефекты'}</div>
                 </div>
                 <div className="rounded-lg bg-purple-50 p-4 text-center">
                   <div className="text-2xl font-bold text-purple-600">{stats.weekInspections}</div>
-                  <div className="text-sm text-gray-600">За неделю</div>
+                  <div className="text-sm text-gray-600">{analyticsDisabled ? 'Сегодня' : 'За неделю'}</div>
                 </div>
               </div>
             </div>

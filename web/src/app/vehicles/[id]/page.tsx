@@ -1,4 +1,5 @@
 'use client'
+/* eslint-disable @next/next/no-img-element */
 
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
@@ -23,6 +24,10 @@ type DefectHistoryEntry = {
   changed_at: string
   changed_by?: string | null
   changed_by_name?: string | null
+}
+
+function getPhotoThumbUrl(photo: { url: string; webp_url?: string | null; thumb_url?: string | null }) {
+  return photo.thumb_url || photo.webp_url || photo.url
 }
 
 function getInspectionTypeLabel(type: string) {
@@ -112,6 +117,7 @@ export default function VehicleDetailPage() {
   useEffect(() => {
     if (!requireAuthToken()) return
     void loadData()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   const reloadDefects = async () => {
@@ -334,7 +340,7 @@ function InfoItem({ label, value }: { label: string; value: string }) {
 
 function InspectionsHistory({ inspections }: { inspections: InspectionRecord[] }) {
   return (
-    <section className="card mt-6 overflow-hidden">
+    <section className="table-card mt-6">
       <div className="border-b border-line px-6 py-4">
         <h2 className="text-lg font-semibold text-foreground">История осмотров</h2>
       </div>
@@ -342,7 +348,7 @@ function InspectionsHistory({ inspections }: { inspections: InspectionRecord[] }
       {inspections.length === 0 ? (
         <div className="p-12 text-center text-foreground-muted">Осмотров пока нет</div>
       ) : (
-        <div className="overflow-x-auto">
+        <div className="table-scroll">
           <table className="min-w-full divide-y divide-line">
             <thead className="table-header">
               <tr>
@@ -475,7 +481,7 @@ function DefectCard({
       {defect.photos.length ? (
         <div className="mt-3 grid grid-cols-3 gap-2">
           {defect.photos.map((photo) => (
-            <img key={photo.url} src={buildApiUrl(photo.url)} alt="Фото дефекта" className="h-20 w-full rounded-control object-cover" />
+            <img key={photo.url} src={buildApiUrl(getPhotoThumbUrl(photo))} alt="Фото дефекта" className="h-20 w-full rounded-control object-cover" />
           ))}
         </div>
       ) : null}
@@ -502,7 +508,7 @@ function StatusHistory({ history }: { history: VehicleHistoryEntry[] }) {
   if (!history.length) return null
 
   return (
-    <section className="card mt-6 overflow-hidden">
+    <section className="table-card mt-6">
       <div className="border-b border-line px-6 py-4">
         <h2 className="text-lg font-semibold text-foreground">История изменения статуса</h2>
       </div>
@@ -513,7 +519,7 @@ function StatusHistory({ history }: { history: VehicleHistoryEntry[] }) {
               <span className={getVehicleStatusBadgeClass(entry.old_status)}>{getVehicleStatusLabel(entry.old_status)}</span>
               <span className="text-foreground-muted">→</span>
               <span className={getVehicleStatusBadgeClass(entry.new_status)}>{getVehicleStatusLabel(entry.new_status)}</span>
-              {entry.reason ? <span className="italic text-foreground-muted">"{entry.reason}"</span> : null}
+              {entry.reason ? <span className="italic text-foreground-muted">&quot;{entry.reason}&quot;</span> : null}
             </div>
             <div className="text-xs text-foreground-muted">
               {formatDate(entry.created_at)}
@@ -593,3 +599,4 @@ function StatusModal({
     </div>
   )
 }
+

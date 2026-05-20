@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test'
+import { test } from '@playwright/test'
 
 // UI-based test: Open defect detail and close defect via UI button, verify toast
 test('Defect detail UI: close defect via UI button', async ({ page, request }) => {
@@ -50,7 +50,7 @@ test('Defect detail UI: close defect via UI button', async ({ page, request }) =
     headers: { Authorization: `Bearer ${adminToken}` }
   })
   const defects = await defectsList.json()
-  const defect = defects?.data?.find((d: any) => d.title === 'UI close item')
+  const defect = defects?.data?.find((d: { title?: string }) => d.title === 'UI close item')
   if (!defect) {
     test.skip('Defect not created for UI close test')
   }

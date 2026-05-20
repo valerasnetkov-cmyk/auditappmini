@@ -58,7 +58,7 @@ test('Defect Timeline Detail: loads history after status change', async ({ page,
     headers: { Authorization: `Bearer ${adminToken}` },
   })
   const defects = await defectsList.json()
-  const defect = defects?.data?.find((d: any) => d.title === 'Timeline detail item')
+  const defect = defects?.data?.find((d: { title?: string }) => d.title === 'Timeline detail item')
   if (!defect) {
     test.skip('Defect not found for timeline detail test')
   }

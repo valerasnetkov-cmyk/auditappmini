@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test'
+import { test } from '@playwright/test'
 
 // MVP: Defect timeline flow in UI — create defect, verify timeline, close/open, verify timeline updates
 
@@ -50,7 +50,7 @@ test('Defect Timeline MVP: verify timeline updates with close/open actions (UI p
     headers: { Authorization: `Bearer ${adminToken}` }
   })
   const defects = await defectsList.json()
-  const defect = defects?.data?.find((d: any) => d.title === 'Timeline test item')
+  const defect = defects?.data?.find((d: { title?: string }) => d.title === 'Timeline test item')
   if (!defect) test.skip('Defect not found for timeline test')
 
   // UI: open list and navigate to vehicle detail

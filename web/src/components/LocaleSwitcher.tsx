@@ -1,17 +1,22 @@
 "use client"
 
 import { setLocale, t } from '@/lib/i18n'
-import { useState, useEffect } from 'react'
+import { useState, useSyncExternalStore } from 'react'
+
+function getStoredLocale() {
+  if (typeof window === 'undefined') return 'ru'
+
+  const stored = localStorage.getItem('locale')
+  return stored === 'en' || stored === 'ru' ? stored : 'ru'
+}
+
+function subscribeToClientReady() {
+  return () => {}
+}
 
 export default function LocaleSwitcher() {
-  const [mounted, setMounted] = useState(false)
-  const [locale, setLocaleState] = useState<'ru' | 'en'>('ru')
-
-  useEffect(() => {
-    setMounted(true)
-    const stored = localStorage.getItem('locale') as 'ru' | 'en' | null
-    if (stored) setLocaleState(stored)
-  }, [])
+  const mounted = useSyncExternalStore(subscribeToClientReady, () => true, () => false)
+  const [locale, setLocaleState] = useState<'ru' | 'en'>(getStoredLocale)
 
   if (!mounted) return null
 

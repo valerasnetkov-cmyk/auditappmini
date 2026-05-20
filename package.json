@@ -8,9 +8,18 @@
     "directus:config": "docker compose -f directus/docker-compose.yml --env-file directus/.env.example config",
     "directus:bootstrap": "node directus/scripts/bootstrap-schema.mjs",
     "directus:bootstrap:dry": "node directus/scripts/bootstrap-schema.mjs --dry-run",
+    "directus:seed:saas": "node directus/scripts/seed-saas-data.mjs",
+    "directus:seed:saas:dry": "node directus/scripts/seed-saas-data.mjs --dry-run",
     "smoke": "npm --prefix backend run smoke",
+    "doctor:launch": "npm --prefix backend run doctor:launch",
+    "audit:backend": "npm --prefix backend audit --audit-level=moderate",
+    "audit:web:high": "npm --prefix web audit --audit-level=high",
+    "audit:launch": "npm run audit:backend && npm run audit:web:high && npm run audit:mobile",
     "verify:backend": "npm --prefix backend run smoke",
     "verify:web": "npm --prefix web run build",
-    "verify": "npm run verify:backend && npm run verify:web"
+    "verify": "npm run verify:backend && npm run verify:web && npm run verify:mobile",
+    "verify:launch": "npm run verify && npm run doctor:launch && npm run audit:launch",
+    "verify:mobile": "npm --prefix mobile run verify",
+    "audit:mobile": "npm --prefix mobile run audit:moderate"
   }
 }

@@ -8,8 +8,8 @@ import Layout from '@/components/Layout'
 import LocaleSwitcher from '@/components/LocaleSwitcher'
 import ThemeSwitcher from '@/components/ThemeSwitcher'
 import api from '@/lib/api/client'
-import { getAuthToken } from '@/lib/auth'
-import type { DirectusIntegrationStatus, RegionRecord } from '@/lib/types'
+import { getAuthToken, isManagerRole } from '@/lib/auth'
+import type { CompanyFeatureAccess, CompanyResourceUsage, CompanyUsageResponse, RegionRecord } from '@/lib/types'
 
 type ImportResult = {
   imported: number
@@ -20,6 +20,14 @@ type ImportResult = {
 type StatusMessage = {
   tone: 'success' | 'warning' | 'danger' | 'info'
   text: string
+}
+
+const COMPANY_USAGE_STALE_BACKEND_ERROR =
+  'Backend на http://localhost:3001 запущен старой версией и не знает endpoint /api/company/usage. Перезапустите backend из корня проекта или командой npm --prefix backend run dev.'
+
+function formatCompanyUsageError(error: string) {
+  if (error === 'HTTP 404') return COMPANY_USAGE_STALE_BACKEND_ERROR
+  return `Не удалось загрузить тариф компании: ${error}`
 }
 
 type ParsedVehicle = {
@@ -44,12 +52,144 @@ function isRussianPlateLike(value: string) {
   return /^[АВЕКМНОРСТУХABEKMHOPCTYX]\d{3}[АВЕКМНОРСТУХABEKMHOPCTYX]{2}\d{2,3}$/i.test(value)
 }
 
+function formatNumber(value: number | undefined | null) {
+  return new Intl.NumberFormat('ru-RU').format(Number(value || 0))
+}
+
+function formatPlanCode(code?: string | null) {
+  if (!code) return 'Без тарифа'
+  return code.toUpperCase()
+}
+
+function formatUsageValue(usage: CompanyResourceUsage) {
+  if (usage.unlimited || usage.max === null) {
+    return `${formatNumber(usage.current)} / без лимита`
+  }
+
+  return `${formatNumber(usage.current)} / ${formatNumber(usage.max)}`
+}
+
+function getUsageBarWidth(usage: CompanyResourceUsage) {
+  if (usage.percent === null || usage.percent === undefined) return '0%'
+  return `${Math.max(0, Math.min(100, usage.percent))}%`
+}
+
+function getUsageTone(usage: CompanyResourceUsage) {
+  if (usage.exceeded) return 'bg-status-danger'
+  if (usage.percent !== null && usage.percent >= 90) return 'bg-status-warning'
+  return 'bg-status-success'
+}
+
+function getUsageHint(usage: CompanyResourceUsage, unit: string) {
+  if (usage.unlimited || usage.max === null) return 'Лимит не задан'
+  if (usage.exceeded) return `Превышение на ${formatNumber(usage.current - usage.max)} ${unit}`
+  return `Осталось ${formatNumber(usage.remaining)} ${unit}`
+}
+
+function getFeatureLabel(feature: CompanyFeatureAccess) {
+  return feature.enabled ? 'Доступно' : 'Отключено тарифом'
+}
+
+function getFeatureClassName(feature: CompanyFeatureAccess) {
+  return feature.enabled ? 'border-green-100 bg-green-50 text-status-success' : 'border-red-100 bg-red-50 text-status-danger'
+}
+
+function ResourceUsageCard({ title, usage, unit }: { title: string; usage: CompanyResourceUsage; unit: string }) {
+  return (
+    <div className="rounded-card border border-line bg-muted-surface p-4">
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-wide text-foreground-muted">{title}</p>
+          <p className="mt-2 text-xl font-bold text-foreground">{formatUsageValue(usage)}</p>
+        </div>
+        <span className={usage.exceeded ? 'badge badge-danger' : 'badge badge-info'}>
+          {usage.unlimited ? '∞' : `${usage.percent || 0}%`}
+        </span>
+      </div>
+      <div className="mt-3 h-2 overflow-hidden rounded-full bg-soft-surface">
+        <div className={`h-full rounded-full ${getUsageTone(usage)}`} style={{ width: usage.unlimited ? '100%' : getUsageBarWidth(usage) }} />
+      </div>
+      <p className="mt-2 text-xs text-foreground-muted">{getUsageHint(usage, unit)}</p>
+    </div>
+  )
+}
+
+function FeatureStatusCard({ title, feature }: { title: string; feature: CompanyFeatureAccess }) {
+  return (
+    <div className={`rounded-card border px-3 py-2 text-sm font-semibold ${getFeatureClassName(feature)}`}>
+      <div className="flex items-center justify-between gap-2">
+        <span>{title}</span>
+        <span>{getFeatureLabel(feature)}</span>
+      </div>
+    </div>
+  )
+}
+
+function CompanyUsagePanel({
+  usage,
+  loading,
+  onRefresh,
+}: {
+  usage: CompanyUsageResponse | null
+  loading: boolean
+  onRefresh: () => void
+}) {
+  if (loading && !usage) {
+    return (
+      <div className="card mb-4 p-4">
+        <div className="h-5 w-48 animate-pulse rounded bg-soft-surface" />
+        <div className="mt-4 grid gap-3 sm:grid-cols-2">
+          <div className="h-28 animate-pulse rounded-card bg-soft-surface" />
+          <div className="h-28 animate-pulse rounded-card bg-soft-surface" />
+        </div>
+      </div>
+    )
+  }
+
+  if (!usage) return null
+
+  return (
+    <div className="card mb-4 p-4">
+      <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <h2 className="text-lg font-semibold text-foreground">Тариф и доступные модули</h2>
+          <p className="mt-1 text-sm text-foreground-secondary">
+            Компания: <span className="font-semibold text-foreground">{usage.company.name}</span>
+            <span className="mx-2 text-foreground-muted">·</span>
+            Тариф: <span className="font-semibold text-foreground">{formatPlanCode(usage.plan.code)}</span>
+          </p>
+        </div>
+        <button type="button" onClick={onRefresh} disabled={loading} className="btn btn-secondary btn-sm disabled:opacity-50">
+          {loading ? 'Обновление...' : 'Обновить'}
+        </button>
+      </div>
+
+      <div className="grid gap-3 sm:grid-cols-2">
+        <ResourceUsageCard title="Техника" usage={usage.usage.vehicles} unit="ед." />
+        <ResourceUsageCard title="Пользователи" usage={usage.usage.users} unit="чел." />
+      </div>
+
+      <div className="mt-4 grid gap-2 lg:grid-cols-3">
+        <FeatureStatusCard title="OCR номера и одометра" feature={usage.features.ocr} />
+        <FeatureStatusCard title="ДТП-осмотры" feature={usage.features.accidentModule} />
+        <FeatureStatusCard title="Аналитика" feature={usage.features.analytics} />
+      </div>
+
+      <p className="mt-3 text-xs text-foreground-muted">
+        Если нужен больший лимит или модуль отключен тарифом, обратитесь к администратору сервиса.
+      </p>
+    </div>
+  )
+}
+
 export default function SettingsPage() {
   const router = useRouter()
   const fileRef = useRef<HTMLInputElement>(null)
 
   const [loading, setLoading] = useState(true)
   const [isManager, setIsManager] = useState(false)
+  const [companyUsage, setCompanyUsage] = useState<CompanyUsageResponse | null>(null)
+  const [companyUsageLoading, setCompanyUsageLoading] = useState(false)
   const [importing, setImporting] = useState(false)
   const [importResult, setImportResult] = useState<ImportResult | null>(null)
   const [status, setStatus] = useState<StatusMessage | null>(null)
@@ -59,9 +199,26 @@ export default function SettingsPage() {
   const [editingRegionName, setEditingRegionName] = useState('')
   const [savingRegionId, setSavingRegionId] = useState<string | null>(null)
   const [deletingRegionId, setDeletingRegionId] = useState<string | null>(null)
-  const [directusStatus, setDirectusStatus] = useState<DirectusIntegrationStatus | null>(null)
-  const [directusError, setDirectusError] = useState<string | null>(null)
-  const [directusLoading, setDirectusLoading] = useState(false)
+
+  const loadCompanyUsage = async () => {
+    setCompanyUsageLoading(true)
+    const result = await api.getCompanyUsage()
+
+    if (result.error) {
+      setCompanyUsage(null)
+      setStatus({ tone: 'danger', text: formatCompanyUsageError(result.error) })
+    } else {
+      setCompanyUsage(result.data || null)
+      setStatus((current) => {
+        if (!current) return current
+        if (current.text === COMPANY_USAGE_STALE_BACKEND_ERROR) return null
+        if (current.text.startsWith('Не удалось загрузить тариф компании:')) return null
+        return current
+      })
+    }
+
+    setCompanyUsageLoading(false)
+  }
 
   const loadRegions = async () => {
     const result = await api.getRegions()
@@ -73,24 +230,6 @@ export default function SettingsPage() {
     setRegions((result.data || []).filter((region) => getRegionVehicleCount(region) > 0))
   }
 
-  const loadDirectusStatus = async () => {
-    setDirectusLoading(true)
-    setDirectusError(null)
-
-    try {
-      const result = await api.getDirectusStatus()
-      if (result.error) {
-        setDirectusError(result.error)
-        setDirectusStatus(null)
-        return
-      }
-
-      setDirectusStatus(result.data || null)
-    } finally {
-      setDirectusLoading(false)
-    }
-  }
-
   useEffect(() => {
     const token = getAuthToken()
     if (!token) {
@@ -98,16 +237,19 @@ export default function SettingsPage() {
       return
     }
 
+    let managerRole = false
     try {
       const payload = JSON.parse(atob(token.split('.')[1]))
-      setIsManager(payload.role === 'manager' || payload.role === 'admin')
+      managerRole = isManagerRole(payload.role)
+      setIsManager(managerRole)
     } catch {
       setIsManager(false)
     }
 
     setLoading(false)
-    void loadRegions()
-    void loadDirectusStatus()
+    if (managerRole) {
+      void Promise.all([loadRegions(), loadCompanyUsage()])
+    }
   }, [router])
 
   const parseExcel = async (buffer: ArrayBuffer): Promise<ParsedVehicle[]> => {
@@ -184,7 +326,7 @@ export default function SettingsPage() {
       if (result.data) {
         setImportResult(result.data)
         setStatus({ tone: 'success', text: `Импортировано машин: ${result.data.imported}` })
-        await loadRegions()
+        await Promise.all([loadRegions(), loadCompanyUsage()])
       }
     } catch {
       setStatus({ tone: 'danger', text: 'Ошибка при импорте Excel-файла.' })
@@ -319,55 +461,7 @@ export default function SettingsPage() {
         </div>
 
         {isManager ? (
-          <div className="card mb-4 p-4">
-            <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
-              <div>
-                <h2 className="text-lg font-semibold text-foreground">Directus CMS</h2>
-                <p className="mt-1 text-sm text-foreground-secondary">
-                  Статус отдельного CMS/Data Studio слоя. Данные проверяются через backend, без передачи service token во frontend.
-                </p>
-              </div>
-              <button
-                type="button"
-                onClick={() => void loadDirectusStatus()}
-                disabled={directusLoading}
-                className="btn btn-secondary btn-sm disabled:opacity-50"
-              >
-                {directusLoading ? 'Проверка...' : 'Обновить'}
-              </button>
-            </div>
-
-            {directusError ? (
-              <div className="alert-danger rounded-card p-3 text-sm">{directusError}</div>
-            ) : (
-              <div className="grid gap-3 md:grid-cols-3">
-                <div className="rounded-card border border-line bg-muted-surface p-3">
-                  <div className="text-xs uppercase tracking-wide text-foreground-muted">Состояние</div>
-                  <div className={`mt-2 font-semibold ${directusStatus?.configured ? 'text-status-success' : 'text-status-warning'}`}>
-                    {directusStatus?.configured ? 'Подключен' : 'Token не настроен'}
-                  </div>
-                </div>
-                <div className="rounded-card border border-line bg-muted-surface p-3">
-                  <div className="text-xs uppercase tracking-wide text-foreground-muted">URL</div>
-                  <div className="mt-2 break-all font-semibold text-foreground">{directusStatus?.url || 'http://localhost:8055'}</div>
-                </div>
-                <div className="rounded-card border border-line bg-muted-surface p-3">
-                  <div className="text-xs uppercase tracking-wide text-foreground-muted">Коллекции</div>
-                  <div className="mt-2 font-semibold text-foreground">{directusStatus?.collections?.length ?? 0}</div>
-                </div>
-              </div>
-            )}
-
-            {directusStatus?.collections?.length ? (
-              <div className="mt-3 flex flex-wrap gap-2">
-                {directusStatus.collections.map((collection) => (
-                  <span key={collection} className="rounded-pill bg-muted px-3 py-1 text-xs font-medium text-foreground-secondary">
-                    {collection}
-                  </span>
-                ))}
-              </div>
-            ) : null}
-          </div>
+          <CompanyUsagePanel usage={companyUsage} loading={companyUsageLoading} onRefresh={() => void loadCompanyUsage()} />
         ) : null}
 
         {isManager ? (

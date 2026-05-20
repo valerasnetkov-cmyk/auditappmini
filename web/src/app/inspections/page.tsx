@@ -122,6 +122,7 @@ export default function InspectionsPage() {
   useEffect(() => {
     if (!requireAuthToken()) return
     void loadData()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [vehicleFilter, typeFilter, dateFrom, dateTo])
 
   const uniqueRegions = useMemo(() => {
@@ -326,8 +327,8 @@ function InspectionsTable({
   onDelete: (id: string) => void
 }) {
   return (
-    <div className="card overflow-hidden">
-      <div className="overflow-x-auto">
+    <div className="table-card">
+      <div className="table-scroll">
         <table className="min-w-full divide-y divide-line">
           <thead className="table-header">
             <tr>

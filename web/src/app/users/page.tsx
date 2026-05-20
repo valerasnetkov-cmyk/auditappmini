@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from 'react'
 import Layout from '@/components/Layout'
 import ManagerAccessDenied from '@/components/ManagerAccessDenied'
 import api from '@/lib/api/client'
-import { useManagerAccess } from '@/lib/useManagerAccess'
+import { useCompanyOwnerAccess } from '@/lib/useCompanyOwnerAccess'
 import type { UserRecord, UserRole } from '@/lib/types'
 
 type UserFormData = {
@@ -30,22 +30,33 @@ const EMPTY_FORM: UserFormData = {
   role: 'inspector',
 }
 
+const PANEL_MANAGED_ROLES = new Set(['inspector', 'manager'])
+
 function getRoleLabel(role: string) {
   if (role === 'manager') return 'Менеджер'
+  if (role === 'owner') return 'Владелец'
   if (role === 'admin') return 'Администратор'
   return 'Инспектор'
 }
 
 function getRoleBadgeClass(role: string) {
-  if (role === 'manager' || role === 'admin') {
+  if (role === 'owner' || role === 'admin') {
+    return 'bg-amber-100 text-amber-800'
+  }
+
+  if (role === 'manager') {
     return 'bg-purple-100 text-purple-700'
   }
 
   return 'bg-blue-100 text-blue-700'
 }
 
+function canManagePanelUser(user: UserRecord) {
+  return PANEL_MANAGED_ROLES.has(user.role)
+}
+
 export default function UsersPage() {
-  const managerAccess = useManagerAccess()
+  const ownerAccess = useCompanyOwnerAccess()
   const [users, setUsers] = useState<UserRecord[]>([])
   const [loading, setLoading] = useState(true)
   const [submitting, setSubmitting] = useState(false)
@@ -66,9 +77,10 @@ export default function UsersPage() {
   })
 
   useEffect(() => {
-    if (!managerAccess.allowed) return
+    if (!ownerAccess.allowed) return
     void loadUsers()
-  }, [managerAccess.allowed])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ownerAccess.allowed])
 
   const showStatus = (tone: MessageTone, message: string) => {
     setStatusTone(tone)
@@ -145,6 +157,11 @@ export default function UsersPage() {
   }
 
   const openEditModal = (user: UserRecord) => {
+    if (!canManagePanelUser(user)) {
+      showStatus('error', 'Системные роли не редактируются в панели пользователя')
+      return
+    }
+
     setEditingUser(user)
     setFormData({
       email: user.email,
@@ -306,7 +323,7 @@ export default function UsersPage() {
     </form>
   )
 
-  if (managerAccess.loading) {
+  if (ownerAccess.loading) {
     return (
       <div className="flex min-h-screen items-center justify-center">
         <div className="h-8 w-8 animate-spin rounded-full border-b-2 border-blue-600"></div>
@@ -314,11 +331,11 @@ export default function UsersPage() {
     )
   }
 
-  if (!managerAccess.allowed) {
+  if (!ownerAccess.allowed) {
     return (
       <Layout currentPage="users">
         <div className="p-6">
-          <ManagerAccessDenied description="Управление пользователями доступно только менеджеру." />
+          <ManagerAccessDenied description="Управление пользователями доступно только владельцу компании." />
         </div>
       </Layout>
     )
@@ -354,6 +371,8 @@ export default function UsersPage() {
               <option value="">Все роли</option>
               <option value="inspector">Инспектор</option>
               <option value="manager">Менеджер</option>
+              <option value="owner">Владелец</option>
+              <option value="admin">Администратор</option>
             </select>
 
             <div className="relative">
@@ -386,10 +405,10 @@ export default function UsersPage() {
             <div className="mx-auto h-8 w-8 animate-spin rounded-full border-b-2 border-blue-600"></div>
           </div>
         ) : (
-          <div className="overflow-hidden rounded-2xl border border-slate-100 bg-white shadow-sm">
-            <div className="overflow-y-auto" style={{ maxHeight: 'calc(100vh - 320px)' }}>
-              <table className="min-w-full divide-y divide-slate-200">
-                <thead className="sticky top-0 z-10 bg-slate-50">
+          <div className="table-card">
+            <div className="table-scroll">
+              <table className="min-w-full divide-y divide-line">
+                <thead className="table-header">
                   <tr>
                     {!hiddenColumns.includes('name') ? (
                       <th className="cursor-pointer px-6 py-3 text-left text-xs font-semibold text-slate-600" onClick={() => handleSort('name')}>
@@ -435,12 +454,18 @@ export default function UsersPage() {
                           <td className="px-6 py-4 text-sm text-slate-500">{new Date(user.created_at).toLocaleDateString('ru-RU')}</td>
                         ) : null}
                         <td className="px-6 py-4 text-right">
-                          <button onClick={() => openEditModal(user)} className="mr-3 text-blue-600 hover:underline">
-                            Изменить
-                          </button>
-                          <button onClick={() => handleDelete(user.id)} className="text-red-600 hover:underline">
-                            Удалить
-                          </button>
+                          {canManagePanelUser(user) ? (
+                            <>
+                              <button onClick={() => openEditModal(user)} className="mr-3 text-blue-600 hover:underline">
+                                Изменить
+                              </button>
+                              <button onClick={() => handleDelete(user.id)} className="text-red-600 hover:underline">
+                                Удалить
+                              </button>
+                            </>
+                          ) : (
+                            <span className="text-sm text-slate-400">Системная роль</span>
+                          )}
                         </td>
                       </tr>
                     ))

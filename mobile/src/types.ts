@@ -1,4 +1,4 @@
-export type UserRole = 'inspector' | 'manager' | 'admin'
+export type UserRole = 'inspector' | 'manager' | 'owner' | 'admin'
 
 export type InspectionType = 'quick' | 'scheduled' | 'accident'
 
@@ -19,6 +19,7 @@ export type User = {
   email: string
   name: string
   role: UserRole
+  status?: 'active' | 'inactive'
   company_id: string
 }
 
@@ -31,17 +32,64 @@ export type Vehicle = {
 }
 
 export type ChecklistItem = {
+  id?: string
   title: string
-  result: boolean | null
+  result: boolean | 0 | 1 | null
   comment: string
 }
 
-export type PhotoRequirement = {
-  id: string
-  type: string
-  label: string
-  required: boolean
+export type PhotoRequirementsResponse = {
+  type: InspectionType
+  requirements: {
+    required: string[]
+    optional: string[]
+  }
+  labels: Record<string, string>
 }
+
+export type VehicleNumberRecognitionResponse = {
+  raw_value: string | null
+  normalized_value: string | null
+  confidence: number
+  requires_confirmation: boolean
+  message?: string
+  photo_url?: string
+  recognized_at?: string
+  candidates: string[]
+}
+
+export type OdometerRecognitionResponse = {
+  raw_value: string | null
+  normalized_value: number | null
+  unit: string
+  confidence: number
+  requires_manual_confirmation: boolean
+  message?: string
+  photo_url?: string
+  recognized_at?: string
+  value: number | null
+}
+
+export type PhotoRecord = {
+  id: string
+  url: string
+  original_url?: string | null
+  webp_url?: string | null
+  thumb_url?: string | null
+  original_mime?: string | null
+  original_name?: string | null
+  width?: number | null
+  height?: number | null
+  size_original?: number | null
+  size_webp?: number | null
+  size_thumb?: number | null
+  hash?: string | null
+  photo_type?: string | null
+  is_required?: number | boolean
+  geo?: string | null
+}
+
+export type UploadPhotoResponse = PhotoRecord
 
 export type Inspection = {
   id: string
@@ -57,16 +105,19 @@ export type Inspection = {
   accident_occurred_at?: string
   accident_location?: string
   checklist_items: ChecklistItem[]
+  defects?: Defect[]
+  photos?: PhotoRecord[]
   created_at: string
 }
 
 export type Defect = {
   id: string
   inspection_id: string
+  checklist_item_id?: string | null
   title: string
   comment?: string
   status: InspectionStatus
-  photos: string[]
+  photos: PhotoRecord[]
 }
 
 export type CreateInspectionPayload = {
@@ -95,36 +146,6 @@ export type ApiError = {
 }
 
 export type ApiResponse<T> = T | ApiError
-
-export const PHOTO_REQUIREMENTS: Record<InspectionType, PhotoRequirement[]> = {
-  quick: [
-    { id: 'front', type: 'quick', label: 'Фронтальная часть', required: true },
-    { id: 'left', type: 'quick', label: 'Левый борт', required: true },
-    { id: 'right', type: 'quick', label: 'Правый борт', required: true },
-    { id: 'rear', type: 'quick', label: 'Задняя часть', required: true },
-    { id: 'overall', type: 'quick', label: 'Общий план', required: true },
-    { id: 'odometer', type: 'quick', label: 'Одометр', required: true },
-  ],
-  scheduled: [
-    { id: 'front', type: 'scheduled', label: 'Фронтальная часть', required: true },
-    { id: 'left', type: 'scheduled', label: 'Левый борт', required: true },
-    { id: 'right', type: 'scheduled', label: 'Правый борт', required: true },
-    { id: 'rear', type: 'scheduled', label: 'Задняя часть', required: true },
-    { id: 'overall', type: 'scheduled', label: 'Общий план', required: true },
-    { id: 'odometer', type: 'scheduled', label: 'Одометр', required: true },
-    { id: 'additional', type: 'scheduled', label: 'Дополнительные', required: false },
-  ],
-  accident: [
-    { id: 'overall', type: 'accident', label: 'Общий план', required: true },
-    { id: 'front', type: 'accident', label: 'Фронтальная часть', required: true },
-    { id: 'left', type: 'accident', label: 'Левый борт', required: true },
-    { id: 'right', type: 'accident', label: 'Правый борт', required: true },
-    { id: 'rear', type: 'accident', label: 'Задняя часть', required: true },
-    { id: 'damage_overall', type: 'accident', label: 'Общий план повреждения', required: true },
-    { id: 'damage_closeup', type: 'accident', label: 'Крупный план повреждения', required: true },
-    { id: 'odometer', type: 'accident', label: 'Одометр', required: false },
-  ],
-}
 
 export const QUICK_CHECKLIST = [
   'Внешний вид',

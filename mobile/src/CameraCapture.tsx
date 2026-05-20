@@ -1,10 +1,10 @@
 import { useState, useEffect, useRef } from 'react'
 import { View, Text, TouchableOpacity, StyleSheet, Alert, Image } from 'react-native'
-import { CameraView, CameraType, useCameraPermissions, useMicrophonePermissions } from 'expo-camera'
+import { CameraView, CameraType, useCameraPermissions } from 'expo-camera'
 import { useTheme } from './theme'
 
 type CameraCaptureProps = {
-  onCapture: (base64: string) => void
+  onCapture: (photo: { base64: string; uri: string }) => void
   onClose: () => void
   title?: string
 }
@@ -13,7 +13,6 @@ export default function CameraCapture({ onCapture, onClose, title }: CameraCaptu
   const { colors } = useTheme()
   const cameraRef = useRef<CameraView>(null)
   const [permission, requestPermission] = useCameraPermissions()
-  const [micPermission, requestMicPermission] = useMicrophonePermissions()
   const [facing, setFacing] = useState<'back' | 'front'>('back')
   const [flash, setFlash] = useState<'off' | 'on' | 'auto'>('auto')
 
@@ -30,10 +29,11 @@ export default function CameraCapture({ onCapture, onClose, title }: CameraCaptu
       const photo = await cameraRef.current.takePictureAsync({
         quality: 0.8,
         skipProcessing: true,
+        base64: true,
       })
 
       if (photo?.base64) {
-        onCapture(photo.base64)
+        onCapture({ base64: photo.base64, uri: photo.uri })
       }
     } catch (error) {
       Alert.alert('Ошибка', 'Не удалось сделать фото')

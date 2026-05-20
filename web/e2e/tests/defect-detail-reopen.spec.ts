@@ -50,7 +50,7 @@ test('Defect detail UI: reopen defect via UI button', async ({ page, request }) 
     headers: { Authorization: `Bearer ${adminToken}` }
   })
   const defects = await defectsList.json()
-  const defect = defects?.data?.find((d: any) => d.title === 'UI reopen item')
+  const defect = defects?.data?.find((d: { title?: string }) => d.title === 'UI reopen item')
   if (!defect) {
     test.skip('Defect not created for UI reopen test')
   }

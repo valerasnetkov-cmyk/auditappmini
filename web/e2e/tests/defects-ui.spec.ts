@@ -51,14 +51,14 @@ test('Defects UI: create vehicle, add defect, display and close (UI path)', asyn
       'Content-Type': 'application/json'
     }
   })
-  const inspectionJson = await inspection.json()
+  await inspection.json()
   const defectsList = await request.get(`/api/vehicles/${vehicleId}/defects`, {
     headers: {
       Authorization: `Bearer ${adminToken}`
     }
   })
   const defects = await defectsList.json()
-  const defect = defects?.data?.find((d: any) => d.title === 'UI defect item') || null
+  const defect = defects?.data?.find((d: { title?: string }) => d.title === 'UI defect item') || null
   if (!defect) {
     test.skip('No defect created for UI test; skipping UI path')
   }

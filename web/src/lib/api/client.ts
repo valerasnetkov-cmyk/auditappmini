@@ -1,9 +1,9 @@
-import { clearAuthToken, getAuthToken, setAuthToken } from '@/lib/auth'
+import { clearAuthToken, endAuthSession, getAuthToken, setAuthToken } from '@/lib/auth'
 import type {
   AnalyticsOverview,
   ApiResponse,
   AuthUser,
-  ChecklistItemInput,
+  CompanyUsageResponse,
   CompanyRecord,
   CreateCompanyPayload,
   CreateInspectionPayload,
@@ -11,6 +11,7 @@ import type {
   CreateUserPayload,
   CreateVehiclePayload,
   DashboardStats,
+  DefectHistoryEntry,
   DefectRecord,
   DirectusIntegrationStatus,
   ExportRow,
@@ -22,7 +23,9 @@ import type {
   MFAVerifyResponse,
   MFASetupResponse,
   NotificationItem,
+  PhotoRequirementsResponse,
   RegionRecord,
+  SaasAdminStats,
   SettingsResponse,
   UpdateCompanyPayload,
   UpdateDefectPayload,
@@ -41,18 +44,34 @@ import type {
 type RawPhotoRecord = {
   id?: string
   url?: string | null
+  original_url?: string | null
+  webp_url?: string | null
+  thumb_url?: string | null
+  original_mime?: string | null
+  original_name?: string | null
+  width?: number | null
+  height?: number | null
+  size_original?: number | null
+  size_webp?: number | null
+  size_thumb?: number | null
+  hash?: string | null
+  photo_type?: string | null
+  is_required?: number | boolean
+  geo?: string | null
 }
 
 type RawDefectRecord = Omit<DefectRecord, 'photos'> & {
   photos?: RawPhotoRecord[] | string | null
 }
 
-type RawInspectionDetail = Omit<InspectionDetail, 'defects'> & {
+type RawInspectionDetail = Omit<InspectionDetail, 'defects' | 'photos'> & {
   defects?: RawDefectRecord[]
+  photos?: RawPhotoRecord[]
 }
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api'
 export const API_BASE_URL = API_URL.replace(/\/api\/?$/, '')
+const INACTIVE_USER_ERROR = 'User is inactive'
 
 export function buildApiUrl(path: string) {
   if (!path) return API_BASE_URL
@@ -66,7 +85,24 @@ function normalizePhotos(source: RawDefectRecord['photos']) {
   if (Array.isArray(source)) {
     return source
       .filter((item): item is RawPhotoRecord & { url: string } => typeof item?.url === 'string' && item.url.length > 0)
-      .map((item) => ({ id: item.id, url: item.url }))
+      .map((item) => ({
+        id: item.id,
+        url: item.url,
+        original_url: item.original_url,
+        webp_url: item.webp_url,
+        thumb_url: item.thumb_url,
+        original_mime: item.original_mime,
+        original_name: item.original_name,
+        width: item.width,
+        height: item.height,
+        size_original: item.size_original,
+        size_webp: item.size_webp,
+        size_thumb: item.size_thumb,
+        hash: item.hash,
+        photo_type: item.photo_type,
+        is_required: item.is_required,
+        geo: item.geo,
+      }))
   }
 
   return source
@@ -79,6 +115,7 @@ function normalizePhotos(source: RawDefectRecord['photos']) {
 function normalizeInspectionDetail(raw: RawInspectionDetail): InspectionDetail {
   return {
     ...raw,
+    photos: normalizePhotos(raw.photos),
     defects: (raw.defects || []).map((defect) => ({
       ...defect,
       photos: normalizePhotos(defect.photos),
@@ -107,6 +144,31 @@ class ApiClient {
     return getAuthToken()
   }
 
+  private shouldHandleSessionFailure(endpoint: string, token: string | null) {
+    if (!token) return false
+    return !endpoint.startsWith('/auth/login') && !endpoint.startsWith('/auth/owner-setup')
+  }
+
+  private handleSessionFailure(status: number, endpoint: string, token: string | null, error?: string) {
+    if (!this.shouldHandleSessionFailure(endpoint, token)) {
+      return null
+    }
+
+    if (status === 401) {
+      this.token = null
+      endAuthSession('expired')
+      return 'AUTH_REQUIRED'
+    }
+
+    if (status === 403 && error === INACTIVE_USER_ERROR) {
+      this.token = null
+      endAuthSession('inactive')
+      return 'SESSION_INACTIVE'
+    }
+
+    return null
+  }
+
   protected async request<T>(endpoint: string, options: RequestInit = {}, retry = false): Promise<ApiResponse<T>> {
     const token = this.getToken()
     const headers: HeadersInit = {
@@ -123,11 +185,9 @@ class ApiClient {
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}))
-        if (response.status === 401) {
-          this.setToken(null)
-          if (token) {
-            return { error: 'AUTH_REQUIRED' }
-          }
+        const sessionError = this.handleSessionFailure(response.status, endpoint, token, errorData.error)
+        if (sessionError) {
+          return { error: sessionError }
         }
 
         return { error: errorData.error || `HTTP ${response.status}` }
@@ -159,6 +219,19 @@ class ApiClient {
     const result = await this.request<LoginResponse>('/auth/login', {
       method: 'POST',
       body: JSON.stringify({ email, password }),
+    })
+
+    if (result.data?.token) {
+      this.setToken(result.data.token)
+    }
+
+    return result
+  }
+
+  async completeOwnerSetup(token: string, password: string) {
+    const result = await this.request<LoginResponse>('/auth/owner-setup', {
+      method: 'POST',
+      body: JSON.stringify({ token, password }),
     })
 
     if (result.data?.token) {
@@ -307,7 +380,36 @@ class ApiClient {
     })
 
     if (!response.ok) {
-      return { error: 'Ошибка загрузки фото' }
+      const errorData = await response.json().catch(() => ({}))
+      const sessionError = this.handleSessionFailure(response.status, `/defects/${defectId}/photos`, token, errorData.error)
+      if (sessionError) return { error: sessionError }
+
+      return { error: errorData.error || 'Ошибка загрузки фото' }
+    }
+
+    const data = await response.json()
+    return { data: isUploadPhotoResponse(data) ? data : {} }
+  }
+
+  async uploadInspectionPhoto(inspectionId: string, photoType: string, file: File, geo?: string) {
+    const token = this.getToken()
+    const formData = new FormData()
+    formData.append('photo', file)
+    formData.append('photo_type', photoType)
+    if (geo) formData.append('geo', geo)
+
+    const response = await fetch(`${API_URL}/inspections/${inspectionId}/photos`, {
+      method: 'POST',
+      headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+      body: formData,
+    })
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}))
+      const sessionError = this.handleSessionFailure(response.status, `/inspections/${inspectionId}/photos`, token, errorData.error)
+      if (sessionError) return { error: sessionError }
+
+      return { error: errorData.error || `HTTP ${response.status}` }
     }
 
     const data = await response.json()
@@ -318,6 +420,16 @@ class ApiClient {
     return this.request<void>(`/photos/${id}`, {
       method: 'DELETE',
     })
+  }
+
+  async completeInspection(id: string) {
+    return this.request<InspectionDetail>(`/inspections/${id}/complete`, {
+      method: 'POST',
+    })
+  }
+
+  async getPhotoRequirements(type: string) {
+    return this.request<PhotoRequirementsResponse>(`/photo-requirements/${type}`)
   }
 
   async updateDefect(id: string, data: UpdateDefectPayload) {
@@ -370,7 +482,7 @@ class ApiClient {
   }
 
   async getDefectHistory(defectId: string) {
-    return this.request<any[]>(`/defects/${defectId}/history`)
+    return this.request<DefectHistoryEntry[]>(`/defects/${defectId}/history`)
   }
 
   async getVehicleDefects(id: string, params?: { limit?: number }) {
@@ -392,6 +504,10 @@ class ApiClient {
     return this.request<SettingsResponse>('/settings')
   }
 
+  async getCompanyUsage() {
+    return this.request<CompanyUsageResponse>('/company/usage')
+  }
+
   async updateSettings(data: SettingsResponse) {
     return this.request<SettingsResponse>('/settings', {
       method: 'PUT',
@@ -405,6 +521,10 @@ class ApiClient {
 
   async getAnalyticsOverview(params?: string) {
     return this.request<AnalyticsOverview>(`/analytics/overview${params || ''}`)
+  }
+
+  async getSaasAdminStats() {
+    return this.request<SaasAdminStats>('/admin/saas/stats')
   }
 
   async exportData(type: ExportType) {
@@ -460,13 +580,13 @@ class ApiClient {
   }
 
   async closeDefect(defectId: string) {
-    return this.request<any>(`/defects/${defectId}/close`, {
+    return this.request<DefectRecord>(`/defects/${defectId}/close`, {
       method: 'POST',
     })
   }
 
   async reopenDefect(defectId: string) {
-    return this.request<any>(`/defects/${defectId}/reopen`, {
+    return this.request<DefectRecord>(`/defects/${defectId}/reopen`, {
       method: 'POST',
     })
   }

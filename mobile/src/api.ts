@@ -1,18 +1,68 @@
 import * as SecureStore from 'expo-secure-store'
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import { Platform } from 'react-native'
-import type { User, Vehicle, Company, Inspection, CreateInspectionPayload, InspectionType, ChecklistItem, AuthResponse, ApiResponse } from './types'
+import type {
+  User,
+  Vehicle,
+  Company,
+  Inspection,
+  CreateInspectionPayload,
+  InspectionType,
+  AuthResponse,
+  PhotoRequirementsResponse,
+  VehicleNumberRecognitionResponse,
+  OdometerRecognitionResponse,
+  UploadPhotoResponse,
+} from './types'
 
-const API_URL = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3001/api'
+const DEFAULT_API_URL = Platform.select({
+  android: 'http://10.0.2.2:3001/api',
+  default: 'http://localhost:3001/api',
+})
+const API_URL = (process.env.EXPO_PUBLIC_API_URL || DEFAULT_API_URL || 'http://localhost:3001/api').replace(/\/+$/, '')
 
 const isWeb = Platform.OS === 'web'
+const AUTH_TOKEN_KEY = 'auth_token'
+const INACTIVE_USER_ERROR = 'User is inactive'
+
+export type AuthSessionReason = 'expired' | 'inactive'
+
+export class AuthSessionError extends Error {
+  reason: AuthSessionReason
+
+  constructor(reason: AuthSessionReason) {
+    super(
+      reason === 'inactive'
+        ? 'Ваша учетная запись отключена. Обратитесь к администратору.'
+        : 'Сессия истекла или была отозвана. Войдите снова.',
+    )
+    this.name = 'AuthSessionError'
+    this.reason = reason
+  }
+}
+
+export function isAuthSessionError(error: unknown): error is AuthSessionError {
+  return error instanceof AuthSessionError
+}
+
+let authSessionHandler: ((error: AuthSessionError) => void) | null = null
+
+export function setAuthSessionHandler(handler: ((error: AuthSessionError) => void) | null): void {
+  authSessionHandler = handler
+}
+
+function notifyAuthSessionError(reason: AuthSessionReason): AuthSessionError {
+  const error = new AuthSessionError(reason)
+  authSessionHandler?.(error)
+  return error
+}
 
 async function getToken(): Promise<string | null> {
   if (isWeb) {
-    return AsyncStorage.getItem('auth_token')
+    return AsyncStorage.getItem(AUTH_TOKEN_KEY)
   }
   try {
-    return await SecureStore.getItemAsync('auth_token')
+    return await SecureStore.getItemAsync(AUTH_TOKEN_KEY)
   } catch {
     return null
   }
@@ -20,23 +70,56 @@ async function getToken(): Promise<string | null> {
 
 async function setToken(token: string): Promise<void> {
   if (isWeb) {
-    return AsyncStorage.setItem('auth_token', token)
+    return AsyncStorage.setItem(AUTH_TOKEN_KEY, token)
   }
-  await SecureStore.setItemAsync('auth_token', token)
+  await SecureStore.setItemAsync(AUTH_TOKEN_KEY, token)
 }
 
 async function removeToken(): Promise<void> {
   if (isWeb) {
-    return AsyncStorage.removeItem('auth_token')
+    return AsyncStorage.removeItem(AUTH_TOKEN_KEY)
   }
-  await SecureStore.deleteItemAsync('auth_token')
+  try {
+    await SecureStore.deleteItemAsync(AUTH_TOKEN_KEY)
+  } catch {
+    // The safest fallback for a revoked/inactive session is to continue the UI reset
+    // even if the platform secure-store cleanup fails transiently.
+  }
+}
+
+function isAuthEndpoint(endpoint: string): boolean {
+  return endpoint.startsWith('/auth/login') || endpoint.startsWith('/auth/owner-setup')
+}
+
+async function getSessionError(
+  status: number,
+  endpoint: string,
+  token: string | null,
+  backendError?: string,
+): Promise<AuthSessionError | null> {
+  if (!token || isAuthEndpoint(endpoint)) {
+    return null
+  }
+
+  if (status === 401) {
+    await removeToken()
+    return notifyAuthSessionError('expired')
+  }
+
+  if (status === 403 && backendError === INACTIVE_USER_ERROR) {
+    await removeToken()
+    return notifyAuthSessionError('inactive')
+  }
+
+  return null
 }
 
 async function request<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
   const token = await getToken()
+  const isFormDataBody = typeof FormData !== 'undefined' && options.body instanceof FormData
   const headers: Record<string, string> = {
-    'Content-Type': 'application/json',
     ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    ...(isFormDataBody ? {} : { 'Content-Type': 'application/json' }),
     ...options.headers as Record<string, string>,
   }
 
@@ -47,10 +130,36 @@ async function request<T>(endpoint: string, options: RequestInit = {}): Promise<
 
   if (!response.ok) {
     const error = await response.json().catch(() => ({ error: 'Network error' }))
-    throw new Error(error.error || 'Request failed')
+    const backendError = typeof error?.error === 'string' ? error.error : undefined
+    const sessionError = await getSessionError(response.status, endpoint, token, backendError)
+    if (sessionError) {
+      throw sessionError
+    }
+    throw new Error(backendError || 'Request failed')
   }
 
   return response.json()
+}
+
+function getPhotoUploadMetadata(imageUri: string, basename: string): { type: string; name: string } {
+  const cleanUri = imageUri.split('?')[0]?.toLowerCase() || ''
+  if (cleanUri.endsWith('.png')) {
+    return { type: 'image/png', name: `${basename}.png` }
+  }
+  if (cleanUri.endsWith('.webp')) {
+    return { type: 'image/webp', name: `${basename}.webp` }
+  }
+
+  return { type: 'image/jpeg', name: `${basename}.jpg` }
+}
+
+function appendPhoto(formData: FormData, fieldName: string, imageUri: string, basename: string): void {
+  const metadata = getPhotoUploadMetadata(imageUri, basename)
+  formData.append(fieldName, {
+    uri: imageUri,
+    type: metadata.type,
+    name: metadata.name,
+  } as any)
 }
 
 export const api = {
@@ -81,7 +190,7 @@ export const api = {
     return request<Vehicle[]>('/vehicles/list')
   },
 
-async resolveVehicleNumber(number: string): Promise<Vehicle | null> {
+  async resolveVehicleNumber(number: string): Promise<Vehicle | null> {
     const result = await request<{ data: Vehicle | null }>('/vehicles/resolve-number', {
       method: 'POST',
       body: JSON.stringify({ number: number.toUpperCase() }),
@@ -89,22 +198,21 @@ async resolveVehicleNumber(number: string): Promise<Vehicle | null> {
     return result.data
   },
 
-  async recognizeVehicleNumber(imageBase64: string): Promise<{ candidates: string[] }> {
+  async recognizeVehicleNumber(imageUri: string): Promise<VehicleNumberRecognitionResponse> {
     const formData = new FormData()
-    formData.append('image', {
-      uri: `data:image/jpeg;base64,${imageBase64}`,
-      type: 'image/jpeg',
-      name: 'plate.jpg',
-    } as any)
+    appendPhoto(formData, 'photo', imageUri, 'plate')
 
-    return request('/vehicle-number/recognize', {
+    const result = await request<Omit<VehicleNumberRecognitionResponse, 'candidates'>>('/vehicle-number/recognize', {
       method: 'POST',
       body: formData as any,
     })
+
+    const candidates = [result.normalized_value, result.raw_value].filter((value): value is string => Boolean(value))
+    return { ...result, candidates }
   },
 
-  async createInspection(payload: { vehicle_id: string; type: InspectionType }): Promise<{ id: string }> {
-    return request<{ id: string }>('/inspections', {
+  async createInspection(payload: CreateInspectionPayload): Promise<Inspection> {
+    return request<Inspection>('/inspections', {
       method: 'POST',
       body: JSON.stringify(payload),
     })
@@ -127,50 +235,48 @@ async resolveVehicleNumber(number: string): Promise<Vehicle | null> {
     return request<Inspection>(`/inspections/${id}`)
   },
 
-  async uploadPhoto(inspectionId: string, imageBase64: string): Promise<{ url: string; id: string }> {
-    const formData = new FormData()
-    formData.append('photo', {
-      uri: `data:image/jpeg;base64,${imageBase64}`,
-      type: 'image/jpeg',
-      name: 'photo.jpg',
-    } as any)
+  async getPhotoRequirements(type: InspectionType): Promise<PhotoRequirementsResponse> {
+    return request<PhotoRequirementsResponse>(`/photo-requirements/${type}`)
+  },
 
-    return request(`/inspections/${inspectionId}/photos`, {
+  async uploadPhoto(inspectionId: string, photoType: string, imageUri: string): Promise<UploadPhotoResponse> {
+    const formData = new FormData()
+    appendPhoto(formData, 'photo', imageUri, 'photo')
+    formData.append('photo_type', photoType)
+
+    return request<UploadPhotoResponse>(`/inspections/${inspectionId}/photos`, {
       method: 'POST',
       body: formData as any,
     })
   },
 
-  async recognizeOdometer(imageBase64: string): Promise<{ value: number }> {
+  async recognizeOdometer(imageUri: string): Promise<OdometerRecognitionResponse> {
     const formData = new FormData()
-    formData.append('image', {
-      uri: `data:image/jpeg;base64,${imageBase64}`,
-      type: 'image/jpeg',
-      name: 'odometer.jpg',
-    } as any)
+    appendPhoto(formData, 'photo', imageUri, 'odometer')
 
-    return request('/odometer/recognize', {
+    const result = await request<Omit<OdometerRecognitionResponse, 'value'>>('/odometer/recognize', {
       method: 'POST',
       body: formData as any,
     })
+
+    return {
+      ...result,
+      value: typeof result.normalized_value === 'number' ? result.normalized_value : null,
+    }
   },
 
-  async createDefect(payload: { inspection_id: string; title: string; comment?: string }): Promise<{ id: string }> {
-    return request<{ id: string }>('/defects', {
+  async createDefect(inspectionId: string, payload: { title: string; comment?: string }): Promise<{ id: string }> {
+    return request<{ id: string }>(`/inspections/${inspectionId}/defects`, {
       method: 'POST',
       body: JSON.stringify(payload),
     })
   },
 
-  async uploadDefectPhoto(defectId: string, imageBase64: string): Promise<{ url: string; id: string }> {
+  async uploadDefectPhoto(defectId: string, imageUri: string): Promise<UploadPhotoResponse> {
     const formData = new FormData()
-    formData.append('photo', {
-      uri: `data:image/jpeg;base64,${imageBase64}`,
-      type: 'image/jpeg',
-      name: 'defect.jpg',
-    } as any)
+    appendPhoto(formData, 'photo', imageUri, 'defect')
 
-    return request(`/defects/${defectId}/photos`, {
+    return request<UploadPhotoResponse>(`/defects/${defectId}/photos`, {
       method: 'POST',
       body: formData as any,
     })

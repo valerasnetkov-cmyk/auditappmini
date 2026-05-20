@@ -11,7 +11,7 @@ import { requireAuthToken } from '@/lib/auth'
 import { normalizeVehicleNumber, VEHICLE_NUMBER_HELP } from '@/lib/vehicleNumber'
 import type { RegionRecord, VehicleRecord, VehicleStatus } from '@/lib/types'
 
-const ITEMS_PER_PAGE = 20
+const ITEMS_PER_BATCH = 20
 
 type VehicleFormData = {
   number: string
@@ -71,7 +71,7 @@ export default function VehiclesPage() {
   const [searchQuery, setSearchQuery] = useState(searchParams.get('q') || '')
   const [statusFilter, setStatusFilter] = useState(searchParams.get('status') || '')
   const [regionFilter, setRegionFilter] = useState(searchParams.get('region') || '')
-  const [page, setPage] = useState(1)
+  const [visibleCount, setVisibleCount] = useState(ITEMS_PER_BATCH)
   const [totalCount, setTotalCount] = useState(0)
   const [showAddModal, setShowAddModal] = useState(false)
   const [showNewInspectionModal, setShowNewInspectionModal] = useState(false)
@@ -123,6 +123,7 @@ export default function VehiclesPage() {
   useEffect(() => {
     if (!requireAuthToken()) return
     void loadData()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchQuery, statusFilter])
 
   useEffect(() => {
@@ -160,8 +161,8 @@ export default function VehiclesPage() {
     })
   }, [vehicles, sortConfig, regionFilter])
 
-  const totalPages = Math.max(1, Math.ceil(sortedVehicles.length / ITEMS_PER_PAGE))
-  const pagedVehicles = sortedVehicles.slice((page - 1) * ITEMS_PER_PAGE, page * ITEMS_PER_PAGE)
+  const visibleVehicles = sortedVehicles.slice(0, visibleCount)
+  const hasMoreVehicles = visibleCount < sortedVehicles.length
 
   const handleSort = (key: SortableVehicleKey) => {
     setSortConfig((current) => ({
@@ -301,15 +302,15 @@ export default function VehiclesPage() {
           showColumnMenu={showColumnMenu}
           onSearchChange={(value) => {
             setSearchQuery(value)
-            setPage(1)
+            setVisibleCount(ITEMS_PER_BATCH)
           }}
           onStatusChange={(value) => {
             setStatusFilter(value)
-            setPage(1)
+            setVisibleCount(ITEMS_PER_BATCH)
           }}
           onRegionChange={(value) => {
             setRegionFilter(value)
-            setPage(1)
+            setVisibleCount(ITEMS_PER_BATCH)
           }}
           onToggleColumnMenu={() => setShowColumnMenu((value) => !value)}
           onToggleColumn={toggleColumn}
@@ -326,7 +327,7 @@ export default function VehiclesPage() {
           </div>
         ) : (
           <VehiclesTable
-            vehicles={pagedVehicles}
+            vehicles={visibleVehicles}
             hiddenColumns={hiddenColumns}
             sortConfig={sortConfig}
             onSort={handleSort}
@@ -339,14 +340,13 @@ export default function VehiclesPage() {
           />
         )}
 
-        {totalPages > 1 ? (
-          <div className="mt-6 flex justify-center gap-2">
-            <button onClick={() => setPage((value) => Math.max(1, value - 1))} disabled={page === 1} className="btn btn-secondary disabled:opacity-50">
-              Назад
-            </button>
-            <span className="px-4 py-2 text-foreground-secondary">Страница {page} из {totalPages}</span>
-            <button onClick={() => setPage((value) => Math.min(totalPages, value + 1))} disabled={page === totalPages} className="btn btn-secondary disabled:opacity-50">
-              Вперед
+        {hasMoreVehicles ? (
+          <div className="mt-6 flex justify-center">
+            <button
+              onClick={() => setVisibleCount((value) => Math.min(value + ITEMS_PER_BATCH, sortedVehicles.length))}
+              className="btn btn-secondary"
+            >
+              Загрузить ещё
             </button>
           </div>
         ) : null}
@@ -493,8 +493,8 @@ function VehiclesTable({
   onInspect: (vehicle: VehicleRecord) => void
 }) {
   return (
-    <div className="card overflow-hidden">
-      <div className="overflow-x-auto">
+    <div className="table-card">
+      <div className="table-scroll">
         <table className="min-w-full divide-y divide-line">
           <thead className="table-header">
             <tr>

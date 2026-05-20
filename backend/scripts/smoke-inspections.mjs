@@ -6,12 +6,16 @@ const HOST = '127.0.0.1'
 const PORT = Number(process.env.PORT || 4015 + (process.pid % 500))
 const DATABASE_PATH = `./.tmp-smoke/smoke-inspections-${process.pid}.sqlite`
 const BASE_URL = `http://${HOST}:${PORT}`
+const VALID_PNG_BYTES = Uint8Array.from(Buffer.from(
+  'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/p9sAAAAASUVORK5CYII=',
+  'base64',
+))
 
 function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms))
 }
 
-async function waitForServer(timeoutMs = 15000) {
+async function waitForServer(timeoutMs = 30000) {
   const startedAt = Date.now()
 
   while (Date.now() - startedAt < timeoutMs) {
@@ -50,6 +54,29 @@ async function request(path, options = {}, expectedStatus = 200) {
   }
 
   return response.json()
+}
+
+async function uploadInspectionPhoto(inspectionId, photoType, headers) {
+  const formData = new FormData()
+  formData.append('photo', new Blob([VALID_PNG_BYTES], { type: 'image/png' }), `${photoType}.png`)
+  formData.append('photo_type', photoType)
+
+  return request(`/api/inspections/${inspectionId}/photos`, {
+    method: 'POST',
+    headers,
+    body: formData,
+  }, 201)
+}
+
+async function uploadDefectPhoto(defectId, headers) {
+  const formData = new FormData()
+  formData.append('photo', new Blob([VALID_PNG_BYTES], { type: 'image/png' }), 'defect.png')
+
+  return request(`/api/defects/${defectId}/photos`, {
+    method: 'POST',
+    headers,
+    body: formData,
+  }, 201)
 }
 
 async function run() {
@@ -132,19 +159,110 @@ async function run() {
       headers: jsonHeaders,
       body: JSON.stringify({
         checklist: [
-          { title: 'Кузов', result: true, comment: '' },
-          { title: 'Остекление', result: false, comment: 'Трещина после ДТП' },
+          { title: 'Body', result: true, comment: '' },
+          { title: 'Glass', result: false, comment: 'Initial crack' },
         ],
         accident_occurred_at: '2026-05-01T10:15:00.000Z',
-        accident_location: 'Южно-Сахалинск, тестовый маршрут',
+        accident_location: 'Smoke route',
       }),
     })
 
     const inspectionDetails = await request(`/api/inspections/${inspection.id}`, {
       headers: authHeaders,
     })
+    const originalDefect = inspectionDetails.defects?.[0]
+    const bodyChecklistItem = inspectionDetails.checklist_items?.[0]
+    const failedChecklistItem = inspectionDetails.checklist_items?.find((item) => item.result === 0)
 
-    const firstDefectId = inspectionDetails.defects?.[0]?.id
+    if (!originalDefect || !bodyChecklistItem || !failedChecklistItem) {
+      throw new Error('Expected checklist items and a defect after saving failed checklist item')
+    }
+
+    const uploadedDefectPhoto = await uploadDefectPhoto(originalDefect.id, authHeaders)
+    if (!uploadedDefectPhoto.webp_url?.endsWith('/main.webp') || !uploadedDefectPhoto.thumb_url?.endsWith('/thumb.webp') || !uploadedDefectPhoto.original_url?.endsWith('/original.png')) {
+      throw new Error(`Defect photo WebP metadata is incomplete: ${JSON.stringify(uploadedDefectPhoto)}`)
+    }
+
+    await request(`/api/inspections/${inspection.id}`, {
+      method: 'PUT',
+      headers: jsonHeaders,
+      body: JSON.stringify({
+        checklist: [
+          { id: bodyChecklistItem.id, title: bodyChecklistItem.title, result: true, comment: '' },
+          { id: failedChecklistItem.id, title: failedChecklistItem.title, result: false, comment: 'Repeat check' },
+        ],
+        accident_occurred_at: '2026-05-01T10:15:00.000Z',
+        accident_location: 'Smoke route',
+      }),
+    })
+
+    const repeatedInspectionDetails = await request(`/api/inspections/${inspection.id}`, {
+      headers: authHeaders,
+    })
+    const repeatedDefect = repeatedInspectionDetails.defects?.find((defect) => defect.id === originalDefect.id)
+
+    if (!repeatedDefect || repeatedDefect.id !== originalDefect.id) {
+      throw new Error('Defect was recreated instead of updated in place on repeated save')
+    }
+
+    if (!repeatedDefect.photos?.some((photo) => photo.id === uploadedDefectPhoto.id)) {
+      throw new Error('Defect photo was lost on repeated save')
+    }
+
+    if (repeatedDefect.comment !== 'Repeat check') {
+      throw new Error('Defect comment was not updated on repeated save')
+    }
+
+    const quickInspection = await request('/api/inspections', {
+      method: 'POST',
+      headers: jsonHeaders,
+      body: JSON.stringify({
+        vehicle_id: vehicle.id,
+        type: 'quick',
+        checklist: [],
+      }),
+    }, 201)
+
+    await request(`/api/inspections/${quickInspection.id}`, {
+      method: 'PUT',
+      headers: jsonHeaders,
+      body: JSON.stringify({
+        checklist: [],
+        odometer_value: 123456,
+        odometer_unit: 'km',
+      }),
+    })
+
+    const uploadedInspectionPhoto = await uploadInspectionPhoto(quickInspection.id, 'front', authHeaders)
+    if (!uploadedInspectionPhoto.webp_url?.endsWith('/main.webp') || !uploadedInspectionPhoto.thumb_url?.endsWith('/thumb.webp') || !uploadedInspectionPhoto.original_url?.endsWith('/original.png')) {
+      throw new Error(`Inspection photo WebP metadata is incomplete: ${JSON.stringify(uploadedInspectionPhoto)}`)
+    }
+
+    const incompleteCompletion = await fetch(`${BASE_URL}/api/inspections/${quickInspection.id}/complete`, {
+      method: 'POST',
+      headers: authHeaders,
+    })
+
+    if (incompleteCompletion.status !== 400) {
+      const body = await incompleteCompletion.text()
+      throw new Error(`Required photo validation failed: expected 400, got ${incompleteCompletion.status}: ${body}`)
+    }
+
+    const incompleteBody = await incompleteCompletion.json()
+    if (!Array.isArray(incompleteBody.missingPhotos) || !incompleteBody.missingPhotos.includes('odometer')) {
+      throw new Error(`Required photo validation did not return missing photo types: ${JSON.stringify(incompleteBody)}`)
+    }
+
+    for (const photoType of ['left', 'right', 'rear', 'overview', 'odometer']) {
+      await uploadInspectionPhoto(quickInspection.id, photoType, authHeaders)
+    }
+
+    const completedQuickInspection = await request(`/api/inspections/${quickInspection.id}/complete`, {
+      method: 'POST',
+      headers: authHeaders,
+    })
+
+    const firstDefectId = repeatedInspectionDetails.defects?.[0]?.id
     const defectDetails = firstDefectId
       ? await request(`/api/defects/${firstDefectId}`, {
           headers: authHeaders,
@@ -194,8 +312,12 @@ async function run() {
           defectsListed: defectsList.data?.length || 0,
           vehicleDefectsListed: Array.isArray(vehicleDefects) ? vehicleDefects.length : 0,
           accidentValidationStatus: invalidAccidentInspectionResponse.status,
+          requiredPhotoMissingCount: incompleteBody.missingPhotos.length,
+          quickInspectionCompleted: Boolean(completedQuickInspection.completed),
           defectInspectionType: defectDetails?.inspection_type ?? null,
           defectAccidentLocation: defectDetails?.accident_location ?? null,
+          repeatedSavePreservedDefectId: repeatedDefect.id === originalDefect.id,
+          repeatedSavePreservedPhoto: repeatedDefect.photos.some((photo) => photo.id === uploadedDefectPhoto.id),
         },
         null,
         2,

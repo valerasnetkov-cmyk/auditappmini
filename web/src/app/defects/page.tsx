@@ -195,11 +195,11 @@ export default function DefectsPage() {
         {loading ? (
           <div className="card p-8 text-foreground-muted">Загрузка...</div>
         ) : (
-          <section className="card overflow-hidden">
+          <section className="table-card">
             <div className="border-b border-line px-4 py-3 text-sm text-foreground-muted">
               Показано {filtered.length} из {defects.length}
             </div>
-            <div className="overflow-x-auto">
+            <div className="table-scroll">
               <table className="min-w-full divide-y divide-line">
                 <thead className="table-header">
                   <tr>

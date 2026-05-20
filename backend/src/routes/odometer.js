@@ -1,34 +1,54 @@
 import { normalizeVehicleNumberToCyrillic } from '../utils/transliteration.js'
 
-// Odometer recognition routes.
-// MVP returns manual-confirmation placeholders until a real OCR provider is wired.
-export function registerOdometerRoutes({ app, db, authenticate, API_MESSAGES, upload }) {
-  app.post('/api/odometer/recognize', authenticate, upload.single('photo'), (req, res) => {
-    if (!req.file) {
-      return res.status(400).json({ error: API_MESSAGES?.odometerPhotoRequired || 'Фото одометра обязательно' })
+function featureGate(ensureFeatureEnabled, featureField, message) {
+  return (req, res, next) => {
+    if (!ensureFeatureEnabled) {
+      next()
+      return
     }
 
-    res.json({
-      raw_value: null,
-      normalized_value: null,
-      unit: 'km',
-      confidence: 0,
-      requires_manual_confirmation: true,
-      message: 'Требуется ручное подтверждение показаний',
-      photo_url: `/uploads/${req.file.filename}`,
-      recognized_at: new Date().toISOString(),
-    })
-  })
+    if (ensureFeatureEnabled(req, res, featureField, message)) {
+      next()
+    }
+  }
+}
+
+// Odometer recognition routes.
+// MVP returns manual-confirmation placeholders until a real OCR provider is wired.
+export function registerOdometerRoutes({ app, db, authenticate, API_MESSAGES, upload, ensureFeatureEnabled = null }) {
+  app.post(
+    '/api/odometer/recognize',
+    authenticate,
+    featureGate(ensureFeatureEnabled, 'ocr_enabled', API_MESSAGES?.ocrFeatureDisabled),
+    upload.single('photo'),
+    (req, res) => {
+      if (!req.file) {
+        return res.status(400).json({ error: API_MESSAGES?.odometerPhotoRequired || 'Фото одометра обязательно' })
+      }
+
+      res.json({
+        raw_value: null,
+        normalized_value: null,
+        unit: 'km',
+        confidence: 0,
+        requires_manual_confirmation: true,
+        message: API_MESSAGES?.odometerRequiresManualConfirmation || 'Требуется ручное подтверждение показаний',
+        photo_url: `/uploads/${req.file.filename}`,
+        recognized_at: new Date().toISOString(),
+      })
+    },
+  )
 
   app.post('/api/inspections/:id/odometer', authenticate, (req, res) => {
     const inspectionId = req.params.id
     const { odometer_value, odometer_unit = 'km' } = req.body
+    const companyId = req.user.company_id || 'default'
 
     if (!odometer_value || isNaN(Number(odometer_value))) {
       return res.status(400).json({ error: API_MESSAGES?.odometerValueRequired || 'Укажите корректное значение одометра' })
     }
 
-    const inspection = db.prepare('SELECT * FROM inspections WHERE id = ?').get(inspectionId)
+    const inspection = db.prepare('SELECT * FROM inspections WHERE id = ? AND company_id = ?').get(inspectionId, companyId)
     if (!inspection) {
       return res.status(404).json({ error: API_MESSAGES?.inspectionNotFound || 'Осмотр не найден' })
     }
@@ -36,8 +56,8 @@ export function registerOdometerRoutes({ app, db, authenticate, API_MESSAGES, up
     db.prepare(`
       UPDATE inspections
       SET odometer_value = ?, odometer_unit = ?, odometer_recognized_at = datetime('now')
-      WHERE id = ?
-    `).run(odometer_value, odometer_unit, inspectionId)
+      WHERE id = ? AND company_id = ?
+    `).run(odometer_value, odometer_unit, inspectionId, companyId)
 
     res.json({
       id: inspectionId,
@@ -50,22 +70,28 @@ export function registerOdometerRoutes({ app, db, authenticate, API_MESSAGES, up
 
 // Vehicle number recognition routes.
 // MVP returns manual-confirmation placeholders until a real ANPR provider is wired.
-export function registerVehicleNumberRecognitionRoutes({ app, db, authenticate, API_MESSAGES, upload }) {
-  app.post('/api/vehicle-number/recognize', authenticate, upload.single('photo'), (req, res) => {
-    if (!req.file) {
-      return res.status(400).json({ error: API_MESSAGES?.vehicleNumberPhotoRequired || 'Фото номера обязательно' })
-    }
+export function registerVehicleNumberRecognitionRoutes({ app, db, authenticate, API_MESSAGES, upload, ensureFeatureEnabled = null }) {
+  app.post(
+    '/api/vehicle-number/recognize',
+    authenticate,
+    featureGate(ensureFeatureEnabled, 'ocr_enabled', API_MESSAGES?.ocrFeatureDisabled),
+    upload.single('photo'),
+    (req, res) => {
+      if (!req.file) {
+        return res.status(400).json({ error: API_MESSAGES?.vehicleNumberPhotoRequired || 'Фото номера обязательно' })
+      }
 
-    res.json({
-      raw_value: null,
-      normalized_value: null,
-      confidence: 0,
-      requires_confirmation: true,
-      message: 'Требуется подтверждение номера инспектором',
-      photo_url: `/uploads/${req.file.filename}`,
-      recognized_at: new Date().toISOString(),
-    })
-  })
+      res.json({
+        raw_value: null,
+        normalized_value: null,
+        confidence: 0,
+        requires_confirmation: true,
+        message: API_MESSAGES?.vehicleNumberRequiresConfirmation || 'Требуется подтверждение номера инспектором',
+        photo_url: `/uploads/${req.file.filename}`,
+        recognized_at: new Date().toISOString(),
+      })
+    },
+  )
 
   app.post('/api/vehicles/resolve-number', authenticate, (req, res) => {
     const { number } = req.body
@@ -79,8 +105,8 @@ export function registerVehicleNumberRecognitionRoutes({ app, db, authenticate, 
     const vehicle = db.prepare(`
       SELECT id, number, name, status, region, company_id
       FROM vehicles
-      WHERE number = ? AND (company_id = ? OR company_id IS NULL)
-    `).get([normalized, companyId])
+      WHERE number = ? AND company_id = ?
+    `).get(normalized, companyId)
 
     if (vehicle) {
       return res.json({

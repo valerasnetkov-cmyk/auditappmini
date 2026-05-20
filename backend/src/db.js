@@ -266,8 +266,74 @@ function dropVehicleQrCodeColumn() {
   }
 }
 
+function ensureUsersRoleSupportsAdminAndOwner() {
+  const usersTableSql = db.exec(`
+    SELECT sql
+    FROM sqlite_master
+    WHERE type = 'table' AND name = 'users'
+  `)?.[0]?.values?.[0]?.[0]
+
+  if (typeof usersTableSql === 'string' && usersTableSql.includes("'owner'")) {
+    return
+  }
+
+  db.run('BEGIN TRANSACTION')
+  try {
+    db.run(`
+      CREATE TABLE users_with_admin_owner_role (
+        id TEXT PRIMARY KEY,
+        email TEXT UNIQUE NOT NULL,
+        password TEXT NOT NULL,
+        name TEXT NOT NULL,
+        role TEXT NOT NULL CHECK (role IN ('inspector', 'manager', 'owner', 'admin')),
+        status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'inactive')),
+        company_id TEXT DEFAULT 'default',
+        mfa_enabled INTEGER NOT NULL DEFAULT 0,
+        mfa_secret TEXT,
+        created_at TEXT DEFAULT (datetime('now'))
+      )
+    `)
+
+    db.run(`
+      INSERT INTO users_with_admin_owner_role (
+        id,
+        email,
+        password,
+        name,
+        role,
+        status,
+        company_id,
+        mfa_enabled,
+        mfa_secret,
+        created_at
+      )
+      SELECT
+        id,
+        email,
+        password,
+        name,
+        CASE WHEN role IN ('inspector', 'manager', 'owner', 'admin') THEN role ELSE 'inspector' END,
+        CASE WHEN status IN ('active', 'inactive') THEN status ELSE 'active' END,
+        COALESCE(company_id, 'default'),
+        COALESCE(mfa_enabled, 0),
+        mfa_secret,
+        COALESCE(created_at, datetime('now'))
+      FROM users
+    `)
+
+    db.run('DROP TABLE users')
+    db.run('ALTER TABLE users_with_admin_owner_role RENAME TO users')
+    db.run('COMMIT')
+    console.log('Expanded users.role to support owner and admin')
+  } catch (error) {
+    db.run('ROLLBACK')
+    throw error
+  }
+}
+
 function applySchemaMigrations() {
   ensureColumn('users', 'company_id', "TEXT DEFAULT 'default'")
+  ensureColumn('users', 'status', "TEXT NOT NULL DEFAULT 'active'")
   ensureColumn('users', 'mfa_enabled', 'INTEGER NOT NULL DEFAULT 0')
   ensureColumn('users', 'mfa_secret', 'TEXT')
   ensureColumn('users', 'created_at', 'TEXT')
@@ -288,21 +354,90 @@ function applySchemaMigrations() {
   ensureColumn('inspections', 'created_at', 'TEXT')
 
   ensureColumn('defects', 'company_id', "TEXT DEFAULT 'default'")
+  ensureColumn('defects', 'checklist_item_id', 'TEXT')
   ensureColumn('defects', 'comment', 'TEXT')
   ensureColumn('defects', 'status', "TEXT NOT NULL DEFAULT 'open'")
   ensureColumn('defects', 'created_at', 'TEXT')
   ensureColumn('defects', 'closed_at', 'TEXT')
 
   ensureColumn('photos', 'defect_id', 'TEXT')
+  ensureColumn('photos', 'company_id', "TEXT DEFAULT 'default'")
+  ensureColumn('photos', 'photo_type', 'TEXT')
   ensureColumn('photos', 'geo', 'TEXT')
   ensureColumn('photos', 'is_required', 'INTEGER NOT NULL DEFAULT 0')
+  ensureColumn('photos', 'original_url', 'TEXT')
+  ensureColumn('photos', 'webp_url', 'TEXT')
+  ensureColumn('photos', 'thumb_url', 'TEXT')
+  ensureColumn('photos', 'original_mime', 'TEXT')
+  ensureColumn('photos', 'original_name', 'TEXT')
+  ensureColumn('photos', 'width', 'INTEGER')
+  ensureColumn('photos', 'height', 'INTEGER')
+  ensureColumn('photos', 'size_original', 'INTEGER')
+  ensureColumn('photos', 'size_webp', 'INTEGER')
+  ensureColumn('photos', 'size_thumb', 'INTEGER')
+  ensureColumn('photos', 'hash', 'TEXT')
   ensureColumn('photos', 'created_at', 'TEXT')
+
+  db.run(`
+    CREATE TABLE IF NOT EXISTS company_limits (
+      id TEXT PRIMARY KEY,
+      company_id TEXT UNIQUE NOT NULL,
+      plan_code TEXT,
+      max_vehicles INTEGER,
+      max_users INTEGER,
+      max_storage_mb INTEGER,
+      ocr_enabled INTEGER,
+      accident_module_enabled INTEGER,
+      analytics_enabled INTEGER,
+      api_access_enabled INTEGER,
+      updated_at TEXT DEFAULT (datetime('now'))
+    )
+  `)
+  ensureColumn('company_limits', 'plan_code', 'TEXT')
+  ensureColumn('company_limits', 'max_vehicles', 'INTEGER')
+  ensureColumn('company_limits', 'max_users', 'INTEGER')
+  ensureColumn('company_limits', 'max_storage_mb', 'INTEGER')
+  ensureColumn('company_limits', 'ocr_enabled', 'INTEGER')
+  ensureColumn('company_limits', 'accident_module_enabled', 'INTEGER')
+  ensureColumn('company_limits', 'analytics_enabled', 'INTEGER')
+  ensureColumn('company_limits', 'api_access_enabled', 'INTEGER')
+  ensureColumn('company_limits', 'updated_at', 'TEXT')
+
+  db.run(`
+    UPDATE defects
+    SET checklist_item_id = (
+      SELECT ci.id
+      FROM checklist_items ci
+      WHERE ci.inspection_id = defects.inspection_id
+        AND ci.title = defects.title
+      LIMIT 1
+    )
+    WHERE checklist_item_id IS NULL
+      AND EXISTS (
+        SELECT 1
+        FROM checklist_items ci
+        WHERE ci.inspection_id = defects.inspection_id
+          AND ci.title = defects.title
+      )
+  `)
+
+  db.run(`
+    UPDATE photos
+    SET company_id = COALESCE(
+      company_id,
+      (SELECT company_id FROM inspections WHERE inspections.id = photos.inspection_id),
+      'default'
+    )
+  `)
 
   db.run("UPDATE users SET created_at = datetime('now') WHERE created_at IS NULL")
   db.run("UPDATE vehicles SET created_at = datetime('now') WHERE created_at IS NULL")
   db.run("UPDATE inspections SET created_at = datetime('now') WHERE created_at IS NULL")
   db.run("UPDATE defects SET created_at = datetime('now') WHERE created_at IS NULL")
   db.run("UPDATE photos SET created_at = datetime('now') WHERE created_at IS NULL")
+  db.run('UPDATE photos SET original_url = url WHERE original_url IS NULL AND url IS NOT NULL')
+  db.run('UPDATE photos SET webp_url = url WHERE webp_url IS NULL AND url IS NOT NULL')
+  db.run('UPDATE photos SET thumb_url = url WHERE thumb_url IS NULL AND url IS NOT NULL')
 }
 
 export async function initDatabase() {
@@ -322,13 +457,17 @@ export async function initDatabase() {
       email TEXT UNIQUE NOT NULL,
       password TEXT NOT NULL,
       name TEXT NOT NULL,
-      role TEXT NOT NULL CHECK (role IN ('inspector', 'manager')),
+      role TEXT NOT NULL CHECK (role IN ('inspector', 'manager', 'owner', 'admin')),
+      status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'inactive')),
       company_id TEXT DEFAULT 'default',
       mfa_enabled INTEGER NOT NULL DEFAULT 0,
       mfa_secret TEXT,
       created_at TEXT DEFAULT (datetime('now'))
     )
   `)
+
+  ensureColumn('users', 'status', "TEXT NOT NULL DEFAULT 'active'")
+  ensureUsersRoleSupportsAdminAndOwner()
 
   try {
     db.run(`ALTER TABLE users ADD COLUMN mfa_enabled INTEGER NOT NULL DEFAULT 0`)
@@ -358,6 +497,36 @@ export async function initDatabase() {
       status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'inactive')),
       created_at TEXT DEFAULT (datetime('now'))
     )
+  `)
+
+  db.run(`
+    CREATE TABLE IF NOT EXISTS company_limits (
+      id TEXT PRIMARY KEY,
+      company_id TEXT UNIQUE NOT NULL,
+      plan_code TEXT,
+      max_vehicles INTEGER,
+      max_users INTEGER,
+      max_storage_mb INTEGER,
+      ocr_enabled INTEGER,
+      accident_module_enabled INTEGER,
+      analytics_enabled INTEGER,
+      api_access_enabled INTEGER,
+      updated_at TEXT DEFAULT (datetime('now'))
+    )
+  `)
+
+  db.run(`
+    INSERT OR IGNORE INTO companies (
+      id,
+      slug,
+      name,
+      region_code,
+      data_residency,
+      api_cluster_key,
+      storage_cluster_key,
+      ocr_cluster_key
+    )
+    VALUES ('default', 'default', 'Default company', NULL, NULL, NULL, NULL, NULL)
   `)
 
   db.run(`
@@ -409,6 +578,7 @@ export async function initDatabase() {
     CREATE TABLE IF NOT EXISTS defects (
       id TEXT PRIMARY KEY,
       inspection_id TEXT NOT NULL,
+      checklist_item_id TEXT,
       company_id TEXT DEFAULT 'default',
       title TEXT NOT NULL,
       comment TEXT,
@@ -436,7 +606,20 @@ export async function initDatabase() {
       id TEXT PRIMARY KEY,
       inspection_id TEXT NOT NULL,
       defect_id TEXT,
+      company_id TEXT DEFAULT 'default',
+      photo_type TEXT,
       url TEXT NOT NULL,
+      original_url TEXT,
+      webp_url TEXT,
+      thumb_url TEXT,
+      original_mime TEXT,
+      original_name TEXT,
+      width INTEGER,
+      height INTEGER,
+      size_original INTEGER,
+      size_webp INTEGER,
+      size_thumb INTEGER,
+      hash TEXT,
       geo TEXT,
       is_required INTEGER NOT NULL DEFAULT 0,
       created_at TEXT DEFAULT (datetime('now'))
@@ -537,12 +720,13 @@ export async function initDatabase() {
         existing.free()
 
         if (adminExists) {
+          db.run('UPDATE users SET role = ? WHERE email = ?', ['admin', ADMIN_EMAIL])
           console.log(`Admin already exists: ${ADMIN_EMAIL}`)
         } else {
           const hashedPassword = bcrypt.hashSync(ADMIN_PASSWORD, 10)
           db.run(
             'INSERT INTO users (id, email, password, name, role, company_id) VALUES (?, ?, ?, ?, ?, ?)',
-            [uuidv4(), ADMIN_EMAIL, hashedPassword, 'Администратор', 'manager', 'default'],
+            [uuidv4(), ADMIN_EMAIL, hashedPassword, 'Администратор', 'admin', 'default'],
           )
           saveDatabase()
         }

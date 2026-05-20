@@ -1,4 +1,5 @@
 'use client'
+/* eslint-disable @next/next/no-img-element */
 
 import { useState } from 'react'
 import { buildApiUrl } from '@/lib/api/client'
@@ -6,6 +7,8 @@ import { buildApiUrl } from '@/lib/api/client'
 type Photo = {
   id?: string
   url: string
+  webp_url?: string | null
+  thumb_url?: string | null
   geo?: string | null
 }
 
@@ -39,7 +42,7 @@ export default function PhotoGallery({ photos, title, onDelete, maxHeight = '200
             type="button"
           >
             <img
-              src={buildApiUrl(photo.url)}
+              src={buildApiUrl(photo.thumb_url || photo.webp_url || photo.url)}
               alt={`Фото ${index + 1}`}
               className="h-full w-full object-cover"
             />

@@ -496,9 +496,17 @@ docs/vehicle-number-format.md
 
 ## Directus CMS
 
-Directus добавлен как отдельный CMS/Data Studio слой рядом с текущим backend. Он нужен для управления компаниями, техникой, ДТП-заявками, участниками, повреждениями, фото-метаданными, OCR-результатами и antifraud-флагами через админ-панель.
+Directus используется как внутренний **SaaS backoffice** владельца ресурса. Это не панель владельцев компаний и не операционный интерфейс для менеджеров/инспекторов.
 
-Directus не заменяет существующий `backend/`. В custom backend остаются OCR номера и одометра, hash фото, проверки гео/времени, PDF, ZIP-экспорт, antifraud-логика, webhooks и бизнес-валидация завершения ДТП-заявки.
+Администратор ресурса в Directus управляет только SaaS-уровнем:
+
+- компании;
+- владельцы компаний;
+- тарифы;
+- лимиты и feature flags;
+- служебные заметки и, при необходимости, snapshots агрегированной статистики.
+
+Операционные данные компаний — техника, осмотры, дефекты, ДТП, фото, OCR и antifraud — остаются в custom backend и пользовательской панели. Владельцы компаний, менеджеры и инспекторы не получают доступ к Directus. Владелец компании работает в web-панели и может назначать только `manager` и `inspector` внутри своей компании.
 
 Запуск:
 
@@ -517,23 +525,48 @@ docker compose up -d
 Env:
 
 - `directus/.env.example` - настройки Directus и PostgreSQL.
-- `backend/.env.example` - `DIRECTUS_URL`, `DIRECTUS_TOKEN` и опциональный `DIRECTUS_DEFAULT_COMPANY_ID` для server-to-server REST API.
-- `web/.env.example` - `NEXT_PUBLIC_DIRECTUS_URL` для frontend helper.
+- `backend/.env.example` - `DIRECTUS_URL`, `DIRECTUS_TOKEN`, `WEB_APP_URL`, `OWNER_SETUP_TOKEN_TTL` для server-to-server provisioning.
+- web/mobile не подключаются к Directus напрямую; все служебные операции идут через backend.
+
+Активные CMS-коллекции Plan B:
+
+- `companies`
+- `company_owners`
+- `plans`
+- `company_limits`
+- `saas_metric_snapshots`
 
 Интеграционные файлы:
 
-- `directus/schema/collections.md` - MVP-коллекции и связи.
-- `directus/schema/seed.md` - статусы, роли и стартовые справочники.
-- `directus/schema/mvp-schema.json` и `directus/scripts/bootstrap-schema.mjs` - безопасный bootstrap коллекций и полей после первого запуска Directus.
+- `directus/schema/collections.md` - активные SaaS-коллекции и границы CMS.
+- `directus/schema/seed.md` - роли, статусы, стартовые справочники.
+- `directus/schema/mvp-schema.json` и `directus/scripts/bootstrap-schema.mjs` - безопасный bootstrap активных коллекций и полей.
+- `directus/schema/legacy-operational-schema.json` - сохраненная историческая схема operational-коллекций; bootstrap ее не использует.
 - `backend/src/services/directus.js` - backend helper для REST API Directus.
-- `web/src/lib/directus.ts` - минимальный web helper на `@directus/sdk`.
 - `docs/directus-cms.md` - архитектура, ограничения и дальнейшие шаги.
 
-Backend endpoints для аккуратной проверки интеграции:
+Backend endpoints:
 
-- `GET /api/integrations/directus/status`
-- `GET /api/integrations/directus/inspections/:id/preview`
-- `POST /api/integrations/directus/inspections/:id/sync`
+- `GET /api/integrations/directus/status` - admin-only статус Directus и список активных SaaS-коллекций.
+- `POST /api/integrations/directus/provisioning/sync` - admin-only синхронизация `companies`, `company_owners` и `company_limits` в локальную auth/API-базу.
+- `GET /api/admin/saas/stats` - admin-only live-агрегаты по всем компаниям: техника, осмотры, дефекты, ДТП, фото, пользователи, тарифы/лимиты и health-индикаторы.
+- `GET /api/company/usage` - данные текущей компании для пользовательской панели: тариф, использование лимитов и доступные модули без упоминания CMS.
+
+Web-страница администратора ресурса:
+
+- `/saas-admin` - глобальная SaaS-статистика и breakdown по компаниям. Пункт меню видит только роль `admin`.
+
+Provisioning sync создает/обновляет локальные компании, владельцев компаний и лимиты из Directus. Если передать `{ "issue_setup_links": true }`, backend вернет одноразовые setup-ссылки `/owner-setup?token=...` для установки пароля владельцем компании в пользовательской панели. После успешной установки пароля повторное использование той же ссылки отклоняется.
+
+Синхронизированные лимиты уже применяются backend-ом:
+
+- `max_vehicles` ограничивает `POST /api/vehicles` и `POST /api/vehicles/import`;
+- `max_users` ограничивает `POST /api/users`;
+- `ocr_enabled` ограничивает OCR endpoints распознавания номера и одометра;
+- `accident_module_enabled` ограничивает создание новых ДТП-осмотров;
+- `analytics_enabled` ограничивает пользовательскую аналитику и экспорт аналитики;
+- незаданный лимит считается безлимитным;
+- при превышении ресурсного лимита backend возвращает `409`, при отключенном модуле — `403`.
 
 Bootstrap коллекций:
 

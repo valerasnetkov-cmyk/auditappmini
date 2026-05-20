@@ -16,6 +16,8 @@ export type AuthUser = {
   email: string
   name: string
   role: UserRole
+  status?: 'active' | 'inactive'
+  company_id?: string
 }
 
 export type LoginResponse = {
@@ -24,7 +26,7 @@ export type LoginResponse = {
   mfaRequired?: boolean
 }
 
-export type UserRole = 'inspector' | 'manager' | 'admin' | string
+export type UserRole = 'inspector' | 'manager' | 'owner' | 'admin' | string
 
 export type CompanyRecord = {
   id: string
@@ -56,6 +58,7 @@ export type UserRecord = {
   email: string
   name: string
   role: UserRole
+  status?: 'active' | 'inactive'
   created_at: string
   mfa_enabled?: boolean
 }
@@ -149,6 +152,7 @@ export type UpdateVehiclePayload = {
 export type InspectionType = 'quick' | 'scheduled' | 'accident' | string
 
 export type ChecklistItemInput = {
+  id?: string
   title: string
   result: boolean
   comment?: string
@@ -170,7 +174,29 @@ export type ChecklistItemResponse = {
 export type PhotoRecord = {
   id?: string
   url: string
+  original_url?: string | null
+  webp_url?: string | null
+  thumb_url?: string | null
+  original_mime?: string | null
+  original_name?: string | null
+  width?: number | null
+  height?: number | null
+  size_original?: number | null
+  size_webp?: number | null
+  size_thumb?: number | null
+  hash?: string | null
+  photo_type?: string | null
+  is_required?: number | boolean
   geo?: string | null
+}
+
+export type PhotoRequirementsResponse = {
+  type: InspectionType
+  requirements: {
+    required: string[]
+    optional: string[]
+  }
+  labels: Record<string, string>
 }
 
 export type DefectRecord = {
@@ -194,6 +220,14 @@ export type DefectRecord = {
   photos: PhotoRecord[]
 }
 
+export type DefectHistoryEntry = {
+  id: string
+  defect_id: string
+  status: string
+  changed_at: string
+  changed_by?: string | null
+}
+
 export type VehicleDefectHistoryItem = DefectRecord & {
   inspection_id: string
   vehicle_id: string
@@ -202,6 +236,17 @@ export type VehicleDefectHistoryItem = DefectRecord & {
 export type UploadPhotoResponse = {
   id?: string
   url?: string
+  original_url?: string | null
+  webp_url?: string | null
+  thumb_url?: string | null
+  original_mime?: string | null
+  original_name?: string | null
+  width?: number | null
+  height?: number | null
+  size_original?: number | null
+  size_webp?: number | null
+  size_thumb?: number | null
+  hash?: string | null
   geo?: string | null
 }
 
@@ -240,6 +285,7 @@ export type InspectionDetail = {
   odometer_unit?: string | null
   checklist_items: ChecklistItemResponse[]
   defects: DefectRecord[]
+  photos?: PhotoRecord[]
 }
 
 export type CreateInspectionPayload = {
@@ -294,6 +340,132 @@ export type DirectusIntegrationStatus = {
   configured: boolean
   url: string
   collections: string[]
+  legacy_sync_collections?: string[]
+}
+
+export type CompanyResourceUsage = {
+  current: number
+  max: number | null
+  remaining: number | null
+  percent: number | null
+  unlimited: boolean
+  exceeded: boolean
+}
+
+export type CompanyFeatureAccess = {
+  enabled: boolean
+  configured: boolean | null
+}
+
+export type CompanyUsageResponse = {
+  company: {
+    id: string
+    slug?: string | null
+    name: string
+    status: 'active' | 'inactive' | string
+    region_code?: string | null
+    data_residency?: string | null
+  }
+  plan: {
+    code?: string | null
+  }
+  usage: {
+    vehicles: CompanyResourceUsage
+    users: CompanyResourceUsage
+  }
+  limits: {
+    maxStorageMb?: number | null
+  }
+  features: {
+    ocr: CompanyFeatureAccess
+    accidentModule: CompanyFeatureAccess
+    analytics: CompanyFeatureAccess
+    apiAccess: CompanyFeatureAccess
+  }
+  updatedAt?: string | null
+}
+
+export type SaasAdminTotals = {
+  companies: number
+  activeCompanies: number
+  inactiveCompanies: number
+  users: number
+  owners: number
+  managers: number
+  inspectors: number
+  vehicles: number
+  activeVehicles: number
+  repairVehicles: number
+  inspections: number
+  completedInspections: number
+  accidents: number
+  defects: number
+  openDefects: number
+  closedDefects: number
+  photos: number
+  inspections7d: number
+  defects7d: number
+  accidents7d: number
+}
+
+export type SaasOperationalHealth = {
+  companiesWithoutOwner: number
+  companiesWithoutLimits: number
+  companiesWithoutOwnerList?: SaasHealthCompany[]
+  companiesWithoutLimitsList?: SaasHealthCompany[]
+  unassignedVehicles: number
+  unassignedInspections: number
+  unassignedDefects: number
+}
+
+export type SaasHealthCompany = {
+  id: string
+  slug?: string | null
+  name: string
+  status?: string | null
+}
+
+export type SaasCompanyLimits = {
+  planCode?: string | null
+  maxVehicles?: number | null
+  maxUsers?: number | null
+  maxStorageMb?: number | null
+  ocrEnabled?: boolean | null
+  accidentModuleEnabled?: boolean | null
+  analyticsEnabled?: boolean | null
+  apiAccessEnabled?: boolean | null
+}
+
+export type SaasCompanyStats = {
+  id: string
+  slug: string
+  name: string
+  region_code?: string | null
+  data_residency?: string | null
+  status: 'active' | 'inactive' | string
+  created_at?: string | null
+  users: number
+  owners: number
+  vehicles: number
+  activeVehicles: number
+  repairVehicles: number
+  inspections: number
+  accidents: number
+  defects: number
+  openDefects: number
+  lastInspectionAt?: string | null
+  limits?: SaasCompanyLimits | null
+}
+
+export type SaasAdminStats = {
+  generated_at: string
+  window: {
+    recent_days: number
+    from: string
+  }
+  totals: SaasAdminTotals
+  operational_health: SaasOperationalHealth
+  companies: SaasCompanyStats[]
 }
 
 export type CountByRegion = {
@@ -308,6 +480,11 @@ export type CountByStatus = {
 
 export type CountByType = {
   type: string
+  count: number
+}
+
+export type DailyCount = {
+  date: string
   count: number
 }
 
@@ -337,6 +514,7 @@ export type AnalyticsOverview = {
   defectsByRegion?: CountByRegion[]
   vehiclesByStatus?: CountByStatus[]
   inspectionsByType?: CountByType[]
+  dailyInspections?: DailyCount[]
   vehiclesByRegion?: CountByRegion[]
   inspectionsByRegion?: CountByRegion[]
 }

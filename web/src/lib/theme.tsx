@@ -16,45 +16,40 @@ const ThemeContext = createContext<ThemeContextType>({
   resolvedTheme: 'light',
 })
 
+function getStoredTheme(): Theme {
+  if (typeof window === 'undefined') return 'system'
+
+  const stored = localStorage.getItem('theme')
+  return stored === 'light' || stored === 'dark' || stored === 'system' ? stored : 'system'
+}
+
+function getSystemResolvedTheme(): 'light' | 'dark' {
+  if (typeof window === 'undefined') return 'light'
+
+  return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'
+}
+
 export function useTheme() {
   return useContext(ThemeContext)
 }
 
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
-  const [theme, setTheme] = useState<Theme>('system')
-  const [resolvedTheme, setResolvedTheme] = useState<'light' | 'dark'>('light')
+  const [theme, setTheme] = useState<Theme>(getStoredTheme)
+  const [systemResolvedTheme, setSystemResolvedTheme] = useState<'light' | 'dark'>(getSystemResolvedTheme)
+  const resolvedTheme = theme === 'system' ? systemResolvedTheme : theme
 
   useEffect(() => {
-    const stored = localStorage.getItem('theme') as Theme | null
-    if (stored && ['light', 'dark', 'system'].includes(stored)) {
-      setTheme(stored)
-    }
-  }, [])
-
-  useEffect(() => {
-    const root = document.documentElement
-    
-    if (theme === 'system') {
-      const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches
-      setResolvedTheme(prefersDark ? 'dark' : 'light')
-      root.setAttribute('data-theme', prefersDark ? 'dark' : 'light')
-    } else {
-      setResolvedTheme(theme)
-      root.setAttribute('data-theme', theme)
-    }
-  }, [theme])
+    document.documentElement.setAttribute('data-theme', resolvedTheme)
+  }, [resolvedTheme])
 
   useEffect(() => {
     const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)')
     const handler = (e: MediaQueryListEvent) => {
-      if (theme === 'system') {
-        setResolvedTheme(e.matches ? 'dark' : 'light')
-        document.documentElement.setAttribute('data-theme', e.matches ? 'dark' : 'light')
-      }
+      setSystemResolvedTheme(e.matches ? 'dark' : 'light')
     }
     mediaQuery.addEventListener('change', handler)
     return () => mediaQuery.removeEventListener('change', handler)
-  }, [theme])
+  }, [])
 
   const handleSetTheme = (newTheme: Theme) => {
     setTheme(newTheme)

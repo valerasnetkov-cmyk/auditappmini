@@ -6,26 +6,28 @@ import Link from 'next/link'
 import Layout from '@/components/Layout'
 import ManagerAccessDenied from '@/components/ManagerAccessDenied'
 import api from '@/lib/api/client'
-import { useManagerAccess } from '@/lib/useManagerAccess'
+import { useCompanyOwnerAccess } from '@/lib/useCompanyOwnerAccess'
 import type { UserRecord } from '@/lib/types'
 
 function getRoleLabel(role: string) {
   if (role === 'manager') return 'Менеджер'
   if (role === 'inspector') return 'Инспектор'
+  if (role === 'owner') return 'Владелец'
+  if (role === 'admin') return 'Администратор'
   return role
 }
 
 export default function AdminMfaListPage() {
-  const managerAccess = useManagerAccess()
+  const ownerAccess = useCompanyOwnerAccess()
   const [users, setUsers] = useState<UserRecord[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const { showToast } = useToast()
 
   useEffect(() => {
-    if (!managerAccess.allowed) return
+    if (!ownerAccess.allowed) return
     void loadUsers()
-  }, [managerAccess.allowed])
+  }, [ownerAccess.allowed])
 
   const loadUsers = async () => {
     try {
@@ -56,7 +58,7 @@ export default function AdminMfaListPage() {
     }
   }
 
-  if (managerAccess.loading) {
+  if (ownerAccess.loading) {
     return (
       <div className="flex min-h-screen items-center justify-center">
         <div className="h-8 w-8 animate-spin rounded-full border-b-2 border-blue-600"></div>
@@ -64,11 +66,11 @@ export default function AdminMfaListPage() {
     )
   }
 
-  if (!managerAccess.allowed) {
+  if (!ownerAccess.allowed) {
     return (
       <Layout currentPage="users">
         <div className="p-6">
-          <ManagerAccessDenied description="Управление MFA доступно только менеджеру." />
+          <ManagerAccessDenied description="Управление MFA доступно только владельцу компании." />
         </div>
       </Layout>
     )
@@ -101,9 +103,10 @@ export default function AdminMfaListPage() {
             <div className="mx-auto h-8 w-8 animate-spin rounded-full border-b-2 border-blue-600"></div>
           </div>
         ) : (
-          <div className="overflow-hidden rounded-2xl border border-slate-100 bg-white shadow-sm">
-            <table className="min-w-full divide-y divide-slate-200">
-              <thead className="bg-slate-50">
+          <div className="table-card">
+            <div className="table-scroll">
+              <table className="min-w-full divide-y divide-line">
+                <thead className="table-header">
                 <tr>
                   <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-600">Имя</th>
                   <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-600">Email</th>
@@ -143,7 +146,8 @@ export default function AdminMfaListPage() {
                   ))
                 )}
               </tbody>
-            </table>
+              </table>
+            </div>
           </div>
         )}
 

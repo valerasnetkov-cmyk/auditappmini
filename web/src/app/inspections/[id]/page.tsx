@@ -1,4 +1,5 @@
 'use client'
+/* eslint-disable @next/next/no-img-element */
 
 import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
@@ -6,15 +7,25 @@ import { useParams } from 'next/navigation'
 import Layout from '@/components/Layout'
 import api, { buildApiUrl } from '@/lib/api/client'
 import { requireAuthToken } from '@/lib/auth'
-import type { ChecklistItemResponse, InspectionDetail, InspectionType, PhotoRecord, VehicleListItem } from '@/lib/types'
+import { useCompanyUsage } from '@/lib/useCompanyUsage'
+import type { ChecklistItemResponse, InspectionDetail, InspectionType, PhotoRecord, PhotoRequirementsResponse, VehicleListItem } from '@/lib/types'
 
 type ChecklistItem = {
+  id?: string
   title: string
   result: boolean
   comment: string
 }
 
 type StatusTone = 'success' | 'error'
+
+function getPhotoPreviewUrl(photo: PhotoRecord) {
+  return photo.webp_url || photo.url
+}
+
+function getPhotoThumbUrl(photo: PhotoRecord) {
+  return photo.thumb_url || photo.webp_url || photo.url
+}
 
 const QUICK_CHECKLIST = ['Внешний вид', 'Повреждения кузова', 'Колеса', 'Стекла', 'Госномер']
 const SCHEDULED_CHECKLIST = [
@@ -35,20 +46,20 @@ const ACCIDENT_CHECKLIST = ['Повреждения кузова', 'Остекл
 
 const CHECKLIST_SECTIONS: Record<string, Record<string, string[]>> = {
   quick: {
-    Кузов: ['Внешний вид', 'Повреждения кузова'],
-    Ходовая: ['Колеса'],
-    Прочее: ['Стекла', 'Госномер'],
+    'Кузов': ['Внешний вид', 'Повреждения кузова'],
+    'Ходовая': ['Колеса'],
+    'Прочее': ['Стекла', 'Госномер'],
   },
   scheduled: {
-    Кузов: ['Внешний вид', 'Повреждения кузова', 'Лакокрасочное покрытие', 'Стекла', 'Фары', 'Зеркала', 'Двери', 'Госномер'],
-    Ходовая: ['Колеса'],
-    Двигатель: ['Двигатель'],
-    Салон: ['Салон', 'Приборная панель'],
+    'Кузов': ['Внешний вид', 'Повреждения кузова', 'Лакокрасочное покрытие', 'Стекла', 'Фары', 'Зеркала', 'Двери', 'Госномер'],
+    'Ходовая': ['Колеса'],
+    'Двигатель': ['Двигатель'],
+    'Салон': ['Салон', 'Приборная панель'],
   },
   accident: {
-    Кузов: ['Повреждения кузова', 'Кузов'],
-    Ходовая: ['Ходовая'],
-    Безопасность: ['Остекление', 'Безопасность'],
+    'Кузов': ['Повреждения кузова', 'Кузов'],
+    'Ходовая': ['Ходовая'],
+    'Безопасность': ['Остекление', 'Безопасность'],
   },
 }
 
@@ -122,6 +133,8 @@ export default function InspectionDetailPage() {
   const [isNewInspection, setIsNewInspection] = useState(false)
   const [checklist, setChecklist] = useState<ChecklistItem[]>([])
   const [defectPhotos, setDefectPhotos] = useState<Record<string, PhotoRecord[]>>({})
+  const [inspectionPhotos, setInspectionPhotos] = useState<Record<string, PhotoRecord[]>>({})
+  const [photoRequirements, setPhotoRequirements] = useState<PhotoRequirementsResponse | null>(null)
   const [accidentOccurredAt, setAccidentOccurredAt] = useState('')
   const [accidentLocation, setAccidentLocation] = useState('')
   const [odometerValue, setOdometerValue] = useState('')
@@ -134,6 +147,7 @@ export default function InspectionDetailPage() {
   useEffect(() => {
     if (!requireAuthToken()) return
     void loadInspection()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   const showStatus = (tone: StatusTone, message: string) => {
@@ -147,6 +161,7 @@ export default function InspectionDetailPage() {
     if (existingItems?.length) {
       setChecklist(
         existingItems.map((item) => ({
+          id: item.id,
           title: item.title,
           result: item.result === 1 || item.result === true,
           comment: item.comment || '',
@@ -186,6 +201,17 @@ export default function InspectionDetailPage() {
         photosByTitle[defect.title] = defect.photos || []
       })
       setDefectPhotos(photosByTitle)
+
+      const standalonePhotos = (result.data.photos || []).reduce<Record<string, PhotoRecord[]>>((groups, photo) => {
+        const photoType = photo.photo_type || 'additional'
+        groups[photoType] = groups[photoType] || []
+        groups[photoType].push(photo)
+        return groups
+      }, {})
+      setInspectionPhotos(standalonePhotos)
+
+      const requirementsResult = await api.getPhotoRequirements(result.data.type)
+      setPhotoRequirements(requirementsResult.data || null)
     } catch {
       setError('Ошибка загрузки осмотра')
     } finally {
@@ -248,11 +274,42 @@ export default function InspectionDetailPage() {
 
       setDefectPhotos((prev) => ({
         ...prev,
-        [defectTitle]: [...(prev[defectTitle] || []), { url: result.data?.url || '', id: result.data?.id, geo: result.data?.geo }],
+        [defectTitle]: [...(prev[defectTitle] || []), { ...result.data, url: result.data?.url || '' }],
       }))
       showStatus('success', 'Фото добавлено')
     } catch {
       showStatus('error', 'Ошибка загрузки фото')
+    } finally {
+      setUploadingPhoto(null)
+    }
+  }
+
+  const handleInspectionPhotoUpload = async (photoType: string, file: File) => {
+    if (!inspection) return
+
+    clearStatus()
+    setUploadingPhoto(photoType)
+
+    try {
+      const result = await api.uploadInspectionPhoto(inspection.id, photoType, file)
+      if (result.error || !result.data?.url) {
+        showStatus('error', result.error || 'Не удалось загрузить фото осмотра')
+        return
+      }
+
+      setInspectionPhotos((prev) => ({
+        ...prev,
+        [photoType]: [...(prev[photoType] || []), {
+          ...result.data,
+          id: result.data?.id,
+          url: result.data?.url || '',
+          photo_type: photoType,
+          geo: result.data?.geo,
+        }],
+      }))
+      showStatus('success', 'Фото осмотра добавлено')
+    } catch {
+      showStatus('error', 'Ошибка загрузки фото осмотра')
     } finally {
       setUploadingPhoto(null)
     }
@@ -286,6 +343,34 @@ export default function InspectionDetailPage() {
     }
   }
 
+  const handleInspectionPhotoDelete = async (photoType: string, photoIndex: number) => {
+    const photo = inspectionPhotos[photoType]?.[photoIndex]
+    if (!photo?.id) return
+
+    if (!confirm('Удалить это фото?')) return
+
+    clearStatus()
+    setDeletingPhoto(`${photoType}-${photoIndex}`)
+
+    try {
+      const result = await api.deletePhoto(photo.id)
+      if (result.error) {
+        showStatus('error', result.error)
+        return
+      }
+
+      setInspectionPhotos((prev) => ({
+        ...prev,
+        [photoType]: (prev[photoType] || []).filter((_, index) => index !== photoIndex),
+      }))
+      showStatus('success', 'Фото осмотра удалено')
+    } catch {
+      showStatus('error', 'Ошибка удаления фото осмотра')
+    } finally {
+      setDeletingPhoto(null)
+    }
+  }
+
   const getIncompleteWarnings = () => {
     const warnings: string[] = []
     if (!inspection) return warnings
@@ -298,6 +383,12 @@ export default function InspectionDetailPage() {
     if ((inspection.type === 'quick' || inspection.type === 'scheduled') && !odometerValue.trim()) {
       warnings.push('Укажите пробег')
     }
+
+    photoRequirements?.requirements.required.forEach((photoType) => {
+      if ((inspectionPhotos[photoType] || []).length === 0) {
+        warnings.push(`Добавьте обязательное фото: ${photoRequirements.labels[photoType] || photoType}`)
+      }
+    })
 
     checklist
       .filter((item) => !item.result)
@@ -324,6 +415,7 @@ export default function InspectionDetailPage() {
     try {
       const result = await api.updateInspection(inspection.id, {
         checklist: checklist.map((item) => ({
+          id: item.id,
           title: item.title,
           result: item.result,
           comment: item.comment,
@@ -343,6 +435,28 @@ export default function InspectionDetailPage() {
       showStatus('success', 'Осмотр сохранен')
     } catch {
       showStatus('error', 'Ошибка сохранения')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const handleComplete = async () => {
+    if (!inspection) return
+
+    clearStatus()
+    setSaving(true)
+
+    try {
+      const result = await api.completeInspection(inspection.id)
+      if (result.error) {
+        showStatus('error', result.error)
+        return
+      }
+
+      await loadInspection()
+      showStatus('success', 'Осмотр завершён')
+    } catch {
+      showStatus('error', 'Ошибка завершения осмотра')
     } finally {
       setSaving(false)
     }
@@ -553,6 +667,65 @@ export default function InspectionDetailPage() {
             </div>
           ) : null}
 
+          {photoRequirements ? (
+            <div className="mb-6 rounded-xl border border-slate-200 bg-slate-50 p-4">
+              <h2 className="mb-3 text-base font-semibold text-slate-900">Обязательные фото осмотра</h2>
+              <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+                {photoRequirements.requirements.required.map((photoType) => {
+                  const photos = inspectionPhotos[photoType] || []
+                  const label = photoRequirements.labels[photoType] || photoType
+
+                  return (
+                    <div key={photoType} className="rounded-lg border border-slate-200 bg-white p-3">
+                      <div className="mb-2 flex items-center justify-between gap-2">
+                        <span className="text-sm font-medium text-slate-800">{label}</span>
+                        <span className={`rounded px-2 py-0.5 text-xs ${photos.length ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700'}`}>
+                          {photos.length ? 'Добавлено' : 'Требуется'}
+                        </span>
+                      </div>
+
+                      <div className="flex flex-wrap items-center gap-2">
+                        {photos.map((photo, photoIndex) => (
+                          <div key={`${photo.url}-${photoIndex}`} className="group relative">
+                            <button type="button" onClick={() => window.open(buildApiUrl(getPhotoPreviewUrl(photo)), '_blank')}>
+                              <img src={buildApiUrl(getPhotoThumbUrl(photo))} alt={label} className="h-20 w-20 rounded border object-cover" />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleInspectionPhotoDelete(photoType, photoIndex)}
+                              disabled={deletingPhoto === `${photoType}-${photoIndex}`}
+                              className="absolute -right-2 -top-2 flex h-6 w-6 items-center justify-center rounded-full bg-red-500 text-xs text-white opacity-0 transition-opacity group-hover:opacity-100"
+                            >
+                              {deletingPhoto === `${photoType}-${photoIndex}` ? '...' : 'x'}
+                            </button>
+                          </div>
+                        ))}
+
+                        <label className="flex h-20 w-20 cursor-pointer items-center justify-center rounded border-2 border-dashed border-slate-300 transition-colors hover:border-blue-400 hover:bg-blue-50">
+                          {uploadingPhoto === photoType ? (
+                            <div className="h-6 w-6 animate-spin rounded-full border-b-2 border-blue-600"></div>
+                          ) : (
+                            <span className="text-2xl text-slate-400">+</span>
+                          )}
+                          <input
+                            type="file"
+                            accept="image/jpeg,image/png,image/webp"
+                            className="hidden"
+                            onChange={(event) => {
+                              if (event.target.files?.[0]) {
+                                void handleInspectionPhotoUpload(photoType, event.target.files[0])
+                              }
+                            }}
+                          />
+                        </label>
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+          ) : null}
+
           <h2 className="mb-4 text-lg font-semibold text-slate-900">
             Чек-лист осмотра
             {defectsCount > 0 ? <span className="ml-2 text-sm text-red-600">({defectsCount} деф.)</span> : null}
@@ -615,8 +788,8 @@ export default function InspectionDetailPage() {
                               <div className="flex flex-wrap items-center gap-2">
                                 {photos.map((photo, photoIndex) => (
                                   <div key={`${photo.url}-${photoIndex}`} className="group relative">
-                                    <button type="button" onClick={() => window.open(buildApiUrl(photo.url), '_blank')}>
-                                      <img src={buildApiUrl(photo.url)} alt="Дефект" className="h-20 w-20 rounded border object-cover" />
+                                    <button type="button" onClick={() => window.open(buildApiUrl(getPhotoPreviewUrl(photo)), '_blank')}>
+                                      <img src={buildApiUrl(getPhotoThumbUrl(photo))} alt="Дефект" className="h-20 w-20 rounded border object-cover" />
                                     </button>
                                     <button
                                       type="button"
@@ -637,7 +810,7 @@ export default function InspectionDetailPage() {
                                   )}
                                   <input
                                     type="file"
-                                    accept="image/*"
+                                    accept="image/jpeg,image/png,image/webp"
                                     className="hidden"
                                     onChange={(event) => {
                                       if (event.target.files?.[0]) {
@@ -687,8 +860,8 @@ export default function InspectionDetailPage() {
                   {defect.photos.length ? (
                     <div className="mt-2 flex flex-wrap gap-2">
                       {defect.photos.map((photo, index) => (
-                        <button key={`${photo.url}-${index}`} type="button" onClick={() => window.open(buildApiUrl(photo.url), '_blank')}>
-                          <img src={buildApiUrl(photo.url)} alt="Фото дефекта" className="h-24 w-24 rounded border object-cover hover:opacity-80" />
+                        <button key={`${photo.url}-${index}`} type="button" onClick={() => window.open(buildApiUrl(getPhotoPreviewUrl(photo)), '_blank')}>
+                          <img src={buildApiUrl(getPhotoThumbUrl(photo))} alt="Фото дефекта" className="h-24 w-24 rounded border object-cover hover:opacity-80" />
                         </button>
                       ))}
                     </div>
@@ -708,6 +881,15 @@ export default function InspectionDetailPage() {
           <button onClick={handleSave} disabled={saving} className="rounded-lg bg-blue-600 px-6 py-2 text-white hover:bg-blue-700 disabled:opacity-50">
             {saving ? 'Сохранение...' : 'Сохранить осмотр'}
           </button>
+          {!inspection?.completed ? (
+            <button
+              onClick={handleComplete}
+              disabled={saving || warnings.length > 0 || !photoRequirements}
+              className="rounded-lg bg-green-600 px-6 py-2 text-white hover:bg-green-700 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              Завершить осмотр
+            </button>
+          ) : null}
         </div>
       </div>
     </Layout>
@@ -728,7 +910,13 @@ function NewInspectionForm({
   const [selectedType, setSelectedType] = useState<InspectionType>('quick')
   const [accidentOccurredAt, setAccidentOccurredAt] = useState('')
   const [accidentLocation, setAccidentLocation] = useState('')
-  const canCreate = Boolean(selectedVehicle) && (selectedType !== 'accident' || (accidentOccurredAt.trim() && accidentLocation.trim()))
+  const { usage, loading: usageLoading } = useCompanyUsage()
+  const accidentEnabled = usage?.features.accidentModule.enabled !== false
+  const accidentAvailable = accidentEnabled && !usageLoading
+  const effectiveSelectedType = !accidentAvailable && selectedType === 'accident' ? 'quick' : selectedType
+  const canCreate =
+    Boolean(selectedVehicle) &&
+    (effectiveSelectedType !== 'accident' || (accidentAvailable && accidentOccurredAt.trim() && accidentLocation.trim()))
 
   useEffect(() => {
     void api.getVehiclesList().then((response) => setVehicles(response.data || []))
@@ -737,9 +925,9 @@ function NewInspectionForm({
   const handleSubmit = (event: React.FormEvent) => {
     event.preventDefault()
     if (!selectedVehicle) return
-    if (selectedType === 'accident' && (!accidentOccurredAt.trim() || !accidentLocation.trim())) return
+    if (effectiveSelectedType === 'accident' && (!accidentAvailable || !accidentOccurredAt.trim() || !accidentLocation.trim())) return
 
-    onCreate(selectedVehicle, selectedType, {
+    onCreate(selectedVehicle, effectiveSelectedType, {
       occurredAt: accidentOccurredAt,
       location: accidentLocation,
     })
@@ -778,22 +966,34 @@ function NewInspectionForm({
             <div>
               <label className="mb-2 block text-sm font-medium text-slate-700">Тип осмотра</label>
               <div className="grid grid-cols-3 gap-2">
-                {(['quick', 'scheduled', 'accident'] as InspectionType[]).map((type) => (
-                  <button
-                    key={type}
-                    type="button"
-                    onClick={() => setSelectedType(type)}
-                    className={`rounded-lg border px-4 py-3 text-center ${
-                      selectedType === type ? getTypeSelectedStyle(type) : 'border-slate-300'
-                    }`}
-                  >
-                    {getTypeLabel(type)}
-                  </button>
-                ))}
+                {(['quick', 'scheduled', 'accident'] as InspectionType[]).map((type) => {
+                  const typeDisabled = type === 'accident' && !accidentAvailable
+
+                  return (
+                    <button
+                      key={type}
+                      type="button"
+                      disabled={typeDisabled}
+                      onClick={() => {
+                        if (!typeDisabled) setSelectedType(type)
+                      }}
+                      className={`rounded-lg border px-4 py-3 text-center ${
+                        effectiveSelectedType === type ? getTypeSelectedStyle(type) : 'border-slate-300'
+                      } ${typeDisabled ? 'cursor-not-allowed bg-slate-100 text-slate-400 opacity-70' : ''}`}
+                    >
+                      {getTypeLabel(type)}
+                    </button>
+                  )
+                })}
               </div>
+              {!accidentEnabled ? (
+                <p className="mt-2 rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-800">
+                  Модуль ДТП отключён для текущего тарифа компании. Создание ДТП-осмотров недоступно.
+                </p>
+              ) : null}
             </div>
 
-            {selectedType === 'accident' ? (
+            {effectiveSelectedType === 'accident' ? (
               <div className="space-y-4 rounded-xl border border-red-200 bg-red-50 p-4">
                 <div>
                   <label className="mb-1 block text-sm font-medium text-slate-700">Время ДТП</label>
@@ -834,3 +1034,7 @@ function NewInspectionForm({
     </Layout>
   )
 }
+
+
+
+

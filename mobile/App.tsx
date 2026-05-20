@@ -1,25 +1,15 @@
-import { createNativeStackNavigator } from '@react-navigation/native-stack'
-import { NavigationContainer } from '@react-navigation/native'
-import { StatusBar } from 'expo-status-bar'
 import { useState, useEffect } from 'react'
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, ActivityIndicator, Modal, Alert } from 'react-native'
+import { View, Text, TextInput, TouchableOpacity, StyleSheet, ActivityIndicator, Modal, Alert, ScrollView, Image } from 'react-native'
 import * as Location from 'expo-location'
 import { ThemeProvider, useTheme } from './src/theme'
-import { api } from './src/api'
-import type { User, Vehicle, Company } from './src/types'
-import { PHOTO_REQUIREMENTS, InspectionType, QUICK_CHECKLIST, SCHEDULED_CHECKLIST, ACCIDENT_CHECKLIST } from './src/types'
+import { api, isAuthSessionError, setAuthSessionHandler } from './src/api'
+import type { User, Vehicle, Company, Inspection, PhotoRequirementsResponse } from './src/types'
+import { InspectionType, QUICK_CHECKLIST, SCHEDULED_CHECKLIST, ACCIDENT_CHECKLIST } from './src/types'
 import CameraCapture from './src/CameraCapture'
 
-type RootStackParamList = {
-  Login: undefined
-  Home: undefined
-  VehicleNumber: undefined
-  InspectionTypeSelect: undefined
-  Photos: undefined
-  Odometer: undefined
-  Checklist: undefined
-  AccidentDamage: undefined
-  Complete: undefined
+type InspectionPhotoPreview = {
+  localUri: string
+  serverUrl: string
 }
 
 function App() {
@@ -36,10 +26,13 @@ function Main() {
   const [user, setUser] = useState<User | null>(null)
   const [companies, setCompanies] = useState<Company[]>([])
   const [selectedCompany, setSelectedCompany] = useState<Company | null>(null)
+  const [sessionMessage, setSessionMessage] = useState('')
 
-  useEffect(() => {
-    checkAuth()
-  }, [])
+  const resetSessionState = () => {
+    setUser(null)
+    setCompanies([])
+    setSelectedCompany(null)
+  }
 
   const checkAuth = async () => {
     try {
@@ -50,15 +43,25 @@ function Main() {
       if (comps.length === 1 && comps[0]) {
         setSelectedCompany(comps[0])
       }
+      setSessionMessage('')
     } catch (e: any) {
       console.log('Auth check failed:', e.message)
-      setUser(null)
-      setCompanies([])
-      setSelectedCompany(null)
+      resetSessionState()
+      setSessionMessage(isAuthSessionError(e) ? e.message : '')
     } finally {
       setLoading(false)
     }
   }
+
+  useEffect(() => {
+    setAuthSessionHandler((error) => {
+      setSessionMessage(error.message)
+      resetSessionState()
+      setLoading(false)
+    })
+    checkAuth()
+    return () => setAuthSessionHandler(null)
+  }, [])
 
   if (loading) {
     return (
@@ -69,10 +72,10 @@ function Main() {
   }
 
   if (!user) {
-    return <LoginScreen onLogin={checkAuth} />
+    return <LoginScreen onLogin={checkAuth} initialMessage={sessionMessage} />
   }
 
-  if (companies.length === 0 || !selectedCompany) {
+  if (companies.length === 0) {
     return (
       <View style={[styles.container, { backgroundColor: colors.background }]}>
         <Text style={[styles.error, { color: colors.danger }]}>
@@ -82,9 +85,8 @@ function Main() {
           style={[styles.button, { backgroundColor: colors.primary }]}
           onPress={async () => {
             await api.logout()
-            setUser(null)
-            setCompanies([])
-            setSelectedCompany(null)
+            setSessionMessage('')
+            resetSessionState()
           }}
         >
           <Text style={[styles.buttonText, { color: colors.buttonText }]}>Выйти</Text>
@@ -105,12 +107,16 @@ function Main() {
   return <InspectionFlowScreen company={selectedCompany!} />
 }
 
-function LoginScreen({ onLogin }: { onLogin: () => void }) {
+function LoginScreen({ onLogin, initialMessage = '' }: { onLogin: () => void; initialMessage?: string }) {
   const { colors } = useTheme()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [loading, setLoading] = useState(false)
-  const [error, setError] = useState('')
+  const [error, setError] = useState(initialMessage)
+
+  useEffect(() => {
+    setError(initialMessage)
+  }, [initialMessage])
 
   const handleLogin = async () => {
     if (!email || !password) {
@@ -123,6 +129,7 @@ function LoginScreen({ onLogin }: { onLogin: () => void }) {
 
     try {
       await api.login(email, password)
+      setError('')
       onLogin()
     } catch (e: any) {
       setError(e.message || 'Ошибка входа')
@@ -203,24 +210,45 @@ function CompanySelectScreen({
 
 function InspectionFlowScreen({ company }: { company: Company }) {
   const { colors } = useTheme()
-const [step, setStep] = useState<
-    'home' | 'number' | 'type' | 'photos' | 'damage' | 'odometer' | 'checklist' | 'complete'
-  >('home')
+  const [step, setStep] = useState<'home' | 'number' | 'type' | 'accident' | 'photos' | 'odometer' | 'checklist' | 'complete'>('home')
   const [vehicleNumber, setVehicleNumber] = useState('')
   const [vehicle, setVehicle] = useState<Vehicle | null>(null)
   const [inspectionType, setInspectionType] = useState<InspectionType | null>(null)
-  const [photos, setPhotos] = useState<Record<string, string>>({})
+  const [inspectionId, setInspectionId] = useState<string | null>(null)
+  const [photoRequirements, setPhotoRequirements] = useState<PhotoRequirementsResponse | null>(null)
+  const [inspectionPhotos, setInspectionPhotos] = useState<Record<string, InspectionPhotoPreview>>({})
   const [odometer, setOdometer] = useState('')
-  const [checklist, setChecklist] = useState<Record<string, boolean>>({})
+  const [checklist, setChecklist] = useState<Record<string, { result: boolean | null; comment: string; photo: string | null }>>({})
+  const [completedInspection, setCompletedInspection] = useState<Inspection | null>(null)
   const [showCamera, setShowCamera] = useState(false)
   const [cameraTarget, setCameraTarget] = useState<string | null>(null)
-  
-  // ДТП данные
+  const [loading, setLoading] = useState(false)
+
   const [accidentOccurredAt, setAccidentOccurredAt] = useState('')
   const [accidentLocation, setAccidentLocation] = useState('')
-  const [currentLocation, setCurrentLocation] = useState<{latitude: number; longitude: number} | null>(null)
+  const [currentLocation, setCurrentLocation] = useState<{ latitude: number; longitude: number } | null>(null)
   const [locationLoading, setLocationLoading] = useState(false)
-  const [defects, setDefects] = useState<{title: string; comment: string; photo: string | null}[]>([])
+
+  const getChecklistTitles = (type: InspectionType) => {
+    if (type === 'quick') return QUICK_CHECKLIST
+    if (type === 'scheduled') return SCHEDULED_CHECKLIST.flatMap((section) => section.items)
+    return ACCIDENT_CHECKLIST
+  }
+
+  const resetChecklist = (type: InspectionType) => {
+    const nextChecklist = Object.fromEntries(
+      getChecklistTitles(type).map((title) => [title, { result: null, comment: '', photo: null }]),
+    )
+    setChecklist(nextChecklist)
+  }
+
+  const requiredPhotoTypes = photoRequirements?.requirements.required ?? []
+  const completedPhotos = requiredPhotoTypes.filter((photoType) => inspectionPhotos[photoType]).length
+  const canProceedFromPhotos = requiredPhotoTypes.length > 0 && completedPhotos === requiredPhotoTypes.length
+  const checklistTitles = inspectionType ? getChecklistTitles(inspectionType) : []
+  const canFinishChecklist = checklistTitles.length > 0
+    && checklistTitles.every((title) => checklist[title]?.result !== null)
+    && checklistTitles.every((title) => checklist[title]?.result !== false || Boolean(checklist[title]?.photo))
 
   const getCurrentLocation = async () => {
     setLocationLoading(true)
@@ -231,57 +259,145 @@ const [step, setStep] = useState<
         return
       }
       const location = await Location.getCurrentPositionAsync({})
-      setCurrentLocation({
+      const coordinates = {
         latitude: location.coords.latitude,
         longitude: location.coords.longitude,
-      })
-    } catch (error) {
+      }
+      setCurrentLocation(coordinates)
+      if (!accidentLocation.trim()) {
+        setAccidentLocation(`${coordinates.latitude.toFixed(5)}, ${coordinates.longitude.toFixed(5)}`)
+      }
+    } catch {
       Alert.alert('Ошибка', 'Не удалось получить координаты')
     } finally {
       setLocationLoading(false)
     }
   }
 
-  const requiredPhotos = inspectionType ? PHOTO_REQUIREMENTS[inspectionType] : []
-  const completedPhotos = requiredPhotos.filter(p => photos[p.id]).length
-  const canProceedFromPhotos = completedPhotos === requiredPhotos.length
-
-  const [loading, setLoading] = useState(false)
-
   const handleNumberSubmit = async () => {
-    if (!vehicleNumber) return
+    if (!vehicleNumber.trim()) return
 
     setLoading(true)
     try {
-      const normalized = vehicleNumber.toUpperCase().replace(/[^A-Z0-9]/g, '')
-      console.log('Resolving:', normalized)
-      const v = await api.resolveVehicleNumber(normalized)
-      console.log('Vehicle found:', v)
-      if (v) {
-        setVehicle(v)
-        setStep('type')
-      } else {
-        alert('Техника не найдена')
+      const normalized = vehicleNumber.toUpperCase().replace(/[^A-ZА-Я0-9]/g, '')
+      const resolvedVehicle = await api.resolveVehicleNumber(normalized)
+      if (!resolvedVehicle) {
+        Alert.alert('Техника не найдена', 'Проверьте номер и попробуйте снова')
+        return
       }
-    } catch (e: any) {
-      console.log('Error:', e.message)
-      alert('Ошибка: ' + e.message)
+
+      setVehicle(resolvedVehicle)
+      setStep('type')
+    } catch (error: any) {
+      Alert.alert('Ошибка', error.message || 'Не удалось найти технику')
     } finally {
       setLoading(false)
     }
   }
 
-  const openCamera = (photoId: string) => {
-    setCameraTarget(photoId)
+  const createInspection = async (type: InspectionType) => {
+    if (!vehicle) return
+
+    setLoading(true)
+    try {
+      const requirements = await api.getPhotoRequirements(type)
+      const createdInspection = await api.createInspection({
+        vehicle_id: vehicle.id,
+        type,
+        checklist: [],
+        ...(type === 'accident'
+          ? {
+              accident_occurred_at: accidentOccurredAt.trim(),
+              accident_location: accidentLocation.trim(),
+            }
+          : {}),
+      })
+
+      setInspectionId(createdInspection.id)
+      setPhotoRequirements(requirements)
+      setInspectionPhotos({})
+      setStep('photos')
+    } catch (error: any) {
+      Alert.alert('Ошибка', error.message || 'Не удалось создать осмотр')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const handleTypeSelect = async (type: InspectionType) => {
+    setInspectionType(type)
+    setCompletedInspection(null)
+    resetChecklist(type)
+
+    if (type === 'accident') {
+      setStep('accident')
+      return
+    }
+
+    await createInspection(type)
+  }
+
+  const openCamera = (target: string) => {
+    setCameraTarget(target)
     setShowCamera(true)
   }
 
-  const handleCameraCapture = (base64: string) => {
-    if (cameraTarget) {
-      setPhotos(prev => ({ ...prev, [cameraTarget]: `data:image/jpeg;base64,${base64}` }))
-    }
+  const handleCameraCapture = async (photo: { base64: string; uri: string }) => {
+    const target = cameraTarget
     setShowCamera(false)
     setCameraTarget(null)
+
+    if (!target) return
+
+    if (target === 'plate_ocr') {
+      setLoading(true)
+      try {
+        const result = await api.recognizeVehicleNumber(photo.uri)
+        if (result.candidates[0]) {
+          setVehicleNumber(result.candidates[0])
+        } else {
+          Alert.alert('Номер не распознан', result.message || 'Введите номер вручную')
+        }
+      } catch (error: any) {
+        Alert.alert('Ошибка', error.message || 'Не удалось распознать номер')
+      } finally {
+        setLoading(false)
+      }
+      return
+    }
+
+    if (target.startsWith('inspection:')) {
+      if (!inspectionId) return
+      const photoType = target.slice('inspection:'.length)
+      setLoading(true)
+      try {
+        const uploadedPhoto = await api.uploadPhoto(inspectionId, photoType, photo.uri)
+        setInspectionPhotos((prev) => ({
+          ...prev,
+          [photoType]: {
+            localUri: photo.uri,
+            serverUrl: uploadedPhoto.thumb_url || uploadedPhoto.webp_url || uploadedPhoto.url,
+          },
+        }))
+      } catch (error: any) {
+        Alert.alert('Ошибка', error.message || 'Не удалось загрузить фото осмотра')
+      } finally {
+        setLoading(false)
+      }
+      return
+    }
+
+    if (target.startsWith('defect:')) {
+      const title = target.slice('defect:'.length)
+      setChecklist((prev) => ({
+        ...prev,
+        [title]: {
+          ...(prev[title] || { result: false, comment: '', photo: null }),
+          result: false,
+          photo: photo.uri,
+        },
+      }))
+    }
   }
 
   const handleCameraClose = () => {
@@ -289,45 +405,104 @@ const [step, setStep] = useState<
     setCameraTarget(null)
   }
 
-  const handlePhotoCapture = (photoId: string) => {
-    // Open camera for this photo
-    openCamera(photoId)
+  const handleContinueAfterPhotos = () => {
+    if (!canProceedFromPhotos) return
+    setStep(inspectionType === 'accident' ? 'checklist' : 'odometer')
   }
 
-  const handleClearPhoto = (photoId: string) => {
-    setPhotos(prev => {
-      const next = { ...prev }
-      delete next[photoId]
-      return next
-    })
+  const handleFinishInspection = async () => {
+    if (!inspectionId || !inspectionType) return
+
+    if (!canFinishChecklist) {
+      Alert.alert('Чек-лист не завершён', 'Ответьте на все пункты и добавьте фото к каждому дефекту')
+      return
+    }
+
+    setLoading(true)
+    try {
+      const checklistPayload = checklistTitles.map((title) => ({
+        title,
+        result: checklist[title]?.result ?? null,
+        comment: checklist[title]?.comment || '',
+      }))
+
+      const updatedInspection = await api.updateInspection(inspectionId, {
+        checklist: checklistPayload,
+        ...(inspectionType === 'accident'
+          ? {
+              accident_occurred_at: accidentOccurredAt.trim(),
+              accident_location: accidentLocation.trim(),
+            }
+          : {
+              odometer_value: Number(odometer),
+              odometer_unit: company.distance_unit || 'km',
+            }),
+      })
+
+      for (const checklistItem of updatedInspection.checklist_items) {
+        if (checklistItem.result !== false && checklistItem.result !== 0) continue
+        const draft = checklist[checklistItem.title]
+        const defect = updatedInspection.defects?.find((item) => (
+          item.checklist_item_id === checklistItem.id || item.title === checklistItem.title
+        ))
+
+        if (defect && draft?.photo && defect.photos.length === 0) {
+          await api.uploadDefectPhoto(defect.id, draft.photo)
+        }
+      }
+
+      const completed = await api.completeInspection(inspectionId)
+      setCompletedInspection(completed)
+      setStep('complete')
+    } catch (error: any) {
+      Alert.alert('Ошибка', error.message || 'Не удалось завершить осмотр')
+    } finally {
+      setLoading(false)
+    }
   }
+
+  const resetFlow = () => {
+    setStep('home')
+    setVehicleNumber('')
+    setVehicle(null)
+    setInspectionType(null)
+    setInspectionId(null)
+    setPhotoRequirements(null)
+    setInspectionPhotos({})
+    setOdometer('')
+    setChecklist({})
+    setCompletedInspection(null)
+    setAccidentOccurredAt('')
+    setAccidentLocation('')
+    setCurrentLocation(null)
+  }
+
+  const cameraTitle = cameraTarget === 'plate_ocr'
+    ? 'Распознавание номера'
+    : cameraTarget?.startsWith('inspection:')
+      ? photoRequirements?.labels[cameraTarget.slice('inspection:'.length)]
+      : cameraTarget?.startsWith('defect:')
+        ? cameraTarget.slice('defect:'.length)
+        : undefined
 
   return (
-    <View style={[styles.container, { backgroundColor: colors.background }]}>
+    <View style={[styles.container, { backgroundColor: colors.background }]}> 
       {step === 'home' && (
-        <View style={[styles.card, { backgroundColor: colors.card }]}>
-          <Text style={[styles.title, { color: colors.text }]}>
-            Осмотр техники
-          </Text>
-          <Text style={[styles.subtitle, { color: colors.mutedText }]}>
-            {company.name}
-          </Text>
+        <View style={[styles.card, { backgroundColor: colors.card }]}> 
+          <Text style={[styles.title, { color: colors.text }]}>Осмотр техники</Text>
+          <Text style={[styles.subtitle, { color: colors.mutedText }]}>{company.name}</Text>
           <TouchableOpacity
             style={[styles.button, { backgroundColor: colors.primary }]}
             onPress={() => setStep('number')}
           >
-            <Text style={[styles.buttonText, { color: colors.buttonText }]}>
-              Начать осмотр
-            </Text>
+            <Text style={[styles.buttonText, { color: colors.buttonText }]}>Начать осмотр</Text>
           </TouchableOpacity>
         </View>
       )}
 
       {step === 'number' && (
-        <View style={[styles.card, { backgroundColor: colors.card }]}>
-          <Text style={[styles.label, { color: colors.text }]}>
-            Введите номер техники
-          </Text>
+        <View style={[styles.card, { backgroundColor: colors.card }]}> 
+          <Text style={[styles.label, { color: colors.text }]}>Введите номер техники</Text>
           <TextInput
             style={[styles.input, { backgroundColor: colors.inputBackground, color: colors.text, borderColor: colors.border }]}
             placeholder="А123БС77"
@@ -337,25 +512,18 @@ const [step, setStep] = useState<
             autoCapitalize="characters"
             maxLength={10}
           />
-          
           <TouchableOpacity
             style={[styles.secondaryButton, { backgroundColor: colors.inputBackground, borderColor: colors.border }]}
-            onPress={() => {
-              setCameraTarget('plate_ocr')
-              setShowCamera(true)
-            }}
+            onPress={() => openCamera('plate_ocr')}
           >
-            <Text style={[styles.secondaryButtonText, { color: colors.text }]}>
-              📷 Распознать номер по фото
-            </Text>
+            <Text style={[styles.secondaryButtonText, { color: colors.text }]}>📷 Распознать номер по фото</Text>
           </TouchableOpacity>
-          
           <TouchableOpacity
             style={[styles.button, { backgroundColor: loading ? colors.mutedText : colors.primary }]}
             onPress={handleNumberSubmit}
             disabled={loading}
           >
-            <Text style={[styles.buttonText, { color: colors.buttonText }]}>
+            <Text style={[styles.buttonText, { color: colors.buttonText }]}> 
               {loading ? 'Загрузка...' : 'Продолжить'}
             </Text>
           </TouchableOpacity>
@@ -363,10 +531,8 @@ const [step, setStep] = useState<
       )}
 
       {step === 'type' && (
-        <View style={[styles.card, { backgroundColor: colors.card }]}>
-          <Text style={[styles.label, { color: colors.text }]}>
-            Выберите тип осмотра
-          </Text>
+        <View style={[styles.card, { backgroundColor: colors.card }]}> 
+          <Text style={[styles.label, { color: colors.text }]}>Выберите тип осмотра</Text>
           {(['quick', 'scheduled', 'accident'] as InspectionType[]).map((type) => (
             <TouchableOpacity
               key={type}
@@ -374,10 +540,8 @@ const [step, setStep] = useState<
                 styles.typeButton,
                 { backgroundColor: inspectionType === type ? colors.primary : colors.inputBackground },
               ]}
-              onPress={() => {
-                setInspectionType(type)
-                setStep('photos')
-              }}
+              onPress={() => handleTypeSelect(type)}
+              disabled={loading}
             >
               <Text
                 style={[
@@ -392,159 +556,10 @@ const [step, setStep] = useState<
         </View>
       )}
 
-      {step === 'photos' && (
-        <View style={styles.fullScreen}>
-          <Text style={[styles.label, { color: colors.text }]}>
-            Обязательные фото ({completedPhotos}/{requiredPhotos.length})
-          </Text>
-          
-          <View style={styles.photoGrid}>
-            {requiredPhotos.map((photo) => (
-              <TouchableOpacity
-                key={photo.id}
-                style={[
-                  styles.photoItem,
-                  { 
-                    backgroundColor: photos[photo.id] ? colors.success : colors.inputBackground,
-                    borderColor: colors.border
-                  }
-                ]}
-                onPress={() => openCamera(photo.id)}
-              >
-                {photos[photo.id] ? (
-                  <Text style={[styles.photoCheck, { color: colors.buttonText }]}>✓</Text>
-                ) : (
-                  <View style={styles.photoIcon}>
-                    <Text style={styles.cameraEmoji}>📷</Text>
-                    <Text style={[styles.photoLabel, { color: colors.mutedText }]}>
-                      {photo.label}
-                    </Text>
-                  </View>
-                )}
-              </TouchableOpacity>
-            ))}
-          </View>
-
-          <View style={styles.buttonRow}>
-            {inspectionType === 'accident' && (
-              <TouchableOpacity
-                style={[styles.button, { backgroundColor: colors.warning }]}
-                onPress={() => setStep('damage')}
-              >
-                <Text style={[styles.buttonText, { color: colors.buttonText }]}>
-                  Добавить повреждение
-                </Text>
-              </TouchableOpacity>
-            )}
-            
-            <TouchableOpacity
-              style={[styles.button, { backgroundColor: colors.primary }]}
-              onPress={() => setStep('odometer')}
-              disabled={!canProceedFromPhotos}
-            >
-              <Text style={[styles.buttonText, { color: colors.buttonText }]}>
-                Продолжить
-              </Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      )}
-
-      {step === 'damage' && (
-        <View style={styles.fullScreen}>
-          <Text style={[styles.label, { color: colors.text }]}>Повреждение</Text>
-          
-          <TextInput
-            style={[styles.input, { backgroundColor: colors.inputBackground, color: colors.text, borderColor: colors.border }]}
-            placeholder="Описание повреждения"
-            placeholderTextColor={colors.mutedText}
-            value={defects.length > 0 ? defects[defects.length - 1].title : ''}
-            onChangeText={(text) => {
-              const newDefects = [...defects]
-              if (newDefects.length > 0) {
-                newDefects[newDefects.length - 1].title = text
-              } else {
-                newDefects.push({ title: text, comment: '', photo: null })
-              }
-              setDefects(newDefects)
-            }}
-          />
-
-          <TouchableOpacity
-            style={[styles.button, { backgroundColor: colors.primary }]}
-            onPress={() => {
-              setCameraTarget('damage_photo')
-              setShowCamera(true)
-            }}
-          >
-            <Text style={[styles.buttonText, { color: colors.buttonText }]}>
-              📷 Фото повреждения
-            </Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={[styles.button, { backgroundColor: colors.success }]}
-            onPress={() => setStep('odometer')}
-          >
-            <Text style={[styles.buttonText, { color: colors.buttonText }]}>
-              Добавить ещё
-            </Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={[styles.button, { backgroundColor: colors.primary }]}
-            onPress={() => setStep('odometer')}
-          >
-            <Text style={[styles.buttonText, { color: colors.buttonText }]}>
-              Продолжить
-            </Text>
-          </TouchableOpacity>
-        </View>
-      )}
-
-      {showCamera && cameraTarget && (
-        <Modal visible={showCamera} animationType="slide">
-          <CameraCapture
-            onCapture={handleCameraCapture}
-            onClose={handleCameraClose}
-            title={requiredPhotos.find(p => p.id === cameraTarget)?.label}
-          />
-        </Modal>
-      )}
-
-{step === 'odometer' && (
-        <View style={[styles.card, { backgroundColor: colors.card }]}>
-          <Text style={[styles.label, { color: colors.text }]}>Одометр</Text>
-          <Text style={[styles.subtitle, { color: colors.mutedText }]}>
-            Введите пробег в {company.distance_unit || 'км'}
-          </Text>
-          
-          <TextInput
-            style={[styles.input, { backgroundColor: colors.inputBackground, color: colors.text, borderColor: colors.border }]}
-            placeholder="0"
-            placeholderTextColor={colors.mutedText}
-            value={odometer}
-            onChangeText={setOdometer}
-            keyboardType="numeric"
-          />
-
-          <TouchableOpacity
-            style={[styles.button, { backgroundColor: colors.primary }]}
-            onPress={() => odometer && setStep('checklist')}
-            disabled={!odometer}
-          >
-            <Text style={[styles.buttonText, { color: colors.buttonText }]}>
-              Продолжить
-            </Text>
-          </TouchableOpacity>
-        </View>
-      )}
-
-      {step === 'checklist' && inspectionType === 'accident' && (
+      {step === 'accident' && (
         <View style={styles.fullScreen}>
           <Text style={[styles.label, { color: colors.text }]}>Данные ДТП</Text>
-          
-          <View style={[styles.card, { backgroundColor: colors.card }]}>
+          <View style={[styles.card, { backgroundColor: colors.card }]}> 
             <Text style={[styles.sublabel, { color: colors.text }]}>Дата и время ДТП</Text>
             <TextInput
               style={[styles.input, { backgroundColor: colors.inputBackground, color: colors.text, borderColor: colors.border }]}
@@ -554,8 +569,7 @@ const [step, setStep] = useState<
               onChangeText={setAccidentOccurredAt}
             />
           </View>
-          
-          <View style={[styles.card, { backgroundColor: colors.card }]}>
+          <View style={[styles.card, { backgroundColor: colors.card }]}> 
             <Text style={[styles.sublabel, { color: colors.text }]}>Место ДТП</Text>
             <TextInput
               style={[styles.input, { backgroundColor: colors.inputBackground, color: colors.text, borderColor: colors.border }]}
@@ -565,114 +579,217 @@ const [step, setStep] = useState<
               onChangeText={setAccidentLocation}
             />
             {currentLocation && (
-              <Text style={[styles.locationText, { color: colors.success }]}>
-                📍 {currentLocation.latitude.toFixed(5)}, {currentLocation.longitude.toFixed(5)}
-              </Text>
+              <Text style={[styles.locationText, { color: colors.success }]}>📍 {currentLocation.latitude.toFixed(5)}, {currentLocation.longitude.toFixed(5)}</Text>
             )}
           </View>
-          
           <TouchableOpacity
             style={[styles.button, { backgroundColor: colors.primary }]}
             onPress={getCurrentLocation}
             disabled={locationLoading}
           >
-            <Text style={[styles.buttonText, { color: colors.buttonText }]}>
+            <Text style={[styles.buttonText, { color: colors.buttonText }]}> 
               {locationLoading ? 'Определение...' : '📍 Определить координаты'}
             </Text>
           </TouchableOpacity>
-          
           <TouchableOpacity
-            style={[
-              styles.button, 
-              { backgroundColor: accidentOccurredAt && accidentLocation ? colors.primary : colors.border }
-            ]}
-            onPress={() => accidentOccurredAt && accidentLocation && setStep('photos')}
-            disabled={!accidentOccurredAt || !accidentLocation}
+            style={[styles.button, { backgroundColor: accidentOccurredAt.trim() && accidentLocation.trim() ? colors.primary : colors.border }]}
+            onPress={() => createInspection('accident')}
+            disabled={!accidentOccurredAt.trim() || !accidentLocation.trim() || loading}
           >
-            <Text style={[styles.buttonText, { color: colors.buttonText }]}>
-              Продолжить
-            </Text>
+            <Text style={[styles.buttonText, { color: colors.buttonText }]}>Продолжить</Text>
           </TouchableOpacity>
         </View>
       )}
 
-      {step === 'checklist' && inspectionType !== 'accident' && (
+      {step === 'photos' && photoRequirements && (
         <View style={styles.fullScreen}>
-          <Text style={[styles.label, { color: colors.text }]}>Чек-лист</Text>
-          
-          <View style={styles.checklistList}>
-            {(inspectionType === 'quick' ? QUICK_CHECKLIST : 
-              inspectionType === 'scheduled' ? SCHEDULED_CHECKLIST[0].items :
-              ACCIDENT_CHECKLIST
-            ).map((item, index) => (
-              <View key={index} style={[styles.checklistItem, { borderColor: colors.border }]}>
-                <Text style={[styles.checklistLabel, { color: colors.text }]}>{item}</Text>
-                <View style={styles.checklistButtons}>
-                  <TouchableOpacity
-                    style={[
-                      styles.yesNoButton,
-                      { backgroundColor: checklist[item] === true ? colors.success : colors.inputBackground }
-                    ]}
-                    onPress={() => setChecklist(prev => ({ ...prev, [item]: true }))}
-                  >
-                    <Text style={{ color: checklist[item] === true ? colors.buttonText : colors.text }}>Да</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    style={[
-                      styles.yesNoButton,
-                      { backgroundColor: checklist[item] === false ? colors.danger : colors.inputBackground }
-                    ]}
-                    onPress={() => setChecklist(prev => ({ ...prev, [item]: false }))}
-                  >
-                    <Text style={{ color: checklist[item] === false ? colors.buttonText : colors.text }}>Нет</Text>
-                  </TouchableOpacity>
-                </View>
-              </View>
+          <Text style={[styles.label, { color: colors.text }]}>Обязательные фото ({completedPhotos}/{requiredPhotoTypes.length})</Text>
+          <View style={styles.photoGrid}>
+            {requiredPhotoTypes.map((photoType) => (
+              <TouchableOpacity
+                key={photoType}
+                style={[
+                  styles.photoItem,
+                  {
+                    backgroundColor: inspectionPhotos[photoType] ? colors.card : colors.inputBackground,
+                    borderColor: inspectionPhotos[photoType] ? colors.success : colors.border,
+                  },
+                ]}
+                onPress={() => openCamera(`inspection:${photoType}`)}
+                disabled={loading}
+              >
+                {inspectionPhotos[photoType] ? (
+                  <>
+                    <Image source={{ uri: inspectionPhotos[photoType].localUri }} style={styles.photoPreview} />
+                    <View style={[styles.photoPreviewOverlay, { backgroundColor: colors.success }]}>
+                      <Text style={[styles.photoCheck, { color: colors.buttonText }]}>✓</Text>
+                    </View>
+                    <View style={styles.photoPreviewLabel}>
+                      <Text numberOfLines={2} style={[styles.photoPreviewLabelText, { color: colors.buttonText }]}>
+                        {photoRequirements.labels[photoType]}
+                      </Text>
+                    </View>
+                  </>
+                ) : (
+                  <View style={styles.photoIcon}>
+                    <Text style={styles.cameraEmoji}>📷</Text>
+                    <Text style={[styles.photoLabel, { color: colors.mutedText }]}>{photoRequirements.labels[photoType]}</Text>
+                  </View>
+                )}
+              </TouchableOpacity>
             ))}
           </View>
-
           <TouchableOpacity
-            style={[styles.button, { backgroundColor: colors.primary }]}
-            onPress={() => setStep('complete')}
+            style={[styles.button, { backgroundColor: canProceedFromPhotos ? colors.primary : colors.border }]}
+            onPress={handleContinueAfterPhotos}
+            disabled={!canProceedFromPhotos || loading}
           >
-            <Text style={[styles.buttonText, { color: colors.buttonText }]}>
-              Завершить осмотр
+            <Text style={[styles.buttonText, { color: colors.buttonText }]}>Продолжить</Text>
+          </TouchableOpacity>
+        </View>
+      )}
+
+      {step === 'odometer' && (
+        <View style={[styles.card, { backgroundColor: colors.card }]}> 
+          <Text style={[styles.label, { color: colors.text }]}>Одометр</Text>
+          <Text style={[styles.subtitle, { color: colors.mutedText }]}>Введите пробег в {company.distance_unit || 'км'}</Text>
+          <TextInput
+            style={[styles.input, { backgroundColor: colors.inputBackground, color: colors.text, borderColor: colors.border }]}
+            placeholder="0"
+            placeholderTextColor={colors.mutedText}
+            value={odometer}
+            onChangeText={setOdometer}
+            keyboardType="numeric"
+          />
+          <TouchableOpacity
+            style={[styles.button, { backgroundColor: odometer ? colors.primary : colors.border }]}
+            onPress={() => odometer && setStep('checklist')}
+            disabled={!odometer}
+          >
+            <Text style={[styles.buttonText, { color: colors.buttonText }]}>Продолжить</Text>
+          </TouchableOpacity>
+        </View>
+      )}
+
+      {step === 'checklist' && inspectionType && (
+        <View style={styles.fullScreen}>
+          <Text style={[styles.label, { color: colors.text }]}>Чек-лист</Text>
+          <ScrollView style={styles.scrollArea} contentContainerStyle={styles.scrollContent}>
+            {checklistTitles.map((item) => {
+              const entry = checklist[item] || { result: null, comment: '', photo: null }
+              return (
+                <View key={item} style={[styles.checklistCard, { borderColor: colors.border }]}> 
+                  <View style={styles.checklistHeader}>
+                    <Text style={[styles.checklistLabel, { color: colors.text }]}>{item}</Text>
+                    <View style={styles.checklistButtons}>
+                      <TouchableOpacity
+                        style={[
+                          styles.yesNoButton,
+                          { backgroundColor: entry.result === true ? colors.success : colors.inputBackground },
+                        ]}
+                        onPress={() => setChecklist((prev) => ({
+                          ...prev,
+                          [item]: { ...(prev[item] || { result: null, comment: '', photo: null }), result: true, comment: '', photo: null },
+                        }))}
+                      >
+                        <Text style={{ color: entry.result === true ? colors.buttonText : colors.text }}>Да</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        style={[
+                          styles.yesNoButton,
+                          { backgroundColor: entry.result === false ? colors.danger : colors.inputBackground },
+                        ]}
+                        onPress={() => setChecklist((prev) => ({
+                          ...prev,
+                          [item]: { ...(prev[item] || { result: null, comment: '', photo: null }), result: false },
+                        }))}
+                      >
+                        <Text style={{ color: entry.result === false ? colors.buttonText : colors.text }}>Нет</Text>
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+                  {entry.result === false && (
+                    <View>
+                      <TextInput
+                        style={[styles.commentInput, { backgroundColor: colors.inputBackground, color: colors.text, borderColor: colors.border }]}
+                        placeholder="Комментарий к дефекту"
+                        placeholderTextColor={colors.mutedText}
+                        value={entry.comment}
+                        onChangeText={(comment) => setChecklist((prev) => ({
+                          ...prev,
+                          [item]: { ...(prev[item] || { result: false, comment: '', photo: null }), result: false, comment },
+                        }))}
+                      />
+                      {entry.photo ? (
+                        <TouchableOpacity
+                          style={[styles.defectPhotoPreview, { borderColor: colors.success }]}
+                          onPress={() => openCamera(`defect:${item}`)}
+                        >
+                          <Image source={{ uri: entry.photo }} style={styles.photoPreview} />
+                          <View style={[styles.photoPreviewOverlay, { backgroundColor: colors.success }]}>
+                            <Text style={[styles.photoCheck, { color: colors.buttonText }]}>✓</Text>
+                          </View>
+                          <View style={styles.photoPreviewLabel}>
+                            <Text numberOfLines={2} style={[styles.photoPreviewLabelText, { color: colors.buttonText }]}>
+                              Фото дефекта выбрано
+                            </Text>
+                          </View>
+                        </TouchableOpacity>
+                      ) : null}
+                      <TouchableOpacity
+                        style={[styles.secondaryButton, { backgroundColor: entry.photo ? colors.success : colors.inputBackground, borderColor: colors.border }]}
+                        onPress={() => openCamera(`defect:${item}`)}
+                      >
+                        <Text style={[styles.secondaryButtonText, { color: entry.photo ? colors.buttonText : colors.text }]}> 
+                          {entry.photo ? 'Заменить фото дефекта' : '📷 Добавить фото дефекта'}
+                        </Text>
+                      </TouchableOpacity>
+                    </View>
+                  )}
+                </View>
+              )
+            })}
+          </ScrollView>
+          <TouchableOpacity
+            style={[styles.button, { backgroundColor: canFinishChecklist && !loading ? colors.primary : colors.border }]}
+            onPress={handleFinishInspection}
+            disabled={!canFinishChecklist || loading}
+          >
+            <Text style={[styles.buttonText, { color: colors.buttonText }]}> 
+              {loading ? 'Сохранение...' : 'Завершить осмотр'}
             </Text>
           </TouchableOpacity>
         </View>
       )}
 
-      {step === 'complete' && (
-        <View style={[styles.card, { backgroundColor: colors.card }]}>
+      {step === 'complete' && completedInspection && (
+        <View style={[styles.card, { backgroundColor: colors.card }]}> 
           <Text style={[styles.title, { color: colors.success }]}>Осмотр завершён</Text>
-          <Text style={[styles.subtitle, { color: colors.mutedText }]}>
-            {vehicle?.number} — {inspectionType}
-          </Text>
-          <Text style={[styles.subtitle, { color: colors.mutedText }]}>
-            Пробег: {odometer} {company.distance_unit || 'км'}
-          </Text>
-          
+          <Text style={[styles.subtitle, { color: colors.mutedText }]}>{completedInspection.vehicle_number} — {completedInspection.type}</Text>
+          {completedInspection.odometer_value ? (
+            <Text style={[styles.subtitle, { color: colors.mutedText }]}>Пробег: {completedInspection.odometer_value} {completedInspection.odometer_unit || company.distance_unit || 'км'}</Text>
+          ) : null}
           <TouchableOpacity
             style={[styles.button, { backgroundColor: colors.primary }]}
-            onPress={() => {
-              setStep('home')
-              setVehicle(null)
-              setInspectionType(null)
-              setPhotos({})
-              setOdometer('')
-              setChecklist({})
-            }}
+            onPress={resetFlow}
           >
-            <Text style={[styles.buttonText, { color: colors.buttonText }]}>
-              Новый осмотр
-            </Text>
+            <Text style={[styles.buttonText, { color: colors.buttonText }]}>Новый осмотр</Text>
           </TouchableOpacity>
         </View>
+      )}
+
+      {showCamera && cameraTarget && (
+        <Modal visible={showCamera} animationType="slide">
+          <CameraCapture
+            onCapture={handleCameraCapture}
+            onClose={handleCameraClose}
+            title={cameraTitle}
+          />
+        </Modal>
       )}
     </View>
   )
 }
-
 const styles = StyleSheet.create({
   container: {
     flex: 1,
@@ -788,10 +905,48 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     marginBottom: 12,
+    overflow: 'hidden',
   },
   photoCheck: {
-    fontSize: 24,
+    fontSize: 18,
     fontWeight: 'bold',
+  },
+  photoPreview: {
+    width: '100%',
+    height: '100%',
+    resizeMode: 'cover',
+  },
+  photoPreviewOverlay: {
+    position: 'absolute',
+    top: 8,
+    right: 8,
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  photoPreviewLabel: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
+    paddingHorizontal: 8,
+    paddingVertical: 6,
+    backgroundColor: 'rgba(0,0,0,0.55)',
+  },
+  photoPreviewLabelText: {
+    fontSize: 11,
+    textAlign: 'center',
+    fontWeight: '600',
+  },
+  defectPhotoPreview: {
+    width: '100%',
+    height: 180,
+    borderRadius: 12,
+    borderWidth: 2,
+    overflow: 'hidden',
+    marginBottom: 12,
   },
   photoIcon: {
     alignItems: 'center',
@@ -806,20 +961,30 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     padding: 8,
   },
-  checklistList: {
+  scrollArea: {
     flex: 1,
+    width: '100%',
     marginBottom: 20,
   },
-  checklistItem: {
+  scrollContent: {
+    paddingBottom: 12,
+  },
+  checklistCard: {
+    width: '100%',
+    borderWidth: 1,
+    borderRadius: 12,
+    padding: 12,
+    marginBottom: 12,
+  },
+  checklistHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingVertical: 12,
-    borderBottomWidth: 1,
   },
   checklistLabel: {
     fontSize: 14,
     flex: 1,
+    marginRight: 12,
   },
   checklistButtons: {
     flexDirection: 'row',
@@ -829,6 +994,15 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 8,
     borderRadius: 8,
+  },
+  commentInput: {
+    width: '100%',
+    padding: 12,
+    borderRadius: 12,
+    fontSize: 14,
+    marginTop: 12,
+    marginBottom: 12,
+    borderWidth: 1,
   },
 })
 

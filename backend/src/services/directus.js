@@ -82,6 +82,20 @@ export function updateItem(collection, id, payload) {
   })
 }
 
+export async function listItems(collection, params = {}) {
+  const query = new URLSearchParams()
+
+  Object.entries(params).forEach(([key, value]) => {
+    if (value === undefined || value === null || value === '') return
+    query.set(key, String(value))
+  })
+
+  const suffix = query.toString() ? `?${query.toString()}` : ''
+  const response = await directusRequest(`/items/${encodeURIComponent(collection)}${suffix}`)
+
+  return response?.data || []
+}
+
 export async function findItemByField(collection, field, value) {
   const query = new URLSearchParams({
     [`filter[${field}][_eq]`]: value,

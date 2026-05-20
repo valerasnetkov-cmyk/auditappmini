@@ -1,4 +1,5 @@
 'use client'
+/* eslint-disable @next/next/no-img-element */
 
 import { useEffect, useState } from 'react'
 import { useToast } from '@/app/contexts/ToastContext'
@@ -7,18 +8,20 @@ import { useParams } from 'next/navigation'
 import Layout from '@/components/Layout'
 import ManagerAccessDenied from '@/components/ManagerAccessDenied'
 import api from '@/lib/api/client'
-import { useManagerAccess } from '@/lib/useManagerAccess'
+import { useCompanyOwnerAccess } from '@/lib/useCompanyOwnerAccess'
 import type { UserRecord } from '@/lib/types'
 
 function getRoleLabel(role: string) {
   if (role === 'manager') return 'Менеджер'
   if (role === 'inspector') return 'Инспектор'
+  if (role === 'owner') return 'Владелец'
+  if (role === 'admin') return 'Администратор'
   return role
 }
 
 export default function AdminMfaUserPage() {
   const { id } = useParams<{ id: string }>()
-  const managerAccess = useManagerAccess()
+  const ownerAccess = useCompanyOwnerAccess()
   const [user, setUser] = useState<UserRecord | null>(null)
   const [otpauthUrl, setOtpauthUrl] = useState<string | null>(null)
   const [secret, setSecret] = useState<string | null>(null)
@@ -33,9 +36,10 @@ export default function AdminMfaUserPage() {
   const [success, setSuccess] = useState('')
 
   useEffect(() => {
-    if (!managerAccess.allowed) return
+    if (!ownerAccess.allowed) return
     void loadUser()
-  }, [id, managerAccess.allowed])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [id, ownerAccess.allowed])
 
   const loadUser = async () => {
     try {
@@ -101,7 +105,7 @@ export default function AdminMfaUserPage() {
     }
   }
 
-  if (managerAccess.loading) {
+  if (ownerAccess.loading) {
     return (
       <div className="flex min-h-screen items-center justify-center">
         <div className="h-8 w-8 animate-spin rounded-full border-b-2 border-blue-600"></div>
@@ -109,11 +113,11 @@ export default function AdminMfaUserPage() {
     )
   }
 
-  if (!managerAccess.allowed) {
+  if (!ownerAccess.allowed) {
     return (
       <Layout currentPage="users">
         <div className="max-w-3xl p-6">
-          <ManagerAccessDenied description="Настройка MFA доступна только менеджеру." />
+          <ManagerAccessDenied description="Настройка MFA доступна только владельцу компании." />
         </div>
       </Layout>
     )

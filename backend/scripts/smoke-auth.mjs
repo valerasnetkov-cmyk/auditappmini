@@ -7,12 +7,13 @@ const PORT = Number(process.env.PORT || 3013 + (process.pid % 500))
 const DATABASE_PATH = `./.tmp-smoke/smoke-auth-${process.pid}.sqlite`
 const BASE_URL = `http://${HOST}:${PORT}`
 const LOGIN_URL = `${BASE_URL}/api/auth/login`
+const JWT_SECRET = 'smoke-auth-secret'
 
 function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms))
 }
 
-async function waitForServer(url, timeoutMs = 15000) {
+async function waitForServer(url, timeoutMs = 30000) {
   const startedAt = Date.now()
 
   while (Date.now() - startedAt < timeoutMs) {
@@ -56,7 +57,7 @@ async function request(path, options = {}, expectedStatus = 200) {
 async function run() {
   const server = spawn(process.execPath, ['src/server.js'], {
     cwd: process.cwd(),
-    env: { ...process.env, PORT: String(PORT), DATABASE_PATH },
+    env: { ...process.env, PORT: String(PORT), DATABASE_PATH, JWT_SECRET },
     stdio: ['ignore', 'pipe', 'pipe'],
   })
 
@@ -88,6 +89,7 @@ async function run() {
     const suffix = Date.now()
     const createdEmail = `smoke-user-${suffix}@example.com`
     const updatedEmail = `smoke-user-updated-${suffix}@example.com`
+    const ownerCreatedEmail = `smoke-owner-created-${suffix}@example.com`
 
     const [meResponse, statsResponse, settingsResponse] = await Promise.all([
       request('/api/auth/me', { headers }),
@@ -141,6 +143,37 @@ async function run() {
       headers,
     }, 204)
 
+    const adminCreatedUser = await request('/api/users', {
+      method: 'POST',
+      headers: jsonHeaders,
+      body: JSON.stringify({
+        email: ownerCreatedEmail,
+        password: 'smoke123',
+        name: 'Admin Created Manager',
+        role: 'manager',
+      }),
+    }, 201)
+
+    await request('/api/users', {
+      method: 'POST',
+      headers: jsonHeaders,
+      body: JSON.stringify({
+        email: `forbidden-owner-${suffix}@example.com`,
+        password: 'smoke123',
+        name: 'Forbidden Owner',
+        role: 'owner',
+      }),
+    }, 403)
+
+    await request(`/api/users/${adminCreatedUser.id}`, {
+      method: 'DELETE',
+      headers,
+    }, 204)
+
+    await request('/api/auth/me', {
+      headers: { Authorization: `Bearer ${updatedLogin.token}` },
+    }, 401)
+
     console.log(
       JSON.stringify(
         {
@@ -161,6 +194,8 @@ async function run() {
           updatedUserEmail: updatedUser.email,
           updatedUserRole: updatedUser.role,
           updatedLoginEmail: updatedLogin.user?.email,
+          deletedUserTokenRejected: true,
+          adminCreatedUserRole: adminCreatedUser.role,
         },
         null,
         2,

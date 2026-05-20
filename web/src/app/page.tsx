@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import Layout from '@/components/Layout'
+import { DailyInspectionsChart, InspectionTypeChart, RegionBarChart, VehicleStatusChart } from '@/components/DashboardCharts'
 import api from '@/lib/api/client'
 import { clearAuthToken, isManagerRole, requireAuthToken } from '@/lib/auth'
 import { formatDate } from '@/lib/dateUtils'
@@ -11,9 +12,7 @@ import type {
   AccidentStats,
   AnalyticsOverview,
   AuthUser,
-  CountByRegion,
-  CountByStatus,
-  CountByType,
+  CompanyUsageResponse,
   DashboardStats,
   ExportType,
   NotificationItem,
@@ -46,38 +45,6 @@ const toastClassName: Record<ToastTone, string> = {
   info: 'toast bg-elevated text-foreground',
 }
 
-const progressClassName: Record<ProgressTone, string> = {
-  success: 'progress-fill-success',
-  warning: 'progress-fill-warning',
-  danger: 'progress-fill-danger',
-  info: 'progress-fill-info',
-  purple: 'progress-fill-purple',
-}
-
-function getTypeLabel(type: string) {
-  if (type === 'quick') return 'Быстрый'
-  if (type === 'scheduled') return 'Плановый'
-  if (type === 'accident') return 'ДТП'
-  return type || 'Не указано'
-}
-
-function getVehicleStatusLabel(status: string) {
-  if (status === 'active') return 'В работе'
-  if (status === 'repair') return 'Ремонт'
-  return status || 'Не указано'
-}
-
-function getInspectionTypeTone(type: string): ProgressTone {
-  if (type === 'accident') return 'danger'
-  if (type === 'scheduled') return 'purple'
-  return 'info'
-}
-
-function getVehicleStatusTone(status: string): ProgressTone {
-  if (status === 'repair') return 'warning'
-  return 'success'
-}
-
 function getAnalyticsParams(range: DateRange, customFrom: string, customTo: string) {
   if (range === 'week' || range === 'all') return ''
 
@@ -100,14 +67,6 @@ function getRangeStart(range: Exclude<DateRange, 'week' | 'all' | 'custom'>) {
   if (range === 'year') return new Date(now.getTime() - 365 * dayMs).toISOString().split('T')[0]
 }
 
-function getMaxCount(items?: Array<{ count: number }>) {
-  return Math.max(1, ...(items?.map((item) => Number(item.count || 0)) || []))
-}
-
-function getPercentage(count: number, maxCount: number) {
-  return `${Math.min(100, Math.round((count / Math.max(maxCount, 1)) * 100))}%`
-}
-
 export default function DashboardPage() {
   const router = useRouter()
   const [stats, setStats] = useState<DashboardStats>({
@@ -119,6 +78,7 @@ export default function DashboardPage() {
   const [notifications, setNotifications] = useState<NotificationItem[]>([])
   const [accidentStats, setAccidentStats] = useState<AccidentStats | null>(null)
   const [data, setData] = useState<AnalyticsOverview | null>(null)
+  const [companyUsage, setCompanyUsage] = useState<CompanyUsageResponse | null>(null)
   const [currentUser, setCurrentUser] = useState<AuthUser | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
@@ -136,6 +96,7 @@ export default function DashboardPage() {
   useEffect(() => {
     if (!requireAuthToken()) return
     void loadDashboard(getAnalyticsParams(dateRange, customFrom, customTo))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [dateRange, customFrom, customTo])
 
   const loadDashboard = async (params: string) => {
@@ -143,14 +104,14 @@ export default function DashboardPage() {
       setLoading(true)
       setError('')
 
-      const [statsRes, notifRes, analyticsRes, meRes] = await Promise.all([
+      const [statsRes, notifRes, meRes, usageRes] = await Promise.all([
         api.getDashboardStats(),
         api.getNotifications(),
-        api.getAnalyticsOverview(params),
         api.getMe(),
+        api.getCompanyUsage(),
       ])
 
-      const authExpired = [statsRes, notifRes, analyticsRes, meRes].some((result) => result.error === 'AUTH_REQUIRED')
+      const authExpired = [statsRes, notifRes, meRes, usageRes].some((result) => result.error === 'AUTH_REQUIRED')
       if (authExpired) {
         router.replace('/login')
         return
@@ -162,10 +123,27 @@ export default function DashboardPage() {
       }
 
       if (notifRes.error) showToast(`Уведомления недоступны: ${notifRes.error}`, 'danger')
-      if (analyticsRes.error) showToast(`Аналитика недоступна: ${analyticsRes.error}`, 'danger')
+      if (usageRes.error) showToast(`Ограничения компании недоступны: ${usageRes.error}`, 'danger')
 
       const statsData: Partial<DashboardStats> = statsRes.data || {}
-      const analyticsData = analyticsRes.data || {}
+      const usageData = usageRes.data || null
+      const analyticsAllowed = usageData?.features.analytics.enabled !== false
+      let analyticsData: AnalyticsOverview | null = null
+
+      if (analyticsAllowed) {
+        const analyticsRes = await api.getAnalyticsOverview(params)
+
+        if (analyticsRes.error === 'AUTH_REQUIRED') {
+          router.replace('/login')
+          return
+        }
+
+        if (analyticsRes.error) {
+          showToast(`Аналитика недоступна: ${analyticsRes.error}`, 'danger')
+        }
+
+        analyticsData = analyticsRes.data || null
+      }
 
       setStats({
         totalVehicles: statsData.totalVehicles || 0,
@@ -174,8 +152,9 @@ export default function DashboardPage() {
         inspectionsToday: statsData.inspectionsToday || 0,
       })
       setNotifications(notifRes.data || [])
-      setAccidentStats(analyticsData.accidents || null)
+      setAccidentStats(analyticsData?.accidents || null)
       setData(analyticsData)
+      setCompanyUsage(usageData)
       setCurrentUser(meRes.data || null)
     } catch {
       setError('Не удалось загрузить данные дашборда')
@@ -194,6 +173,11 @@ export default function DashboardPage() {
   }
 
   const handleExport = async (type: ExportType, format: 'json' | 'csv' = 'csv') => {
+    if (!analyticsEnabled) {
+      showToast('Аналитика и экспорт отключены тарифом компании', 'info')
+      return
+    }
+
     try {
       const result = await api.exportData(type)
       const items = result.data ?? []
@@ -256,6 +240,7 @@ export default function DashboardPage() {
   }
 
   const canSeedDemoData = isManagerRole(currentUser?.role)
+  const analyticsEnabled = companyUsage?.features.analytics.enabled !== false
 
   if (error) {
     return (
@@ -298,6 +283,7 @@ export default function DashboardPage() {
           dateRange={dateRange}
           customFrom={customFrom}
           customTo={customTo}
+          analyticsEnabled={analyticsEnabled}
           onRangeChange={handleDateRangeChange}
           onCustomFromChange={setCustomFrom}
           onCustomToChange={setCustomTo}
@@ -313,30 +299,68 @@ export default function DashboardPage() {
             <section className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
               <StatCard label="Всего техники" value={stats.totalVehicles} tone="info" code="VH" />
               <StatCard label="Всего осмотров" value={data?.total?.inspections || stats.totalInspections} tone="success" code="IN" />
-              <StatCard label="Всего дефектов" value={data?.total?.defects || 0} tone="danger" code="DF" />
-              <StatCard label="За выбранный период" value={data?.week?.inspections || 0} tone="purple" code="PR" />
+              <StatCard
+                label={analyticsEnabled ? 'Всего дефектов' : 'Техника с дефектами'}
+                value={analyticsEnabled ? data?.total?.defects || 0 : stats.vehiclesWithDefects}
+                tone="danger"
+                code="DF"
+              />
+              <StatCard
+                label={analyticsEnabled ? 'За выбранный период' : 'Сегодня осмотров'}
+                value={analyticsEnabled ? data?.week?.inspections || 0 : stats.inspectionsToday}
+                tone="purple"
+                code="PR"
+              />
             </section>
 
-            <section className="mb-6 grid grid-cols-1 gap-6 xl:grid-cols-2">
-              {accidentStats ? <AccidentCard stats={accidentStats} /> : null}
-              {data?.defectsByRegion?.length ? (
-                <RegionRankingCard title="Дефекты по регионам" items={data.defectsByRegion} tone="danger" />
-              ) : null}
-            </section>
+            {!analyticsEnabled ? (
+              <section className="card mb-6 border-amber-200 bg-amber-50 p-5 text-sm text-amber-900">
+                Аналитический модуль отключён тарифом компании. Основная оперативная сводка остаётся доступной, а графики,
+                ДТП-статистика по аналитике и экспорт скрыты до включения модуля владельцем компании.
+              </section>
+            ) : (
+              <>
+                <section className="mb-6 grid grid-cols-1 gap-6 xl:grid-cols-2">
+                  {accidentStats ? <AccidentCard stats={accidentStats} /> : null}
+                  {data?.defectsByRegion?.length ? (
+                    <ChartCard title="Дефекты по регионам" tone="danger">
+                      <RegionBarChart items={data.defectsByRegion} tone="danger" ariaLabel="График дефектов по регионам" />
+                    </ChartCard>
+                  ) : null}
+                </section>
 
-            <section className="mb-6 grid grid-cols-1 gap-6 xl:grid-cols-2">
-              <VehicleStatusCard items={data?.vehiclesByStatus || []} />
-              <InspectionTypeCard items={data?.inspectionsByType || []} />
-            </section>
+                {data?.dailyInspections?.length ? (
+                  <section className="mb-6">
+                    <article className="card p-6">
+                      <h2 className="mb-4 text-lg font-bold text-status-info">Динамика осмотров</h2>
+                      <DailyInspectionsChart items={data.dailyInspections} />
+                    </article>
+                  </section>
+                ) : null}
 
-            <section className="mb-6 grid grid-cols-1 gap-6 xl:grid-cols-2">
-              {data?.vehiclesByRegion?.length ? (
-                <RegionRankingCard title="Техника по регионам" items={data.vehiclesByRegion} tone="info" />
-              ) : null}
-              {data?.inspectionsByRegion?.length ? (
-                <RegionRankingCard title="Осмотры по регионам" items={data.inspectionsByRegion} tone="success" />
-              ) : null}
-            </section>
+                <section className="mb-6 grid grid-cols-1 gap-6 xl:grid-cols-2">
+                  <ChartCard title="Техника по статусу" tone="info">
+                    <VehicleStatusChart items={data?.vehiclesByStatus || []} />
+                  </ChartCard>
+                  <ChartCard title="Осмотры по типу" tone="success">
+                    <InspectionTypeChart items={data?.inspectionsByType || []} />
+                  </ChartCard>
+                </section>
+
+                <section className="mb-6 grid grid-cols-1 gap-6 xl:grid-cols-2">
+                  {data?.vehiclesByRegion?.length ? (
+                    <ChartCard title="Техника по регионам" tone="info">
+                      <RegionBarChart items={data.vehiclesByRegion} tone="info" ariaLabel="График техники по регионам" />
+                    </ChartCard>
+                  ) : null}
+                  {data?.inspectionsByRegion?.length ? (
+                    <ChartCard title="Осмотры по регионам" tone="success">
+                      <RegionBarChart items={data.inspectionsByRegion} tone="success" ariaLabel="График осмотров по регионам" />
+                    </ChartCard>
+                  ) : null}
+                </section>
+              </>
+            )}
 
             {notifications.length ? <NotificationsCard notifications={notifications} /> : null}
           </>
@@ -372,6 +396,7 @@ function DashboardFilters({
   dateRange,
   customFrom,
   customTo,
+  analyticsEnabled,
   onRangeChange,
   onCustomFromChange,
   onCustomToChange,
@@ -380,6 +405,7 @@ function DashboardFilters({
   dateRange: DateRange
   customFrom: string
   customTo: string
+  analyticsEnabled: boolean
   onRangeChange: (range: DateRange) => void
   onCustomFromChange: (value: string) => void
   onCustomToChange: (value: string) => void
@@ -390,7 +416,12 @@ function DashboardFilters({
       <div className="flex flex-col gap-4 xl:flex-row xl:items-center">
         <div className="flex flex-wrap items-center gap-2">
           <span className="text-sm font-semibold text-foreground-secondary">Период:</span>
-          <select value={dateRange} onChange={(event) => onRangeChange(event.target.value as DateRange)} className="select w-auto min-w-40">
+          <select
+            value={dateRange}
+            disabled={!analyticsEnabled}
+            onChange={(event) => onRangeChange(event.target.value as DateRange)}
+            className="select w-auto min-w-40 disabled:cursor-not-allowed disabled:opacity-60"
+          >
             {(Object.keys(RANGE_LABELS) as DateRange[]).map((range) => (
               <option key={range} value={range}>
                 {RANGE_LABELS[range]}
@@ -401,21 +432,38 @@ function DashboardFilters({
 
         {dateRange === 'custom' ? (
           <div className="flex flex-wrap items-center gap-2">
-            <input type="date" value={customFrom} onChange={(event) => onCustomFromChange(event.target.value)} className="input w-auto" />
+            <input
+              type="date"
+              value={customFrom}
+              disabled={!analyticsEnabled}
+              onChange={(event) => onCustomFromChange(event.target.value)}
+              className="input w-auto disabled:cursor-not-allowed disabled:opacity-60"
+            />
             <span className="text-foreground-muted">-</span>
-            <input type="date" value={customTo} onChange={(event) => onCustomToChange(event.target.value)} className="input w-auto" />
+            <input
+              type="date"
+              value={customTo}
+              disabled={!analyticsEnabled}
+              onChange={(event) => onCustomToChange(event.target.value)}
+              className="input w-auto disabled:cursor-not-allowed disabled:opacity-60"
+            />
           </div>
         ) : null}
 
         <div className="flex flex-wrap gap-3 xl:ml-auto">
-          <button onClick={() => onExport('vehicles', 'csv')} className="btn btn-success">
+          <button onClick={() => onExport('vehicles', 'csv')} disabled={!analyticsEnabled} className="btn btn-success disabled:cursor-not-allowed disabled:opacity-60">
             CSV техники
           </button>
-          <button onClick={() => onExport('inspections', 'csv')} className="btn btn-primary">
+          <button onClick={() => onExport('inspections', 'csv')} disabled={!analyticsEnabled} className="btn btn-primary disabled:cursor-not-allowed disabled:opacity-60">
             CSV осмотров
           </button>
         </div>
       </div>
+      {!analyticsEnabled ? (
+        <p className="mt-3 rounded-card bg-amber-50 px-4 py-3 text-sm text-amber-800">
+          Аналитика, фильтры периода и экспорт отключены текущим тарифом компании.
+        </p>
+      ) : null}
     </section>
   )
 }
@@ -502,92 +550,22 @@ function AccidentCard({ stats }: { stats: AccidentStats }) {
   )
 }
 
-function RegionRankingCard({ title, items, tone }: { title: string; items: CountByRegion[]; tone: ProgressTone }) {
-  const maxCount = getMaxCount(items)
-
+function ChartCard({ title, tone, children }: { title: string; tone: ProgressTone; children: React.ReactNode }) {
   return (
     <article className="card p-6">
-      <h2 className={`mb-4 text-lg font-bold ${tone === 'danger' ? 'text-status-danger' : tone === 'success' ? 'text-status-success' : 'text-status-info'}`}>
+      <h2 className={`mb-4 text-lg font-bold ${
+        tone === 'danger'
+          ? 'text-status-danger'
+          : tone === 'success'
+            ? 'text-status-success'
+            : tone === 'purple'
+              ? 'text-chart-purple'
+              : 'text-status-info'
+      }`}>
         {title}
       </h2>
-      <div className="space-y-3">
-        {items.slice(0, 5).map((item, index) => (
-          <div key={item.region || `region-${index}`} className="flex items-center gap-3">
-            <span className="flex h-6 w-6 items-center justify-center rounded-lg bg-muted-surface text-sm font-bold text-foreground-muted">
-              {index + 1}
-            </span>
-            <div className="min-w-0 flex-1">
-              <div className="truncate text-sm font-medium text-foreground">{item.region || 'Не указано'}</div>
-              <div className="progress mt-1 h-2">
-                <div className={`${progressClassName[tone]} h-2 rounded-pill`} style={{ width: getPercentage(item.count, maxCount) }}></div>
-              </div>
-            </div>
-            <span className={`text-lg font-bold ${tone === 'danger' ? 'text-status-danger' : tone === 'success' ? 'text-status-success' : 'text-status-info'}`}>
-              {item.count}
-            </span>
-          </div>
-        ))}
-      </div>
+      {children}
     </article>
-  )
-}
-
-function VehicleStatusCard({ items }: { items: CountByStatus[] }) {
-  const maxCount = getMaxCount(items)
-
-  return (
-    <article className="card p-6">
-      <h2 className="mb-4 text-lg font-bold text-status-info">Техника по статусу</h2>
-      <div className="space-y-4">
-        {items.map((item) => {
-          const tone = getVehicleStatusTone(item.status)
-          return (
-            <ProgressRow
-              key={item.status}
-              label={getVehicleStatusLabel(item.status)}
-              count={item.count}
-              maxCount={maxCount}
-              tone={tone}
-            />
-          )
-        })}
-      </div>
-    </article>
-  )
-}
-
-function InspectionTypeCard({ items }: { items: CountByType[] }) {
-  const maxCount = getMaxCount(items)
-
-  return (
-    <article className="card p-6">
-      <h2 className="mb-4 text-lg font-bold text-status-success">Осмотры по типу</h2>
-      <div className="space-y-4">
-        {items.map((item) => (
-          <ProgressRow
-            key={item.type}
-            label={getTypeLabel(item.type)}
-            count={item.count}
-            maxCount={maxCount}
-            tone={getInspectionTypeTone(item.type)}
-          />
-        ))}
-      </div>
-    </article>
-  )
-}
-
-function ProgressRow({ label, count, maxCount, tone }: { label: string; count: number; maxCount: number; tone: ProgressTone }) {
-  return (
-    <div>
-      <div className="mb-1 flex justify-between text-sm text-foreground-secondary">
-        <span>{label}</span>
-        <span className="font-bold text-foreground">{count}</span>
-      </div>
-      <div className="progress h-4">
-        <div className={`${progressClassName[tone]} h-4 rounded-pill`} style={{ width: getPercentage(count, maxCount) }}></div>
-      </div>
-    </div>
   )
 }
 

@@ -66,12 +66,27 @@ export const translations = {
     success: 'Успешно',
     noData: 'Нет данных',
 
-// Theme
-  theme: 'Тема',
-  lightTheme: 'Светлая',
-  darkTheme: 'Тёмная',
-  systemTheme: 'Системная',
-  language: 'Язык',
+    // Theme
+    theme: 'Тема',
+    lightTheme: 'Светлая',
+    darkTheme: 'Тёмная',
+    systemTheme: 'Системная',
+    language: 'Язык',
+
+    // Validation errors
+    odometerRequired: 'Укажите пробег',
+    accidentTimeRequired: 'Укажите время ДТП',
+    accidentLocationRequired: 'Укажите место ДТП',
+    photosRequired: 'Загрузите обязательные фото',
+    defectNeedsPhoto: 'К каждому дефекту нужно фото',
+
+    // Technical categories
+    exterior: 'Внешние дефекты',
+    undercarriage: 'Ходовая часть',
+    brakeSystem: 'Тормозная система',
+    electrical: 'Электрика',
+    lighting: 'Освещение',
+    other: 'Прочее',
   },
   en: {
     // Auth
@@ -148,19 +163,19 @@ export const translations = {
     language: 'Language',
 
     // Validation errors
-    odometerRequired: 'Укажите пробег',
-    accidentTimeRequired: 'Укажите время ДТП',
-    accidentLocationRequired: 'Укажите место ДТП',
-    photosRequired: 'Загрузите обязательные фото',
-    defectNeedsPhoto: 'К каждому дефекту нужно фото',
+    odometerRequired: 'Enter mileage',
+    accidentTimeRequired: 'Enter accident time',
+    accidentLocationRequired: 'Enter accident location',
+    photosRequired: 'Upload required photos',
+    defectNeedsPhoto: 'Each defect requires a photo',
 
-    // Technical categories  
-    exterior: 'Внешние дефекты',
-    undercarriage: 'Ходовая часть',
-    brakeSystem: 'Тормозная система',
-    electrical: 'Электрика',
-    lighting: 'Освещение',
-    other: 'Прочее',
+    // Technical categories
+    exterior: 'Exterior defects',
+    undercarriage: 'Undercarriage',
+    brakeSystem: 'Brake system',
+    electrical: 'Electrical',
+    lighting: 'Lighting',
+    other: 'Other',
   },
 }
 
@@ -181,7 +196,7 @@ export function getLocale(): Locale {
 }
 
 export function t(key: TranslationKey): string {
-  return translations[currentLocale]?.[key] || translations['ru']?.[key] || key
+  return translations[currentLocale]?.[key] || translations.ru[key] || key
 }
 
 export function initLocale() {

@@ -1,11 +1,11 @@
 "use client";
 
 import { useEffect, useState } from 'react'
+import type { FormEvent } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import api from '@/lib/api/client'
-import { clearAuthToken, getAuthToken, isManagerRole } from '@/lib/auth'
-import type { AuthUser } from '@/lib/types'
+import { getAuthToken, isAdminRole, isCompanyOwnerRole, isManagerRole } from '@/lib/auth'
 
 interface LayoutProps {
   children: React.ReactNode
@@ -17,54 +17,59 @@ type MenuItem = {
   label: string
   icon: string
   key: string
+  adminOnly?: boolean
   managerOnly?: boolean
+  ownerOnly?: boolean
+}
+
+function readStoredRole() {
+  const token = getAuthToken()
+  if (!token) return null
+
+  try {
+    const payload = JSON.parse(atob(token.split('.')[1] || ''))
+    return typeof payload.role === 'string' ? payload.role : null
+  } catch {
+    return null
+  }
 }
 
 export default function Layout({ children, currentPage }: LayoutProps) {
   const router = useRouter()
-  const [mounted, setMounted] = useState(false)
   const [quickSearch, setQuickSearch] = useState('')
-  const [currentUser, setCurrentUser] = useState<AuthUser | null>(null)
-  const [userReady, setUserReady] = useState(false)
+  const [currentRole, setCurrentRole] = useState<string | null>(null)
 
   useEffect(() => {
     const token = getAuthToken()
-    if (!token) {
-      setUserReady(true)
-      return
-    }
+    if (!token) return
 
     let cancelled = false
-    const load = async () => {
-      try {
-        const res = await api.getMe()
-        if (!cancelled && res?.data) setCurrentUser(res.data)
-      } catch {
-        // ignore
-      } finally {
-        setUserReady(true)
+
+    const loadCurrentUser = async () => {
+      const result = await api.getMe()
+      if (!cancelled && result.data?.role) {
+        setCurrentRole(result.data.role)
+      } else if (!cancelled) {
+        setCurrentRole(readStoredRole())
       }
     }
-    void load()
+
+    void loadCurrentUser()
+
     return () => {
       cancelled = true
     }
   }, [])
 
-  // mark client mount to avoid hydration differences
-  useEffect(() => {
-    setMounted(true)
-  }, [])
-
-  const handleQuickSearch = (e: any) => {
+  const handleQuickSearch = (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault()
     if (!quickSearch.trim()) return
     router.push(`/vehicles?q=${encodeURIComponent(quickSearch.trim())}`)
   }
 
   const handleLogout = () => {
-    clearAuthToken()
-    window.location.reload()
+    void api.logout()
+    router.replace('/login')
   }
 
   const menuItems: MenuItem[] = [
@@ -72,18 +77,22 @@ export default function Layout({ children, currentPage }: LayoutProps) {
     { href: '/vehicles', label: 'Техника', icon: 'VH', key: 'vehicles' },
     { href: '/inspections', label: 'Осмотры', icon: 'IN', key: 'inspections' },
     { href: '/defects', label: 'Дефекты', icon: 'DF', key: 'defects' },
-    { href: '/users', label: 'Пользователи', icon: 'US', key: 'users', managerOnly: true },
-    { href: '/companies', label: 'Компании', icon: 'CO', key: 'companies', managerOnly: true },
+    { href: '/users', label: 'Пользователи', icon: 'US', key: 'users', ownerOnly: true },
+    { href: '/saas-admin', label: 'SaaS-админ', icon: 'SA', key: 'saas-admin', adminOnly: true },
     { href: '/profile', label: 'Профиль', icon: 'PR', key: 'profile' },
     { href: '/settings', label: 'Настройки', icon: 'ST', key: 'settings', managerOnly: true },
   ]
 
-  const allMenuItems = menuItems
-  const visibleMenuItems = allMenuItems
+  const visibleMenuItems = menuItems.filter((item) => {
+    if (item.adminOnly) return isAdminRole(currentRole)
+    if (item.ownerOnly) return isCompanyOwnerRole(currentRole)
+    if (item.managerOnly) return isManagerRole(currentRole)
+    return true
+  })
 
   return (
     <div className="app-shell flex min-h-screen">
-      <aside className="flex w-64 flex-col border-r border-line bg-surface shadow-card">
+      <aside className="sticky top-0 flex h-screen w-64 shrink-0 flex-col border-r border-line bg-surface shadow-card">
         <div className="border-b border-line p-5">
           <div className="flex items-center gap-3">
             <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary text-sm font-semibold text-foreground-inverse">AT</div>
@@ -135,7 +144,7 @@ export default function Layout({ children, currentPage }: LayoutProps) {
         </div>
       </aside>
 
-      <main className="page flex-1 overflow-auto">{children}</main>
+      <main className="page min-w-0 flex-1">{children}</main>
     </div>
   )
 }

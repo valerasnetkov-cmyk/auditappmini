@@ -22,11 +22,6 @@ export default function OdometerHistory({ inspections }: OdometerHistoryProps) {
     })
   }
 
-  const formatOdometer = (value?: number | null, unit?: string) => {
-    if (!value) return '—'
-    return `${value.toLocaleString('ru-RU')} ${unit || 'км'}`
-  }
-
   return (
     <div className="card p-4">
       <h3 className="text-lg font-semibold mb-4">История пробега</h3>
@@ -35,7 +30,7 @@ export default function OdometerHistory({ inspections }: OdometerHistoryProps) {
         <p className="text-sm text-gray-500">Нет данных о пробеге</p>
       ) : (
         <div className="space-y-2">
-          {inspectionsWithOdometer.map((inspection, idx) => (
+          {inspectionsWithOdometer.map((inspection) => (
             <div key={inspection.id} className="flex items-center justify-between text-sm">
               <div className="flex items-center gap-2">
                 <span className="text-gray-500">{formatDate(inspection.created_at)}</span>
@@ -50,7 +45,6 @@ export default function OdometerHistory({ inspections }: OdometerHistoryProps) {
                 </span>
               </div>
               <div className="font-medium">
-                {/* В будущем здесь будет настоящий odometer_value из inspection */}
                 <span className="text-gray-400">—</span>
               </div>
             </div>

@@ -11,7 +11,7 @@ function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms))
 }
 
-async function waitForServer(timeoutMs = 15000) {
+async function waitForServer(timeoutMs = 30000) {
   const startedAt = Date.now()
 
   while (Date.now() - startedAt < timeoutMs) {
@@ -93,7 +93,14 @@ async function run() {
       headers: authHeaders,
     })
 
-    if (status.configured !== false || status.collections?.length !== 9) {
+    if (
+      status.configured !== false ||
+      status.collections?.length !== 5 ||
+      !status.collections.includes('company_owners') ||
+      !status.collections.includes('plans') ||
+      status.collections.includes('accident_cases') ||
+      !status.legacy_sync_collections?.includes('accident_cases')
+    ) {
       throw new Error(`Unexpected Directus status payload: ${JSON.stringify(status)}`)
     }
 

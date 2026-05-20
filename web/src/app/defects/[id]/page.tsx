@@ -1,4 +1,5 @@
 'use client'
+/* eslint-disable @next/next/no-img-element */
 
 import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
@@ -17,6 +18,14 @@ type DefectHistoryEntry = {
   changed_at: string
   changed_by?: string | null
   changed_by_name?: string | null
+}
+
+function getPhotoPreviewUrl(photo: { url: string; webp_url?: string | null }) {
+  return photo.webp_url || photo.url
+}
+
+function getPhotoThumbUrl(photo: { url: string; webp_url?: string | null; thumb_url?: string | null }) {
+  return photo.thumb_url || photo.webp_url || photo.url
 }
 
 function getInspectionTypeLabel(type?: string) {
@@ -69,6 +78,7 @@ export default function DefectDetailPage() {
   useEffect(() => {
     if (!requireAuthToken()) return
     void loadDefect()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   const loadDefect = async () => {
@@ -287,12 +297,12 @@ export default function DefectDetailPage() {
                   {photos.map((photo, index) => (
                     <button
                       key={`${photo.url}-${index}`}
-                      onClick={() => window.open(buildApiUrl(photo.url), '_blank')}
+                      onClick={() => window.open(buildApiUrl(getPhotoPreviewUrl(photo)), '_blank')}
                       className="rounded-card border border-line bg-muted-surface p-3 text-left transition hover:border-primary hover:bg-surface-hover"
                       type="button"
                     >
                       <img
-                        src={buildApiUrl(photo.url)}
+                        src={buildApiUrl(getPhotoThumbUrl(photo))}
                         alt={`Фото дефекта ${index + 1}`}
                         className="h-56 w-full rounded-control object-cover"
                       />
@@ -495,3 +505,4 @@ export default function DefectDetailPage() {
     </Layout>
   )
 }
+

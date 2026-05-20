@@ -48,6 +48,8 @@ node_modules/
 *.sqlite
 uploads/
 backend/uploads/
+backend/backups/
+backend/data/
 dist/
 build/
 .next/
