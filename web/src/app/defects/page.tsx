@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
+import { useSearchParams } from 'next/navigation'
 import Layout from '@/components/Layout'
 import api from '@/lib/api/client'
 import { requireAuthToken } from '@/lib/auth'
@@ -55,10 +56,12 @@ function getVisibleRowsLabel(value: VisibleRowsFilter) {
 }
 
 export default function DefectsPage() {
+  const searchParams = useSearchParams()
   const [defects, setDefects] = useState<DefectRecord[]>([])
   const [vehicles, setVehicles] = useState<VehicleListItem[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
+  const [vehicleFilter, setVehicleFilter] = useState(searchParams.get('vehicle') || '')
   const [regionFilter, setRegionFilter] = useState('')
   const [visibleRows, setVisibleRows] = useState<VisibleRowsFilter>('all')
   const [typeFilter, setTypeFilter] = useState<InspectionType | ''>('')
@@ -66,7 +69,8 @@ export default function DefectsPage() {
   useEffect(() => {
     if (!requireAuthToken()) return
     void loadData()
-  }, [])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [vehicleFilter])
 
   const loadData = async () => {
     setLoading(true)
@@ -74,7 +78,7 @@ export default function DefectsPage() {
 
     try {
       const [defectsRes, vehiclesRes] = await Promise.all([
-        api.getDefects({ page: 1, limit: 100 }),
+        api.getDefects({ page: 1, limit: 100, vehicle: vehicleFilter || undefined }),
         api.getVehiclesList(),
       ])
 
@@ -94,6 +98,10 @@ export default function DefectsPage() {
   const uniqueRegions = useMemo(
     () => Array.from(new Set(vehicles.map((vehicle) => vehicle.region).filter((region): region is string => Boolean(region)))).sort(),
     [vehicles],
+  )
+  const selectedVehicle = useMemo(
+    () => vehicles.find((vehicle) => vehicle.id === vehicleFilter) || null,
+    [vehicles, vehicleFilter],
   )
 
   const filtered = useMemo(() => {
@@ -154,7 +162,20 @@ export default function DefectsPage() {
         </section>
 
         <section className="card mb-6 p-4">
-          <div className="grid gap-3 md:grid-cols-3">
+          <div className="grid gap-3 md:grid-cols-4">
+            <label className="block">
+              <span className="label">Техника</span>
+              <select value={vehicleFilter} onChange={(event) => setVehicleFilter(event.target.value)} className="select">
+                <option value="">Вся техника</option>
+                {vehicleFilter && !selectedVehicle ? <option value={vehicleFilter}>Выбранная техника</option> : null}
+                {vehicles.map((vehicle) => (
+                  <option key={vehicle.id} value={vehicle.id}>
+                    {vehicle.number} · {vehicle.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+
             <label className="block">
               <span className="label">Регион</span>
               <select value={regionFilter} onChange={(event) => setRegionFilter(event.target.value)} className="select">
@@ -188,6 +209,19 @@ export default function DefectsPage() {
               </select>
             </label>
           </div>
+          {vehicleFilter ? (
+            <div className="mt-3 flex flex-wrap items-center gap-3 rounded-card bg-surface-soft px-4 py-3 text-sm text-foreground-secondary">
+              <span>
+                Показаны дефекты техники:{' '}
+                <span className="font-medium text-foreground">
+                  {selectedVehicle ? `${selectedVehicle.number} · ${selectedVehicle.name}` : 'выбранная техника'}
+                </span>
+              </span>
+              <button type="button" onClick={() => setVehicleFilter('')} className="text-primary hover:underline">
+                Показать все дефекты
+              </button>
+            </div>
+          ) : null}
         </section>
 
         {error ? <div className="alert-danger mb-4 rounded-card px-4 py-3 text-sm">{error}</div> : null}

@@ -225,7 +225,7 @@ function dropVehicleQrCodeColumn() {
         id TEXT PRIMARY KEY,
         number TEXT NOT NULL,
         name TEXT NOT NULL,
-        status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'repair')),
+        status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'repair', 'archived')),
         company_id TEXT DEFAULT 'default',
         region TEXT,
         last_scheduled_inspection TEXT,
@@ -248,7 +248,7 @@ function dropVehicleQrCodeColumn() {
         id,
         COALESCE(NULLIF(TRIM(number), ''), id),
         COALESCE(NULLIF(TRIM(name), ''), 'Без названия'),
-        CASE WHEN status IN ('active', 'repair') THEN status ELSE 'active' END,
+        CASE WHEN status IN ('active', 'repair', 'archived') THEN status ELSE 'active' END,
         COALESCE(company_id, 'default'),
         region,
         last_scheduled_inspection,
@@ -260,6 +260,65 @@ function dropVehicleQrCodeColumn() {
     db.run('ALTER TABLE vehicles_without_qr RENAME TO vehicles')
     db.run('COMMIT')
     console.log('Removed legacy vehicles.qr_code column')
+  } catch (error) {
+    db.run('ROLLBACK')
+    throw error
+  }
+}
+
+function ensureVehicleStatusSupportsArchived() {
+  const vehiclesTableSql = db.exec(`
+    SELECT sql
+    FROM sqlite_master
+    WHERE type = 'table' AND name = 'vehicles'
+  `)?.[0]?.values?.[0]?.[0]
+
+  if (typeof vehiclesTableSql === 'string' && vehiclesTableSql.includes("'archived'")) {
+    return
+  }
+
+  db.run('BEGIN TRANSACTION')
+  try {
+    db.run(`
+      CREATE TABLE vehicles_with_archived_status (
+        id TEXT PRIMARY KEY,
+        number TEXT NOT NULL,
+        name TEXT NOT NULL,
+        status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'repair', 'archived')),
+        company_id TEXT DEFAULT 'default',
+        region TEXT,
+        last_scheduled_inspection TEXT,
+        created_at TEXT DEFAULT (datetime('now'))
+      )
+    `)
+
+    db.run(`
+      INSERT INTO vehicles_with_archived_status (
+        id,
+        number,
+        name,
+        status,
+        company_id,
+        region,
+        last_scheduled_inspection,
+        created_at
+      )
+      SELECT
+        id,
+        COALESCE(NULLIF(TRIM(number), ''), id),
+        COALESCE(NULLIF(TRIM(name), ''), 'Без названия'),
+        CASE WHEN status IN ('active', 'repair', 'archived') THEN status ELSE 'active' END,
+        COALESCE(company_id, 'default'),
+        region,
+        last_scheduled_inspection,
+        COALESCE(created_at, datetime('now'))
+      FROM vehicles
+    `)
+
+    db.run('DROP TABLE vehicles')
+    db.run('ALTER TABLE vehicles_with_archived_status RENAME TO vehicles')
+    db.run('COMMIT')
+    console.log('Expanded vehicles.status to support archived')
   } catch (error) {
     db.run('ROLLBACK')
     throw error
@@ -343,6 +402,7 @@ function applySchemaMigrations() {
   ensureColumn('vehicles', 'last_scheduled_inspection', 'TEXT')
   ensureColumn('vehicles', 'created_at', 'TEXT')
   dropVehicleQrCodeColumn()
+  ensureVehicleStatusSupportsArchived()
 
   ensureColumn('inspections', 'company_id', "TEXT DEFAULT 'default'")
   ensureColumn('inspections', 'completed', 'INTEGER NOT NULL DEFAULT 0')
@@ -534,7 +594,7 @@ export async function initDatabase() {
       id TEXT PRIMARY KEY,
       number TEXT NOT NULL,
       name TEXT NOT NULL,
-      status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'repair')),
+      status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'repair', 'archived')),
       company_id TEXT DEFAULT 'default',
       region TEXT,
       last_scheduled_inspection TEXT,

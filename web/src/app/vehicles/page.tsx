@@ -50,11 +50,13 @@ const columns: ColumnConfig[] = [
 function getStatusLabel(status: string) {
   if (status === 'active') return 'В работе'
   if (status === 'repair') return 'Ремонт'
+  if (status === 'archived') return 'Архив'
   return status || 'Не указано'
 }
 
 function getStatusBadgeClass(status: string) {
   if (status === 'repair') return 'badge badge-warning'
+  if (status === 'archived') return 'badge badge-secondary'
   return 'badge badge-success'
 }
 
@@ -84,6 +86,7 @@ export default function VehiclesPage() {
   const [error, setError] = useState('')
   const [formError, setFormError] = useState('')
   const [saving, setSaving] = useState(false)
+  const [selectedVehicleIds, setSelectedVehicleIds] = useState<string[]>([])
 
   const loadData = async () => {
     try {
@@ -145,6 +148,11 @@ export default function VehiclesPage() {
     })
   }, [vehicles, searchParams])
 
+  useEffect(() => {
+    const availableIds = new Set(vehicles.map((vehicle) => vehicle.id))
+    setSelectedVehicleIds((current) => current.filter((id) => availableIds.has(id)))
+  }, [vehicles])
+
   const sortedVehicles = useMemo(() => {
     const filtered = regionFilter ? vehicles.filter((vehicle) => vehicle.region === regionFilter) : vehicles
 
@@ -163,6 +171,9 @@ export default function VehiclesPage() {
 
   const visibleVehicles = sortedVehicles.slice(0, visibleCount)
   const hasMoreVehicles = visibleCount < sortedVehicles.length
+  const selectedVehicleIdsSet = useMemo(() => new Set(selectedVehicleIds), [selectedVehicleIds])
+  const selectableVisibleVehicleIds = visibleVehicles.filter((vehicle) => vehicle.status !== 'archived').map((vehicle) => vehicle.id)
+  const allVisibleSelected = selectableVisibleVehicleIds.length > 0 && selectableVisibleVehicleIds.every((id) => selectedVehicleIdsSet.has(id))
 
   const handleSort = (key: SortableVehicleKey) => {
     setSortConfig((current) => ({
@@ -250,15 +261,36 @@ export default function VehiclesPage() {
     }
   }
 
-  const handleDelete = async (id: string) => {
-    if (!confirm('Удалить технику?')) return
+  const toggleVehicleSelection = (id: string) => {
+    setSelectedVehicleIds((current) => (current.includes(id) ? current.filter((item) => item !== id) : [...current, id]))
+  }
 
-    const result = await api.deleteVehicle(id)
+  const toggleVisibleSelection = () => {
+    if (allVisibleSelected) {
+      setSelectedVehicleIds((current) => current.filter((id) => !selectableVisibleVehicleIds.includes(id)))
+      return
+    }
+
+    setSelectedVehicleIds((current) => [...new Set([...current, ...selectableVisibleVehicleIds])])
+  }
+
+  const clearSelection = () => {
+    setSelectedVehicleIds([])
+  }
+
+  const handleArchiveVehicles = async (ids: string[]) => {
+    const archiveIds = [...new Set(ids)].filter(Boolean)
+    if (archiveIds.length === 0) return
+
+    if (!confirm(`Переместить в архив выбранную технику (${archiveIds.length})?`)) return
+
+    const result = await api.archiveVehicles(archiveIds)
     if (result.error) {
       setError(result.error)
       return
     }
 
+    setSelectedVehicleIds((current) => current.filter((id) => !archiveIds.includes(id)))
     await loadData()
   }
 
@@ -316,8 +348,21 @@ export default function VehiclesPage() {
           onToggleColumn={toggleColumn}
         />
 
-        <div className="mb-4 text-sm text-foreground-muted">
-          Показано {sortedVehicles.length} из {totalCount}
+        <div className="mb-4 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+          <div className="text-sm text-foreground-muted">
+            Показано {sortedVehicles.length} из {totalCount}
+          </div>
+          {selectedVehicleIds.length > 0 ? (
+            <div className="flex flex-wrap items-center gap-3 rounded-card border border-line bg-surface-soft px-4 py-3 text-sm">
+              <span className="font-medium text-foreground">Выбрано: {selectedVehicleIds.length}</span>
+              <button type="button" onClick={() => void handleArchiveVehicles(selectedVehicleIds)} className="btn btn-secondary btn-sm">
+                В архив
+              </button>
+              <button type="button" onClick={clearSelection} className="text-foreground-muted hover:text-foreground">
+                Снять выделение
+              </button>
+            </div>
+          ) : null}
         </div>
 
         {loading ? (
@@ -330,9 +375,13 @@ export default function VehiclesPage() {
             vehicles={visibleVehicles}
             hiddenColumns={hiddenColumns}
             sortConfig={sortConfig}
+            selectedIds={selectedVehicleIdsSet}
+            allVisibleSelected={allVisibleSelected}
             onSort={handleSort}
             onEdit={handleEdit}
-            onDelete={handleDelete}
+            onArchive={(id) => void handleArchiveVehicles([id])}
+            onToggleSelected={toggleVehicleSelection}
+            onToggleAllVisible={toggleVisibleSelection}
             onInspect={(vehicle) => {
               setSelectedVehicleForInspection(vehicle)
               setShowNewInspectionModal(true)
@@ -439,6 +488,7 @@ function VehiclesFilters({
           <option value="">Все статусы</option>
           <option value="active">В работе</option>
           <option value="repair">Ремонт</option>
+          <option value="archived">Архив</option>
         </select>
 
         <select value={regionFilter} onChange={(event) => onRegionChange(event.target.value)} className="select w-auto min-w-[190px]">
@@ -479,17 +529,25 @@ function VehiclesTable({
   vehicles,
   hiddenColumns,
   sortConfig,
+  selectedIds,
+  allVisibleSelected,
   onSort,
   onEdit,
-  onDelete,
+  onArchive,
+  onToggleSelected,
+  onToggleAllVisible,
   onInspect,
 }: {
   vehicles: VehicleRecord[]
   hiddenColumns: string[]
   sortConfig: SortConfig
+  selectedIds: Set<string>
+  allVisibleSelected: boolean
   onSort: (key: SortableVehicleKey) => void
   onEdit: (vehicle: VehicleRecord) => void
-  onDelete: (id: string) => void
+  onArchive: (id: string) => void
+  onToggleSelected: (id: string) => void
+  onToggleAllVisible: () => void
   onInspect: (vehicle: VehicleRecord) => void
 }) {
   return (
@@ -498,6 +556,15 @@ function VehiclesTable({
         <table className="min-w-full divide-y divide-line">
           <thead className="table-header">
             <tr>
+              <th className="w-12 px-6 py-3 text-left">
+                <input
+                  type="checkbox"
+                  checked={allVisibleSelected}
+                  onChange={onToggleAllVisible}
+                  aria-label="Выбрать все видимые строки"
+                  className="h-4 w-4 rounded border-line"
+                />
+              </th>
               {columns.map((column) =>
                 hiddenColumns.includes(column.key) ? null : (
                   <th
@@ -522,14 +589,16 @@ function VehiclesTable({
                   key={vehicle.id}
                   vehicle={vehicle}
                   hiddenColumns={hiddenColumns}
+                  selected={selectedIds.has(vehicle.id)}
                   onInspect={onInspect}
                   onEdit={onEdit}
-                  onDelete={onDelete}
+                  onArchive={onArchive}
+                  onToggleSelected={onToggleSelected}
                 />
               ))
             ) : (
               <tr>
-                <td colSpan={columns.length + 1} className="px-6 py-12 text-center text-foreground-muted">
+                <td colSpan={columns.length + 2} className="px-6 py-12 text-center text-foreground-muted">
                   Техника не найдена
                 </td>
               </tr>
@@ -544,18 +613,34 @@ function VehiclesTable({
 function VehicleRow({
   vehicle,
   hiddenColumns,
+  selected,
   onInspect,
   onEdit,
-  onDelete,
+  onArchive,
+  onToggleSelected,
 }: {
   vehicle: VehicleRecord
   hiddenColumns: string[]
+  selected: boolean
   onInspect: (vehicle: VehicleRecord) => void
   onEdit: (vehicle: VehicleRecord) => void
-  onDelete: (id: string) => void
+  onArchive: (id: string) => void
+  onToggleSelected: (id: string) => void
 }) {
+  const isArchived = vehicle.status === 'archived'
+
   return (
     <tr className="hover:bg-surface-hover">
+      <td className="whitespace-nowrap px-6 py-4">
+        <input
+          type="checkbox"
+          checked={selected}
+          disabled={isArchived}
+          onChange={() => onToggleSelected(vehicle.id)}
+          aria-label={`Выбрать технику ${vehicle.number}`}
+          className="h-4 w-4 rounded border-line disabled:opacity-40"
+        />
+      </td>
       {!hiddenColumns.includes('number') ? (
         <td className="whitespace-nowrap px-6 py-4 font-medium">
           <Link href={`/vehicles/${vehicle.id}`} className="text-primary hover:underline">
@@ -580,15 +665,19 @@ function VehicleRow({
         </td>
       ) : null}
       <td className="px-6 py-4 text-center">
-        <button onClick={() => onInspect(vehicle)} className="mr-3 text-status-success hover:underline">
-          Осмотр
-        </button>
+        {!isArchived ? (
+          <button onClick={() => onInspect(vehicle)} className="mr-3 text-status-success hover:underline">
+            Осмотр
+          </button>
+        ) : null}
         <button onClick={() => onEdit(vehicle)} className="mr-3 text-primary hover:underline">
           Изменить
         </button>
-        <button onClick={() => onDelete(vehicle.id)} className="text-status-danger hover:underline">
-          Удалить
-        </button>
+        {!isArchived ? (
+          <button onClick={() => onArchive(vehicle.id)} className="text-status-danger hover:underline">
+            В архив
+          </button>
+        ) : null}
       </td>
     </tr>
   )
@@ -680,6 +769,7 @@ function VehicleForm({
           <select value={formData.status} onChange={(event) => onChange({ ...formData, status: event.target.value })} className="select">
             <option value="active">В работе</option>
             <option value="repair">Ремонт</option>
+            {mode === 'edit' ? <option value="archived">Архив</option> : null}
           </select>
         </div>
       </div>

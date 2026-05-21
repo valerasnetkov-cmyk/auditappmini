@@ -101,7 +101,7 @@ export type MFAVerifyResponse = {
   user?: AuthUser
 }
 
-export type VehicleStatus = 'active' | 'repair' | string
+export type VehicleStatus = 'active' | 'repair' | 'archived' | string
 
 export type VehicleListItem = {
   id: string

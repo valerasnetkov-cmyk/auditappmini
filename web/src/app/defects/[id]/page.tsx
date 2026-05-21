@@ -141,7 +141,7 @@ export default function DefectDetailPage() {
       }
 
       await loadDefect()
-      showToast('Дефект возвращен в работу')
+      showToast('Дефект повторно открыт')
     } finally {
       setActionLoading(false)
     }

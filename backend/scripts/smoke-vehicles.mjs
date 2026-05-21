@@ -210,6 +210,40 @@ async function run() {
       headers: { Authorization: `Bearer ${login.token}` },
     })
 
+    const archivePlateOne = `А${String((suffix + 1) % 1000).padStart(3, '0')}МС${String((suffix % 900) + 100)}`
+    const archivePlateTwo = `А${String((suffix + 2) % 1000).padStart(3, '0')}НХ${String((suffix % 900) + 100)}`
+    const archiveVehicleOne = await request('/api/vehicles', {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({
+        number: archivePlateOne,
+        name: `Smoke Archive Vehicle 1 ${suffix}`,
+        status: 'active',
+      }),
+    })
+    const archiveVehicleTwo = await request('/api/vehicles', {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({
+        number: archivePlateTwo,
+        name: `Smoke Archive Vehicle 2 ${suffix}`,
+        status: 'repair',
+      }),
+    })
+
+    const archiveResult = await request('/api/vehicles/archive', {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ ids: [archiveVehicleOne.id, archiveVehicleTwo.id] }),
+    })
+
+    const vehiclesDefaultList = await request('/api/vehicles?limit=100', {
+      headers: { Authorization: `Bearer ${login.token}` },
+    })
+    const vehiclesArchiveList = await request('/api/vehicles?status=archived&limit=100', {
+      headers: { Authorization: `Bearer ${login.token}` },
+    })
+
     await request(`/api/vehicles/${created.id}`, {
       method: 'DELETE',
       headers: { Authorization: `Bearer ${login.token}` },
@@ -228,6 +262,9 @@ async function run() {
           oldRegionRemovedAfterMerge: !regionsAfterMerge.some((region) => region.id === createdRegion.id),
           vehicleMovedToMergedRegion: vehicleAfterRegionMerge.region === mergedRegionName,
           regionClearedOnDelete: vehicleAfterRegionDelete.region === null,
+          archivedVehicles: archiveResult.archived,
+          archivedHiddenFromDefaultList: !vehiclesDefaultList.data.some((vehicle) => archiveResult.ids.includes(vehicle.id)),
+          archivedVisibleInArchiveFilter: archiveResult.ids.every((id) => vehiclesArchiveList.data.some((vehicle) => vehicle.id === id && vehicle.status === 'archived')),
           staleRegionIdFallbackUpdated: fallbackUpdatedRegion.name === fallbackRenamedRegionName,
           staleRegionIdOldNameRemoved: !regionsAfterFallbackUpdate.some((region) => region.name === fallbackRegionName),
           inspectionId: inspection.id,

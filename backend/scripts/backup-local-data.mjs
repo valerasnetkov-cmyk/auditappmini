@@ -1,4 +1,5 @@
 import fs from 'node:fs/promises'
+import crypto from 'node:crypto'
 import path from 'node:path'
 import process from 'node:process'
 
@@ -39,10 +40,67 @@ async function copyIfExists(source, destination) {
   return true
 }
 
+async function hashFile(filePath) {
+  if (!(await exists(filePath))) return null
+  const data = await fs.readFile(filePath)
+  return crypto.createHash('sha256').update(data).digest('hex')
+}
+
+async function fileStats(filePath) {
+  if (!(await exists(filePath))) return null
+  const stat = await fs.stat(filePath)
+  return {
+    sizeBytes: stat.size,
+    sha256: stat.isFile() ? await hashFile(filePath) : null,
+  }
+}
+
+async function directoryStats(directoryPath) {
+  if (!(await exists(directoryPath))) {
+    return {
+      exists: false,
+      fileCount: 0,
+      totalBytes: 0,
+    }
+  }
+
+  let fileCount = 0
+  let totalBytes = 0
+
+  async function walk(currentPath) {
+    const entries = await fs.readdir(currentPath, { withFileTypes: true })
+
+    for (const entry of entries) {
+      const entryPath = path.join(currentPath, entry.name)
+
+      if (entry.isDirectory()) {
+        await walk(entryPath)
+        continue
+      }
+
+      if (entry.isFile()) {
+        const stat = await fs.stat(entryPath)
+        fileCount += 1
+        totalBytes += stat.size
+      }
+    }
+  }
+
+  await walk(directoryPath)
+
+  return {
+    exists: true,
+    fileCount,
+    totalBytes,
+  }
+}
+
 await fs.mkdir(backupDir, { recursive: true })
 
 const databaseCopied = await copyIfExists(databasePath, path.join(backupDir, 'database.sqlite'))
 const uploadsCopied = await copyIfExists(uploadsDir, path.join(backupDir, 'uploads'))
+const backupDatabasePath = path.join(backupDir, 'database.sqlite')
+const backupUploadsDir = path.join(backupDir, 'uploads')
 
 const manifest = {
   createdAt: new Date().toISOString(),
@@ -51,6 +109,18 @@ const manifest = {
   backupDir,
   databaseCopied,
   uploadsCopied,
+  database: {
+    sourcePath: databasePath,
+    backupPath: backupDatabasePath,
+    copied: databaseCopied,
+    ...(await fileStats(backupDatabasePath)),
+  },
+  uploads: {
+    sourcePath: uploadsDir,
+    backupPath: backupUploadsDir,
+    copied: uploadsCopied,
+    ...(await directoryStats(backupUploadsDir)),
+  },
 }
 
 await fs.writeFile(path.join(backupDir, 'manifest.json'), JSON.stringify(manifest, null, 2), 'utf8')

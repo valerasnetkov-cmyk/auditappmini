@@ -8,7 +8,10 @@
     "ios": "expo run:ios",
     "web": "expo start --web",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "doctor": "expo-doctor",
+    "doctor": "node scripts/expo-doctor-safe.mjs",
+    "doctor:launch": "node scripts/launch-doctor.mjs",
+    "doctor:production": "node scripts/launch-doctor.mjs --production --doctor-env-file .env.production",
+    "doctor:online": "expo-doctor",
     "install:check": "npx expo install --check",
     "audit:moderate": "npm audit --audit-level=moderate",
     "verify": "npm run typecheck && npm run install:check && npm run doctor"
@@ -39,6 +42,7 @@
   },
   "private": true,
   "overrides": {
-    "postcss": "^8.5.14"
+    "postcss": "^8.5.14",
+    "uuid": "^11.1.1"
   }
 }

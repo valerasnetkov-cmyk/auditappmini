@@ -41,6 +41,141 @@
 
 ---
 
+## 2026-05-22
+
+### Added
+- **Изолированный launch E2E runner**: добавлен `scripts/e2e-local.mjs`, который сам поднимает backend и web на свободных локальных портах, использует временную SQLite-БД/uploads, пробрасывает `CORS_ORIGINS`, запускает Chromium Playwright и очищает временные данные после проверки.
+- **E2E в launch gate**: root-команда `npm run verify:launch` теперь включает `npm run verify:e2e`, а GitHub Actions workflow устанавливает Playwright Chromium перед запуском launch-проверки.
+- **Web E2E helper-команды**: в web-пакет добавлены `prepare:e2e:chromium` и `test:e2e:chromium` для явного запуска/подготовки Chromium-проверок.
+- **Production env шаблоны**: добавлены `backend/.env.production.example`, `web/.env.production.example` и `mobile/.env.production.example` с обязательными production-переменными для JWT, CORS, persistent storage, публичных API URL, owner setup и опциональной Directus-интеграции.
+- **Production runbook**: добавлен `docs/production-env.md` с порядком подготовки секретов, persistent storage, проверки `doctor:production`, запуска backend/PM2, web build и mobile production build.
+- **Production doctor команда**: добавлен root/backend/web/mobile script `doctor:production`, который проверяет отдельные `.env.production` в строгом production-режиме.
+- **Mobile launch doctor**: добавлен `mobile/scripts/launch-doctor.mjs`, который проверяет `EXPO_PUBLIC_API_URL` и запрещает localhost/emulator/LAN/placeholder URL в production.
+- **Backup verification**: добавлен `backend/scripts/verify-local-backup.mjs` и команды `npm run backup:verify` / `npm --prefix backend run backup:verify` для read-only проверки последнего или указанного backup.
+- **Backup smoke gate**: добавлен `backend/scripts/smoke-backup.mjs` и `npm --prefix backend run smoke:backup`; общий backend smoke теперь проверяет создание backup, SQLite `PRAGMA integrity_check`, counts ключевых таблиц и копирование uploads.
+- **Backup recovery runbook**: добавлен `docs/backup-restore.md` с порядком создания, проверки и ручного восстановления backup перед пилотной миграцией.
+- **Release runbook**: добавлен `docs/release-runbook.md` с единым порядком выкладки: code gate, production env gate, backup gate, build/start, post-release UAT, rollback и release evidence.
+- **Release scripts**: добавлены root-команды `release:verify`, `release:production-check` и `release:check` для предрелизной проверки, production env/backup gate и полного релизного gate.
+- **Backend health/readiness endpoints**: добавлены unauthenticated endpoints `/health`, `/api/health`, `/api/health/live` и `/api/health/ready`; readiness проверяет SQLite query и возможность записи во временный файл внутри `UPLOAD_DIR`.
+- **Health smoke gate**: добавлен `backend/scripts/smoke-health.mjs` и `npm --prefix backend run smoke:health`; общий backend smoke теперь начинается с проверки liveness/readiness endpoint.
+- **Production guard smoke**: добавлен `backend/scripts/smoke-production-guard.mjs` и `npm --prefix backend run smoke:production-guard`; общий backend smoke теперь проверяет, что production doctor запрещает публичную регистрацию.
+
+### Changed
+- **Mobile doctor без зависимости от внешней сети**: `mobile/scripts/expo-doctor-safe.mjs` запускает Expo Doctor с `EXPO_DOCTOR_WARN_ON_NETWORK_ERRORS=1` и отключённой React Native Directory network-проверкой; строгий сетевой режим оставлен отдельной командой `npm --prefix mobile run doctor:online`.
+- **Launch doctor с явным env-файлом**: `backend/scripts/launch-doctor.mjs` теперь поддерживает `--production`, `--mode`, `--doctor-env-file` и `LAUNCH_ENV_FILE`, показывает `envFileExists` и отлавливает placeholder-значения в JWT, CORS, admin/password и `WEB_APP_URL`.
+- **Web launch doctor**: `web/scripts/launch-doctor.mjs` получил `--production`, `--mode`, `--doctor-env-file`, `LAUNCH_ENV_FILE`, проверку placeholder URL и HTTPS-требование для `NEXT_PUBLIC_API_URL` в production.
+- **Root launch doctor**: `npm run doctor:launch` и `npm run verify:launch` теперь проверяют backend, web и mobile env-контуры, а не только backend.
+- **PM2 production env**: `backend/ecosystem.config.cjs` автоматически подхватывает `backend/.env.production`, если он есть, и пробрасывает production-секреты/лимиты/Directus-настройки в backend-процесс.
+- **Launch checklist и README**: `docs/launch-checklist.md`, `web/README.md` и `mobile/README.md` теперь описывают production env для backend/web/mobile и обязательную проверку `npm run doctor:production` перед релизом.
+- **Backup manifest**: `backend/scripts/backup-local-data.mjs` теперь дополняет manifest размером и SHA-256 SQLite-файла, статистикой uploads и структурированными `database`/`uploads` блоками, сохраняя старые поля `databaseCopied`/`uploadsCopied`.
+- **Launch/production docs**: `docs/launch-checklist.md` и `docs/production-env.md` теперь требуют запуск `backup:verify` после каждого pilot backup.
+- **Связка launch docs**: `docs/launch-checklist.md`, `docs/production-env.md` и `docs/backup-restore.md` теперь ссылаются на единый release runbook, чтобы порядок выкладки не расходился между документами.
+- **Deployment docs**: `docs/deployment.md` и `docs/release-runbook.md` теперь описывают `/api/health/ready` как основной endpoint для reverse proxy/monitoring readiness, а `/health` как лёгкую liveness-проверку.
+- **SaaS registration model**: публичный `/api/auth/register` оставлен только для local/dev-сценариев и отключается через `PUBLIC_REGISTRATION_ENABLED=false`; в production backend и doctor запрещают включать саморегистрацию, потому что компании создаёт админ ресурса, а менеджеров/инспекторов — владелец компании.
+- **Company features smoke stability**: `backend/scripts/smoke-company-features.mjs` теперь выбирает свободные локальные порты и ждёт `/api/health/ready`, чтобы launch gate не падал случайно из-за занятого порта или чужого HTTP-сервиса.
+- **Backend dependency security**: `uuid` в backend обновлён до `^11.1.1`, чтобы закрыть moderate advisory `uuid <11.1.1` без `npm audit fix --force`.
+- **Web/mobile dependency security**: для web и active Expo mobile добавлен npm override `uuid@^11.1.1`, закрывающий транзитивный advisory через `exceljs` и Expo `xcode` без breaking `npm audit fix --force`.
+
+### Verified
+- `node --check backend/src/server.js`
+- `node --check backend/scripts/smoke-health.mjs`
+- `node --check backend/scripts/smoke-production-guard.mjs`
+- `node --check backend/scripts/smoke-company-features.mjs`
+- `npm --prefix backend run smoke:production-guard`
+- `npm --prefix backend run smoke:company-features`
+- `npm --prefix backend audit --audit-level=moderate`
+- `npm --prefix web audit --audit-level=high`
+- `npm --prefix mobile run audit:moderate`
+- `npm --prefix backend run smoke:health`
+- `npm --prefix backend run smoke`
+- `npm run verify:launch`
+- `node -e "<package release scripts check>"`
+- `npm run release:verify`
+- `node --check backend/scripts/backup-local-data.mjs`
+- `node --check backend/scripts/verify-local-backup.mjs`
+- `node --check backend/scripts/smoke-backup.mjs`
+- `npm --prefix backend run smoke:backup`
+- `npm --prefix backend run backup:verify`
+- `npm --prefix backend run smoke`
+- `node --check backend/scripts/launch-doctor.mjs`
+- `node --check web/scripts/launch-doctor.mjs`
+- `node --check mobile/scripts/launch-doctor.mjs`
+- `node --check backend/ecosystem.config.cjs`
+- `npm --prefix backend run doctor:launch`
+- `npm --prefix web run doctor:launch`
+- `npm --prefix mobile run doctor:launch`
+- `npm run doctor:launch`
+- `node backend/scripts/launch-doctor.mjs --production --doctor-env-file <temporary-valid-env>`
+- `node backend/scripts/launch-doctor.mjs --production --doctor-env-file .env.production.example` — ожидаемо падает, пока placeholder-значения не заменены.
+- `node web/scripts/launch-doctor.mjs --production --doctor-env-file <temporary-valid-env>`
+- `node mobile/scripts/launch-doctor.mjs --production --doctor-env-file <temporary-valid-env>`
+- `node web/scripts/launch-doctor.mjs --production --doctor-env-file .env.production.example` — ожидаемо падает, пока placeholder API URL не заменён.
+- `node mobile/scripts/launch-doctor.mjs --production --doctor-env-file .env.production.example` — ожидаемо падает, пока placeholder API URL не заменён.
+- `node --check scripts/e2e-local.mjs`
+- `node --check mobile/scripts/expo-doctor-safe.mjs`
+- `npm --prefix mobile run verify`
+- `npm --prefix web run lint`
+- `npm run verify:e2e`
+- `npm run verify:launch`
+
+## 2026-05-21
+
+### Fixed
+- **Launch E2E gate для дефектов и MFA**: Playwright-тесты обновлены под текущий контракт backend/UI — API-запросы идут в backend на 3001, тестовые госномера генерируются в валидном российском формате, дефекты создаются через актуальный endpoint `/api/inspections/:id/defects`, а MFA verify отправляет поле `token`.
+- **Статус дефекта в детальной карточке**: endpoint `GET /api/defects/:id` теперь возвращает `status` и `closed_at`, поэтому после закрытия дефекта detail-страница переключается на действие «Вернуть в работу» и не остаётся в устаревшем состоянии.
+- **Селекторы формы входа для E2E**: поля email/password получили стабильные `name` и `data-testid`, чтобы тесты и автоматизация не зависели от текста интерфейса.
+
+### Changed
+- **E2E helper-слой**: добавлен общий `web/e2e/tests/helpers.ts` для авторизации, создания тестовой техники, осмотров, дефектов, пользователей MFA и безопасной cleanup-архивации тестовых записей.
+- **Toast переоткрытия дефекта**: в детальной карточке дефекта сообщение приведено к единому тексту «Дефект повторно открыт», как в карточке техники.
+
+### Verified
+- `node --check backend/src/server.js`
+- `node --check backend/scripts/smoke-inspections.mjs`
+- `npm --prefix backend run smoke:inspections`
+- `npm --prefix web run lint`
+- `npm --prefix web run build`
+- `npm --prefix web run test:e2e -- --project=Chromium`
+- `npm run verify:launch`
+
+### Added
+- **Фильтр дефектов по технике из осмотра**: страница «Дефекты» теперь читает параметр `vehicle` из URL, загружает дефекты выбранной техники и показывает активный фильтр с возможностью вернуться к общему журналу.
+- **Контекст осмотра в журнале дефектов**: список дефектов теперь получает `inspection_id` из backend API, чтобы переход обратно в карточку осмотра был доступен из отфильтрованного списка.
+- **Множественная архивация техники**: на вкладке техники добавлен выбор строк чекбоксами, панель выбранных элементов и действие «В архив» для массового переноса техники без физического удаления данных.
+- **Backend API архивации техники**: добавлены tenant-safe endpoints `POST /api/vehicles/archive` и `POST /api/vehicles/:id/archive` со статусной историей перехода в `archived`; `DELETE /api/vehicles/:id` теперь также выполняет мягкую архивацию вместо физического удаления.
+
+### Changed
+- **Статус техники `archived`**: схема SQLite расширена для архивного статуса; основной список и справочник выбора техники по умолчанию скрывают архивные записи, а фильтр «Архив» позволяет просмотреть их отдельно.
+- **Действие удаления на вкладке техники**: одиночное действие в строке теперь переносит технику в архив вместо физического удаления из базы.
+
+### Verified
+- `node --check backend/src/server.js`
+- `node --check backend/scripts/smoke-inspections.mjs`
+- `npm --prefix backend run smoke:inspections`
+- `npm --prefix web run lint`
+- `npm --prefix web run build`
+- `node --check backend/src/server.js`
+- `node --check backend/src/db.js`
+- `node --check backend/scripts/smoke-vehicles.mjs`
+- `npm --prefix backend run smoke:vehicles`
+- `npm --prefix backend run smoke`
+- `npm --prefix web run lint`
+- `npm --prefix web run build`
+
+### Fixed
+- **Закрытие дефекта в карточке техники**: endpoint `/api/vehicles/:id/defects` теперь возвращает `status` и `closed_at`, поэтому после нажатия «Закрыть дефект» карточка техники обновляет бейдж на «Закрыт» и показывает действие возврата в работу.
+- **Photo file lifecycle cleanup**: deleting photos, defects or inspections now removes the related `original_url`, `webp_url`, `thumb_url` and legacy `url` files from the protected uploads directory, while repeated inspection edits continue preserving existing defect photos unless the defect/photo record is actually removed.
+- **Tenant-safe photo deletion queries**: bulk photo deletions for inspections and defects now include `company_id` and collect photo rows before deleting DB records, so filesystem cleanup follows the same tenant boundary as the API.
+
+### Changed
+- **Inspection smoke uploads isolation**: `smoke-inspections` now runs with an isolated temporary `UPLOAD_DIR`, asserts generated WebP/original files exist after upload, and verifies files are removed after deleting an inspection.
+
+### Verified
+- `node --check backend/src/server.js`
+- `node --check backend/scripts/smoke-inspections.mjs`
+- `npm --prefix backend run smoke:inspections`
+- `npm --prefix backend run smoke`
+
 ## 2026-05-20
 
 ### Changed

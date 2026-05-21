@@ -4,20 +4,43 @@ import fs from 'node:fs/promises'
 import process from 'node:process'
 
 const HOST = '127.0.0.1'
-const PORT = Number(process.env.PORT || 4977 + (process.pid % 500))
-const DIRECTUS_PORT = Number(process.env.DIRECTUS_PORT || 5977 + (process.pid % 500))
+let PORT = Number(process.env.PORT || 0)
+let DIRECTUS_PORT = Number(process.env.DIRECTUS_PORT || 0)
 const DATABASE_PATH = `./.tmp-smoke/smoke-company-features-${process.pid}.sqlite`
-const BASE_URL = `http://${HOST}:${PORT}`
-const DIRECTUS_URL = `http://${HOST}:${DIRECTUS_PORT}`
+let BASE_URL = ''
+let DIRECTUS_URL = ''
 const DIRECTUS_TOKEN = 'smoke-company-features-token'
 
 function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms))
 }
 
+function getFreePort() {
+  return new Promise((resolve, reject) => {
+    const server = http.createServer()
+    server.once('error', reject)
+    server.listen(0, HOST, () => {
+      const address = server.address()
+      const port = typeof address === 'object' && address ? address.port : null
+      server.close(() => {
+        if (!port) {
+          reject(new Error('Could not allocate a free port'))
+          return
+        }
+
+        resolve(port)
+      })
+    })
+  })
+}
+
 function listen(server, port) {
-  return new Promise((resolve) => {
-    server.listen(port, HOST, resolve)
+  return new Promise((resolve, reject) => {
+    server.once('error', reject)
+    server.listen(port, HOST, () => {
+      server.off('error', reject)
+      resolve()
+    })
   })
 }
 
@@ -92,16 +115,10 @@ async function waitForServer(timeoutMs = 30000) {
 
   while (Date.now() - startedAt < timeoutMs) {
     try {
-      const response = await fetch(`${BASE_URL}/api/auth/login`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          email: 'admin@example.com',
-          password: 'admin123',
-        }),
-      })
+      const response = await fetch(`${BASE_URL}/api/health/ready`)
+      const payload = await response.json().catch(() => null)
 
-      if (response.status !== 500) {
+      if (response.ok && payload?.ready) {
         return
       }
     } catch {
@@ -135,6 +152,17 @@ function assertErrorIncludes(response, expectedText, scope) {
 }
 
 async function run() {
+  if (!PORT) {
+    PORT = await getFreePort()
+  }
+
+  if (!DIRECTUS_PORT) {
+    DIRECTUS_PORT = await getFreePort()
+  }
+
+  BASE_URL = `http://${HOST}:${PORT}`
+  DIRECTUS_URL = `http://${HOST}:${DIRECTUS_PORT}`
+
   const fakeDirectus = createFakeDirectusServer()
   await listen(fakeDirectus, DIRECTUS_PORT)
 

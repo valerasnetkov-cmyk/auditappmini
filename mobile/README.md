@@ -92,6 +92,28 @@ npm run doctor
 npm run audit:moderate
 ```
 
+## Production env перед сборкой
+
+Перед production build используйте отдельный env-файл:
+
+```powershell
+Copy-Item .env.production.example .env.production
+```
+
+В `mobile/.env.production` должен быть публичный HTTPS backend API:
+
+```env
+EXPO_PUBLIC_API_URL=https://api.<project-domain>/api
+```
+
+Проверьте env перед сборкой:
+
+```powershell
+npm run doctor:production
+```
+
+Production build нельзя выпускать с `localhost`, `10.0.2.2` или LAN IP — такие адреса подходят только для локальной разработки.
+
 ## Проверяемый MVP-flow
 
 1. Войти пользователем backend.

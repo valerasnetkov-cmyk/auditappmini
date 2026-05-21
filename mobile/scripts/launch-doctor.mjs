@@ -4,7 +4,7 @@ import process from 'node:process'
 import { fileURLToPath } from 'node:url'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
-const webRoot = path.resolve(__dirname, '..')
+const mobileRoot = path.resolve(__dirname, '..')
 const errors = []
 const warnings = []
 
@@ -57,7 +57,7 @@ function parseArgs(argv) {
 
 function resolveEnvPath(value) {
   if (!value) return null
-  return path.isAbsolute(value) ? value : path.resolve(webRoot, value)
+  return path.isAbsolute(value) ? value : path.resolve(mobileRoot, value)
 }
 
 function parseEnvFile(filePath) {
@@ -94,12 +94,12 @@ if (explicitEnvFile) {
   }
 } else {
   envFile = candidateEnvFiles
-    .map((name) => path.join(webRoot, name))
+    .map((name) => path.join(mobileRoot, name))
     .find((filePath) => fs.existsSync(filePath))
 }
 
 const fileEnv = parseEnvFile(envFile)
-const apiUrl = process.env.NEXT_PUBLIC_API_URL || fileEnv.NEXT_PUBLIC_API_URL || ''
+const apiUrl = process.env.EXPO_PUBLIC_API_URL || fileEnv.EXPO_PUBLIC_API_URL || ''
 const doctorMode = args.mode || process.env.NODE_ENV || fileEnv.NODE_ENV || 'development'
 const isProduction = doctorMode === 'production'
 const allowedModes = new Set(['development', 'test', 'production'])
@@ -121,14 +121,18 @@ function looksPlaceholder(value) {
   return /example\.com|replace-with|change-me/i.test(value || '')
 }
 
-requireProduction(Boolean(apiUrl), 'NEXT_PUBLIC_API_URL must be configured')
-requireProduction(/^https?:\/\//.test(apiUrl), 'NEXT_PUBLIC_API_URL must be an absolute URL')
-requireProduction(!apiUrl.includes('localhost') && !apiUrl.includes('127.0.0.1'), 'NEXT_PUBLIC_API_URL must not point to localhost')
-requireProduction(!looksPlaceholder(apiUrl), 'NEXT_PUBLIC_API_URL must not use a placeholder URL')
-requireProduction(!apiUrl || apiUrl.startsWith('https://'), 'NEXT_PUBLIC_API_URL should use HTTPS in production')
+function pointsToLocalNetwork(value) {
+  return /localhost|127\.0\.0\.1|10\.0\.2\.2|10\.0\.3\.2|192\.168\.|172\.(1[6-9]|2\d|3[0-1])\.|10\./.test(value || '')
+}
+
+requireProduction(Boolean(apiUrl), 'EXPO_PUBLIC_API_URL must be configured')
+requireProduction(/^https?:\/\//.test(apiUrl), 'EXPO_PUBLIC_API_URL must be an absolute URL')
+requireProduction(!pointsToLocalNetwork(apiUrl), 'EXPO_PUBLIC_API_URL must not point to localhost, emulator host, or private LAN in production')
+requireProduction(!looksPlaceholder(apiUrl), 'EXPO_PUBLIC_API_URL must not use a placeholder URL')
+requireProduction(!apiUrl || apiUrl.startsWith('https://'), 'EXPO_PUBLIC_API_URL should use HTTPS in production')
 
 if (apiUrl && !apiUrl.endsWith('/api')) {
-  warnings.push('NEXT_PUBLIC_API_URL is expected to end with /api for the current backend client')
+  warnings.push('EXPO_PUBLIC_API_URL is expected to end with /api for the current mobile client')
 }
 
 const result = {

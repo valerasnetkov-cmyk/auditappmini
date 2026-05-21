@@ -1,36 +1,69 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Auditmini Web
 
-## Getting Started
+Next.js web-панель Auditmini находится в папке `web/`.
 
-First, run the development server:
+## Локальный запуск
 
-```bash
+Из корня проекта:
+
+```powershell
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Или отдельно:
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+```powershell
+npm --prefix backend run dev
+npm --prefix web run dev
+```
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+Web по умолчанию открывается на `http://localhost:3002`, backend API — на `http://localhost:3001/api`.
 
-## Learn More
+## Локальный env
 
-To learn more about Next.js, take a look at the following resources:
+```powershell
+cd C:\Projects\Auditmini\auditappmini\web
+Copy-Item .env.example .env.local
+```
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+Для локальной разработки:
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+```env
+NEXT_PUBLIC_API_URL=http://localhost:3001/api
+```
 
-## Deploy on Vercel
+## Production env
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+Перед production build используйте отдельный env-файл:
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+```powershell
+Copy-Item .env.production.example .env.production
+```
+
+В `web/.env.production` должен быть публичный HTTPS backend API:
+
+```env
+NEXT_PUBLIC_API_URL=https://api.<project-domain>/api
+```
+
+`NEXT_PUBLIC_API_URL` встраивается в frontend bundle и виден браузеру. Секреты в `NEXT_PUBLIC_*` переменных хранить нельзя.
+
+Проверка production env:
+
+```powershell
+npm run doctor:production
+```
+
+## Проверки
+
+```powershell
+npm run lint
+npm run build
+npm run doctor:launch
+```
+
+E2E-проверки запускаются из корня проекта через изолированный runner:
+
+```powershell
+npm run verify:e2e
+```

@@ -306,6 +306,13 @@ class ApiClient {
     })
   }
 
+  async archiveVehicles(ids: string[]) {
+    return this.request<{ requested: number; matched: number; archived: number; skipped: number; ids: string[] }>('/vehicles/archive', {
+      method: 'POST',
+      body: JSON.stringify({ ids }),
+    })
+  }
+
   async getRegions(params?: { includeEmpty?: boolean }) {
     const query = params?.includeEmpty ? '?includeEmpty=1' : ''
     return this.request<RegionRecord[]>(`/regions${query}`)

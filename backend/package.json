@@ -14,9 +14,12 @@
     "pm2:logs": "pm2 logs audit-backend",
     "pm2:delete": "pm2 delete audit-backend",
     "backup:local": "node scripts/backup-local-data.mjs",
+    "backup:verify": "node scripts/verify-local-backup.mjs",
     "doctor:launch": "node scripts/launch-doctor.mjs",
+    "doctor:production": "node scripts/launch-doctor.mjs --production --doctor-env-file .env.production",
     "audit:launch": "npm audit --audit-level=moderate",
-    "smoke": "npm run smoke:auth && npm run smoke:vehicles && npm run smoke:inspections && npm run smoke:isolation && npm run smoke:analytics && npm run smoke:saas-admin && npm run smoke:company-limits && npm run smoke:company-features && npm run smoke:directus:service && npm run smoke:directus && npm run smoke:owner-setup",
+    "smoke": "npm run smoke:health && npm run smoke:production-guard && npm run smoke:auth && npm run smoke:vehicles && npm run smoke:inspections && npm run smoke:isolation && npm run smoke:analytics && npm run smoke:saas-admin && npm run smoke:company-limits && npm run smoke:company-features && npm run smoke:backup && npm run smoke:directus:service && npm run smoke:directus && npm run smoke:owner-setup",
+    "smoke:health": "node scripts/smoke-health.mjs",
     "smoke:auth": "node scripts/smoke-auth.mjs",
     "smoke:vehicles": "node scripts/smoke-vehicles.mjs",
     "smoke:inspections": "node scripts/smoke-inspections.mjs",
@@ -25,10 +28,12 @@
     "smoke:saas-admin": "node scripts/smoke-saas-admin.mjs",
     "smoke:company-limits": "node scripts/smoke-company-limits.mjs",
     "smoke:company-features": "node scripts/smoke-company-features.mjs",
+    "smoke:backup": "node scripts/smoke-backup.mjs",
     "smoke:mfa": "node scripts/smoke-mfa.mjs",
     "smoke:directus": "node scripts/smoke-directus.mjs",
     "smoke:directus:service": "node scripts/smoke-directus-service.mjs",
-    "smoke:owner-setup": "node scripts/smoke-owner-setup.mjs"
+    "smoke:owner-setup": "node scripts/smoke-owner-setup.mjs",
+    "smoke:production-guard": "node scripts/smoke-production-guard.mjs"
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",
@@ -40,6 +45,6 @@
     "sharp": "^0.34.5",
     "speakeasy": "^2.0.0",
     "sql.js": "^1.10.0",
-    "uuid": "^9.0.1"
+    "uuid": "^11.1.1"
   }
 }

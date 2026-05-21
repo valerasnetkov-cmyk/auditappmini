@@ -1,49 +1,33 @@
-import { test, expect } from '@playwright/test'
+import { expect, test } from '@playwright/test'
 import * as speakeasy from 'speakeasy'
-
-// This test uses API calls to set up MFA for a user and then verifies the flow via API.
-// It demonstrates the end-to-end MFA enablement without relying on full UI interactions.
+import { API_BASE, apiHeaders, createUser, deleteUser, getAdminToken } from './helpers'
 
 test('MFA Admin: setup and verify for a user (API-driven)', async ({ request }) => {
-  // Backend API base for tests (configurable via env, default to 3001 if available)
-  const API_BASE = process.env.BACKEND_API_BASE || 'http://localhost:3001'
-  // Admin login
-  const login = await request.post(`${API_BASE}/api/auth/login`, {
-    data: { email: 'admin@example.com', password: 'admin123' },
-  })
-  const loginBody = await login.json()
-  const token = loginBody?.token
-  expect(token).toBeTruthy()
+  const adminToken = await getAdminToken(request)
+  const user = await createUser(request, adminToken, 'MFA Playwright')
 
-  const headers = { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }
+  try {
+    const headers = apiHeaders(adminToken)
 
-  // Create a test user
-  const suffix = Date.now()
-  const userEmail = `mfa-playwright-${suffix}@example.com`
-  const created = await request.post(`${API_BASE}/api/users`, {
-    headers,
-    data: { email: userEmail, password: 'mfa123', name: 'MFA Playwright', role: 'inspector' },
-  })
-  const user = await created.json()
-  expect(user.id).toBeTruthy()
+    const setup = await request.post(`${API_BASE}/api/users/${user.id}/mfa/setup`, { headers })
+    if (!setup.ok()) throw new Error(`MFA setup failed with HTTP ${setup.status()}: ${await setup.text()}`)
 
-  // MFA Setup
-  const setup = await request.post(`${API_BASE}/api/users/${user.id}/mfa/setup`, { headers })
-  const setupData = await setup.json()
-  const otpauth_url = setupData?.data?.otpauth_url
-  const secret = setupData?.data?.secret
-  expect(otpauth_url).toBeTruthy()
-  expect(secret).toBeTruthy()
+    const setupData = (await setup.json()) as { otpauth_url?: string; secret?: string }
+    expect(setupData.otpauth_url).toBeTruthy()
+    const secret = setupData.secret
+    expect(secret).toBeTruthy()
+    if (!secret) throw new Error('MFA setup response does not contain secret')
 
-  // Generate TOTp
-  const code = speakeasy.totp({ secret, encoding: 'base32' })
+    const code = speakeasy.totp({ secret, encoding: 'base32' })
+    const verify = await request.post(`${API_BASE}/api/users/${user.id}/mfa/verify`, {
+      headers,
+      data: { token: code },
+    })
+    if (!verify.ok()) throw new Error(`MFA verify failed with HTTP ${verify.status()}: ${await verify.text()}`)
 
-  // Verify MFA
-  const verify = await request.post(`${API_BASE}/api/users/${user.id}/mfa/verify`, {
-    headers,
-    data: { code },
-  })
-  expect(await verify.text()).toBeFalsy()
-  // Clean up: delete user
-  await request.delete(`${API_BASE}/api/users/${user.id}`, { headers })
+    const verifyData = (await verify.json()) as { token?: string }
+    expect(verifyData.token).toBeTruthy()
+  } finally {
+    await deleteUser(request, adminToken, user.id)
+  }
 })

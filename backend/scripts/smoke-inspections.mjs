@@ -1,10 +1,12 @@
 import { spawn } from 'node:child_process'
 import fs from 'node:fs/promises'
+import path from 'node:path'
 import process from 'node:process'
 
 const HOST = '127.0.0.1'
 const PORT = Number(process.env.PORT || 4015 + (process.pid % 500))
 const DATABASE_PATH = `./.tmp-smoke/smoke-inspections-${process.pid}.sqlite`
+const UPLOAD_DIR = `./.tmp-smoke/uploads-inspections-${process.pid}`
 const BASE_URL = `http://${HOST}:${PORT}`
 const VALID_PNG_BYTES = Uint8Array.from(Buffer.from(
   'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/p9sAAAAASUVORK5CYII=',
@@ -56,6 +58,38 @@ async function request(path, options = {}, expectedStatus = 200) {
   return response.json()
 }
 
+function uploadUrlToFilePath(url) {
+  if (typeof url !== 'string' || !url.startsWith('/uploads/')) return null
+  return path.resolve(process.cwd(), UPLOAD_DIR, url.slice('/uploads/'.length))
+}
+
+async function assertPhotoFilesExist(photo, label) {
+  const urls = new Set([photo.url, photo.original_url, photo.webp_url, photo.thumb_url].filter(Boolean))
+  for (const url of urls) {
+    const filePath = uploadUrlToFilePath(url)
+    if (!filePath) continue
+    try {
+      await fs.access(filePath)
+    } catch {
+      throw new Error(`${label} expected photo file to exist: ${filePath}`)
+    }
+  }
+}
+
+async function assertPhotoFilesRemoved(photo, label) {
+  const urls = new Set([photo.url, photo.original_url, photo.webp_url, photo.thumb_url].filter(Boolean))
+  for (const url of urls) {
+    const filePath = uploadUrlToFilePath(url)
+    if (!filePath) continue
+    try {
+      await fs.access(filePath)
+      throw new Error(`${label} expected photo file to be removed: ${filePath}`)
+    } catch (error) {
+      if (error?.code !== 'ENOENT') throw error
+    }
+  }
+}
+
 async function uploadInspectionPhoto(inspectionId, photoType, headers) {
   const formData = new FormData()
   formData.append('photo', new Blob([VALID_PNG_BYTES], { type: 'image/png' }), `${photoType}.png`)
@@ -82,7 +116,7 @@ async function uploadDefectPhoto(defectId, headers) {
 async function run() {
   const server = spawn(process.execPath, ['src/server.js'], {
     cwd: process.cwd(),
-    env: { ...process.env, PORT: String(PORT), DATABASE_PATH },
+    env: { ...process.env, PORT: String(PORT), DATABASE_PATH, UPLOAD_DIR },
     stdio: ['ignore', 'pipe', 'pipe'],
   })
 
@@ -182,6 +216,7 @@ async function run() {
     if (!uploadedDefectPhoto.webp_url?.endsWith('/main.webp') || !uploadedDefectPhoto.thumb_url?.endsWith('/thumb.webp') || !uploadedDefectPhoto.original_url?.endsWith('/original.png')) {
       throw new Error(`Defect photo WebP metadata is incomplete: ${JSON.stringify(uploadedDefectPhoto)}`)
     }
+    await assertPhotoFilesExist(uploadedDefectPhoto, 'uploaded defect photo')
 
     await request(`/api/inspections/${inspection.id}`, {
       method: 'PUT',
@@ -237,6 +272,7 @@ async function run() {
     if (!uploadedInspectionPhoto.webp_url?.endsWith('/main.webp') || !uploadedInspectionPhoto.thumb_url?.endsWith('/thumb.webp') || !uploadedInspectionPhoto.original_url?.endsWith('/original.png')) {
       throw new Error(`Inspection photo WebP metadata is incomplete: ${JSON.stringify(uploadedInspectionPhoto)}`)
     }
+    await assertPhotoFilesExist(uploadedInspectionPhoto, 'uploaded inspection photo')
 
     const incompleteCompletion = await fetch(`${BASE_URL}/api/inspections/${quickInspection.id}/complete`, {
       method: 'POST',
@@ -281,10 +317,34 @@ async function run() {
       headers: authHeaders,
     })
 
+    const closeDefectResult = await request(`/api/defects/${originalDefect.id}/close`, {
+      method: 'POST',
+      headers: authHeaders,
+    })
+
+    const vehicleDefectsAfterClose = await request(`/api/vehicles/${vehicle.id}/defects?limit=10`, {
+      headers: authHeaders,
+    })
+    const defectDetailsAfterClose = await request(`/api/defects/${originalDefect.id}`, {
+      headers: authHeaders,
+    })
+    const closedVehicleDefect = Array.isArray(vehicleDefectsAfterClose)
+      ? vehicleDefectsAfterClose.find((defect) => defect.id === originalDefect.id)
+      : null
+
+    if (closeDefectResult.status !== 'closed' || closedVehicleDefect?.status !== 'closed' || !closedVehicleDefect?.closed_at) {
+      throw new Error(`Vehicle defect endpoint did not return closed status after close: ${JSON.stringify(closedVehicleDefect)}`)
+    }
+
+    if (defectDetailsAfterClose.status !== 'closed' || !defectDetailsAfterClose.closed_at) {
+      throw new Error(`Defect detail endpoint did not return closed status after close: ${JSON.stringify(defectDetailsAfterClose)}`)
+    }
+
     await request(`/api/inspections/${inspection.id}`, {
       method: 'DELETE',
       headers: authHeaders,
     }, 204)
+    await assertPhotoFilesRemoved(uploadedDefectPhoto, 'deleted inspection defect photo')
 
     await request(`/api/vehicles/${vehicle.id}`, {
       method: 'DELETE',
@@ -311,6 +371,8 @@ async function run() {
           inspectionsListed: inspectionsList.data?.length || 0,
           defectsListed: defectsList.data?.length || 0,
           vehicleDefectsListed: Array.isArray(vehicleDefects) ? vehicleDefects.length : 0,
+          vehicleDefectCloseReflected: closedVehicleDefect?.status === 'closed',
+          defectDetailCloseReflected: defectDetailsAfterClose.status === 'closed',
           accidentValidationStatus: invalidAccidentInspectionResponse.status,
           requiredPhotoMissingCount: incompleteBody.missingPhotos.length,
           quickInspectionCompleted: Boolean(completedQuickInspection.completed),
@@ -327,6 +389,7 @@ async function run() {
     server.kill()
     await sleep(300)
     await fs.rm(DATABASE_PATH, { force: true })
+    await fs.rm(UPLOAD_DIR, { recursive: true, force: true })
   }
 
   if (stderr.trim()) {

@@ -7,9 +7,12 @@
     "start": "next start -p 3002",
     "build": "next build",
     "doctor:launch": "node scripts/launch-doctor.mjs",
+    "doctor:production": "node scripts/launch-doctor.mjs --production --doctor-env-file .env.production",
     "lint": "eslint",
     "prepare:e2e": "npx playwright install",
+    "prepare:e2e:chromium": "npx playwright install chromium",
     "test:e2e": "npx playwright test",
+    "test:e2e:chromium": "npx playwright test --project=Chromium",
     "test:e2e:ci": "npx playwright test --reporter=github",
     "test:e2e:defects": "npx playwright test web/e2e/tests/defects-ui.spec.ts web/e2e/tests/defect-timeline.spec.ts web/e2e/tests/defect-timeline-detail.spec.ts web/e2e/tests/defect-detail-close.spec.ts web/e2e/tests/defect-detail-reopen.spec.ts",
     "test:e2e:defects:ci": "npx playwright test web/e2e/tests/defects-ui.spec.ts web/e2e/tests/defect-timeline.spec.ts web/e2e/tests/defect-timeline-detail.spec.ts web/e2e/tests/defect-detail-close.spec.ts web/e2e/tests/defect-detail-reopen.spec.ts --reporter=github"
@@ -39,6 +42,7 @@
     "typescript": "^5"
   },
   "overrides": {
-    "postcss": "^8.5.13"
+    "postcss": "^8.5.13",
+    "uuid": "^11.1.1"
   }
 }

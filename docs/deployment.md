@@ -104,6 +104,21 @@ service role keys
 - Не хранить production ссылки в README.
 - Не писать реальные домены клиентов в публичной документации.
 
+## Health checks
+
+Backend отдаёт безопасные unauthenticated health endpoints:
+
+```txt
+/health
+/api/health
+/api/health/live
+/api/health/ready
+```
+
+`/health`, `/api/health` и `/api/health/live` подходят для liveness-проверки процесса.
+
+`/api/health/ready` подходит для readiness/monitoring: он проверяет, что backend может выполнить SQLite query и записать временный probe-файл в `UPLOAD_DIR`. Endpoint не возвращает секреты, tenant data или пользовательские данные.
+
 ## Regional deployment
 
 Для multi-company SaaS используется несколько региональных окружений:

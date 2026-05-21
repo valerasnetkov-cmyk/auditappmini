@@ -1,63 +1,33 @@
-import { test, expect } from '@playwright/test'
+import { expect, test } from '@playwright/test'
 import * as speakeasy from 'speakeasy'
+import { createUser, deleteUser, getAdminToken, loginAsAdmin, WEB_BASE } from './helpers'
 
-// UI end-to-end MFA flow for an admin configuring MFA per user
-test('MFA UI: end-to-end flow (admin per-user) - UI path', async ({ page }) => {
-  const base = 'http://localhost:3002'
+test('MFA UI: end-to-end flow (admin per-user) - UI path', async ({ page, request }) => {
+  await loginAsAdmin(page)
 
-  // Try login via UI; if login form not present, skip gracefully
-  await page.goto(`${base}/login`).catch(() => {})
-  const hasEmail = await page.locator('input[name="email"]').count()
-  if (hasEmail > 0) {
-    await page.fill('input[name="email"]', 'admin@example.com')
-    const hasPwd = await page.locator('input[name="password"]').count()
-    if (hasPwd > 0) {
-      await page.fill('input[name="password"]', 'admin123')
-      const loginBtn = page.locator('button[type="submit"]')
-      if (await loginBtn.count() > 0) {
-        await loginBtn.click()
-        // wait to land on admin area
-        await page.waitForURL('**/admin/**', { timeout: 15000 }).catch(() => {})
-      }
+  const adminToken = await getAdminToken(request)
+  const user = await createUser(request, adminToken, 'MFA UI Playwright')
+
+  try {
+    await page.goto(`${WEB_BASE}/admin/mfa/${user.id}`)
+
+    await page.getByRole('button', { name: 'Подготовить MFA' }).click()
+    await expect(page.locator('img[alt="QR-код MFA"]')).toBeVisible({ timeout: 10000 })
+
+    const showSecretButton = page.getByRole('button', { name: 'Показать секрет' })
+    if (await showSecretButton.count()) {
+      await showSecretButton.click()
     }
-  } else {
-    // If there is no login form, skip UI login path
-    test.skip('UI login page not available in this environment')
-  }
 
-  // Go to MFA list and open first user
-  await page.goto(`${base}/admin/mfa`)
-  const firstRow = page.locator('table tbody tr').first()
-  await firstRow.waitFor()
-  const setupLink = firstRow.locator('a', { hasText: 'Настроить MFA' })
-  if (await setupLink.count() === 0) {
-    test.skip('No user with MFA actions found')
-  }
-  await setupLink.first().click()
+    const secret = (await page.locator('code').first().innerText()).trim()
+    expect(secret).toBeTruthy()
 
-  // Step 1: Prepare MFA
-  await page.click('button:has-text("Подготовить MFA")')
-  await page.waitForSelector('img[alt="QR-код MFA"]')
+    const code = speakeasy.totp({ secret, encoding: 'base32' })
+    await page.fill('input[placeholder="6-значный код"]', code)
+    await page.getByRole('button', { name: 'Подтвердить' }).click()
 
-  // Step 2: Reveal and read secret
-  const showSecretBtn = page.locator('button:has-text("Показать секрет")')
-  if (await showSecretBtn.count() > 0) {
-    await showSecretBtn.first().click()
+    await expect(page.getByText('MFA успешно активирован')).toBeVisible({ timeout: 10000 })
+  } finally {
+    await deleteUser(request, adminToken, user.id)
   }
-  const secret = await page.locator('code').first().innerText()
-  // Generate TOTp using the secret
-  const code = speakeasy.totp({ secret: secret.trim(), encoding: 'base32' })
-  // Copy actions (optional)
-  if (await page.locator('button:has-text("Копировать URL MFA")').count() > 0) {
-    await page.click('button:has-text("Копировать URL MFA")')
-  }
-  if (await page.locator('button:has-text("Копировать секрет")').count() > 0) {
-    await page.click('button:has-text("Копировать секрет")')
-  }
-
-  // Step 3: Verify TOTp
-  await page.fill('input[placeholder="6-значный код"]', code)
-  await page.click('button:has-text("Подтвердить")')
-  // Expect a success indicator on the page
-  await expect(page.locator('text=MFA успешно активирован')).toBeVisible()
 })

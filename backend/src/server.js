@@ -38,6 +38,9 @@ const PORT = process.env.PORT || 3001
 const DEFAULT_JWT_SECRET = 'audit-secret-key-2024'
 const JWT_SECRET = process.env.JWT_SECRET || DEFAULT_JWT_SECRET
 const isProduction = process.env.NODE_ENV === 'production'
+const PUBLIC_REGISTRATION_ENABLED = process.env.PUBLIC_REGISTRATION_ENABLED
+  ? process.env.PUBLIC_REGISTRATION_ENABLED === 'true'
+  : !isProduction
 const corsOrigins = (process.env.CORS_ORIGINS || 'http://localhost:3000,http://localhost:3002,http://localhost:8083,http://localhost:8081,http://localhost:8082')
   .split(',')
   .map(origin => origin.trim())
@@ -79,6 +82,10 @@ function assertProductionConfig() {
   if (process.env.DIRECTUS_TOKEN && process.env.DIRECTUS_TOKEN.includes('change-me')) {
     throw new Error('DIRECTUS_TOKEN cannot use a placeholder value in production')
   }
+
+  if (PUBLIC_REGISTRATION_ENABLED) {
+    throw new Error('PUBLIC_REGISTRATION_ENABLED must be false in production; company users are created by company owners')
+  }
 }
 
 assertProductionConfig()
@@ -97,6 +104,7 @@ const storage = multer.diskStorage({
 const MAX_FILE_SIZE = Number(process.env.MAX_FILE_SIZE || 15 * 1024 * 1024)
 const JSON_BODY_LIMIT = process.env.JSON_BODY_LIMIT || '2mb'
 const ALLOWED_UPLOAD_MIME_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp'])
+const VEHICLE_STATUSES = new Set(['active', 'repair', 'archived'])
 const upload = multer({
   storage,
   limits: { fileSize: MAX_FILE_SIZE },
@@ -144,14 +152,66 @@ function sendError(res, status, message) {
   return res.status(status).json({ error: message })
 }
 
-app.get('/api/health', (req, res) => {
-  const dbOk = db ? true : false
-  res.json({
-    status: dbOk ? 'ok' : 'error',
+function buildLivenessPayload() {
+  return {
+    status: 'ok',
     timestamp: new Date().toISOString(),
     uptime: process.uptime(),
+    uptimeSeconds: Math.round(process.uptime()),
     version: '1.0.0',
-  })
+    service: 'audit-backend',
+  }
+}
+
+async function checkUploadsWritable() {
+  const probePath = path.join(uploadsDir, `.healthcheck-${process.pid}-${Date.now()}.tmp`)
+  await fs.promises.mkdir(uploadsDir, { recursive: true })
+  await fs.promises.writeFile(probePath, 'ok', 'utf8')
+  await fs.promises.unlink(probePath)
+  return true
+}
+
+async function buildReadinessPayload() {
+  const checks = {
+    database: false,
+    uploads: false,
+  }
+  const errors = []
+
+  try {
+    const result = db.prepare('SELECT 1 as ok').get()
+    checks.database = Number(result?.ok) === 1
+    if (!checks.database) {
+      errors.push('Database query did not return expected result')
+    }
+  } catch (error) {
+    errors.push(`Database check failed: ${error.message}`)
+  }
+
+  try {
+    checks.uploads = await checkUploadsWritable()
+  } catch (error) {
+    errors.push(`Uploads check failed: ${error.message}`)
+  }
+
+  const ok = Object.values(checks).every(Boolean)
+
+  return {
+    ...buildLivenessPayload(),
+    status: ok ? 'ok' : 'error',
+    ready: ok,
+    checks,
+    errors,
+  }
+}
+
+app.get(['/health', '/api/health', '/api/health/live'], (req, res) => {
+  res.json(buildLivenessPayload())
+})
+
+app.get('/api/health/ready', async (req, res) => {
+  const payload = await buildReadinessPayload()
+  res.status(payload.ready ? 200 : 503).json(payload)
 })
 
 app.use((req, res, next) => {
@@ -264,6 +324,10 @@ async function removePhotoFiles(photo) {
     const resolved = resolveUploadPath(url.slice('/uploads/'.length))
     if (resolved) await removeFileIfExists(resolved.filePath)
   }))
+}
+
+async function removePhotoFilesForRows(photos) {
+  await Promise.all((photos || []).map((photo) => removePhotoFiles(photo)))
 }
 
 async function processUploadedPhoto({ tempPath, originalName, mimetype, inspectionId, photoId }) {
@@ -694,6 +758,67 @@ function recordVehicleStatusChange({ vehicleId, oldStatus, newStatus, reason, ch
     INSERT INTO vehicle_status_history (id, vehicle_id, old_status, new_status, reason, changed_by, created_at)
     VALUES (?, ?, ?, ?, ?, ?, datetime('now'))
   `).run(uuidv4(), vehicleId, oldStatus, newStatus, reason || null, changedBy)
+}
+
+function archiveVehiclesByIds({ ids, companyId, changedBy }) {
+  const uniqueIds = [...new Set((Array.isArray(ids) ? ids : []).map((id) => String(id || '').trim()).filter(Boolean))]
+
+  if (uniqueIds.length === 0) {
+    return { error: 'Не выбрана техника для архивации', status: 400 }
+  }
+
+  if (uniqueIds.length > 500) {
+    return { error: 'За один раз можно архивировать не более 500 единиц техники', status: 400 }
+  }
+
+  const placeholders = uniqueIds.map(() => '?').join(', ')
+  const existingVehicles = db.prepare(`
+    SELECT id, status
+    FROM vehicles
+    WHERE company_id = ? AND id IN (${placeholders})
+  `).all(companyId, ...uniqueIds)
+
+  if (existingVehicles.length === 0) {
+    return { error: API_MESSAGES.vehicleNotFound, status: 404 }
+  }
+
+  const vehiclesToArchive = existingVehicles.filter((vehicle) => vehicle.status !== 'archived')
+  if (vehiclesToArchive.length === 0) {
+    return {
+      requested: uniqueIds.length,
+      matched: existingVehicles.length,
+      archived: 0,
+      skipped: uniqueIds.length,
+      ids: [],
+    }
+  }
+
+  const archiveIds = vehiclesToArchive.map((vehicle) => vehicle.id)
+  const archivePlaceholders = archiveIds.map(() => '?').join(', ')
+
+  db.prepare(`
+    UPDATE vehicles
+    SET status = 'archived'
+    WHERE company_id = ? AND id IN (${archivePlaceholders})
+  `).run(companyId, ...archiveIds)
+
+  vehiclesToArchive.forEach((vehicle) => {
+    recordVehicleStatusChange({
+      vehicleId: vehicle.id,
+      oldStatus: vehicle.status,
+      newStatus: 'archived',
+      reason: 'Archived from vehicles list',
+      changedBy,
+    })
+  })
+
+  return {
+    requested: uniqueIds.length,
+    matched: existingVehicles.length,
+    archived: vehiclesToArchive.length,
+    skipped: uniqueIds.length - vehiclesToArchive.length,
+    ids: archiveIds,
+  }
 }
 
 function upsertSettingValue(key, value) {
@@ -1133,8 +1258,14 @@ app.post('/api/users/:id/mfa/verify', authenticate, (req, res) => {
   res.json({ token: tokenJwt, user: { id: user.id, email: user.email, name: user.name, role: user.role, company_id: user.company_id || companyId } })
 })
 
-// Registration endpoint for mobile app
+// Legacy public registration endpoint for local/mobile experiments.
+// In the SaaS production model companies are created by the resource admin,
+// and company users are created by the company owner from the user panel.
 app.post('/api/auth/register', (req, res) => {
+  if (!PUBLIC_REGISTRATION_ENABLED) {
+    return sendError(res, 403, 'Public registration is disabled')
+  }
+
   const { email, password, name } = req.body
   // Public registration: always register as inspector
   const role = 'inspector'
@@ -1428,9 +1559,14 @@ app.get('/api/vehicles', authenticate, (req, res) => {
     params.push(`%${search}%`, `%${search}%`)
   }
 
-  if (status !== 'all') {
+  if (status && status !== 'all') {
+    if (!VEHICLE_STATUSES.has(String(status))) {
+      return sendError(res, 400, 'Неизвестный статус техники')
+    }
     whereClause += ' AND status = ?'
     params.push(status)
+  } else {
+    whereClause += " AND status != 'archived'"
   }
 
   const countQuery = db.prepare(`SELECT COUNT(*) as count FROM vehicles WHERE ${whereClause}`)
@@ -1475,7 +1611,12 @@ app.get('/api/vehicles', authenticate, (req, res) => {
 app.get('/api/vehicles/list', authenticate, (req, res) => {
   try {
     const companyId = req.user.company_id || 'default'
-    const vehicles = db.prepare('SELECT id, number, name, status, region FROM vehicles WHERE company_id = ? ORDER BY number').all(companyId)
+    const vehicles = db.prepare(`
+      SELECT id, number, name, status, region
+      FROM vehicles
+      WHERE company_id = ? AND status != 'archived'
+      ORDER BY number
+    `).all(companyId)
     res.json(vehicles)
   } catch (err) {
     console.error('Vehicles list error:', err)
@@ -1509,7 +1650,7 @@ app.get('/api/vehicles/:id/defects', authenticate, (req, res) => {
 
   const limit = Number(req.query.limit || 20)
   const defects = db.prepare(`
-    SELECT d.id, d.inspection_id, d.title, d.comment, d.created_at,
+    SELECT d.id, d.inspection_id, d.title, d.comment, d.created_at, d.status, d.closed_at,
            i.type as inspection_type, i.created_at as inspection_date, i.created_at as inspection_time,
            i.accident_occurred_at, i.accident_location,
            v.id as vehicle_id, v.number as vehicle_number, v.name as vehicle_name, v.region as vehicle_region,
@@ -1543,6 +1684,10 @@ app.get('/api/vehicles/:id', authenticate, (req, res) => {
 app.post('/api/vehicles', authenticate, (req, res) => {
   const { number, name, status = 'active', region } = req.body
   const companyId = req.user.company_id || 'default'
+  if (!VEHICLE_STATUSES.has(String(status))) {
+    return sendError(res, 400, 'Неизвестный статус техники')
+  }
+
   const validated = validateVehiclePayload({ number, name, region })
   if (validated.error) {
     return sendError(res, 400, validated.error)
@@ -1643,9 +1788,46 @@ app.post('/api/vehicles/import', authenticate, (req, res) => {
   res.json({ imported: imported.length, errors, vehicles: imported, regionsAdded: regionsAdded.length })
 })
 
+app.post('/api/vehicles/archive', authenticate, (req, res) => {
+  if (!ensureManager(req, res)) return
+
+  const companyId = req.user.company_id || 'default'
+  const result = archiveVehiclesByIds({
+    ids: req.body?.ids,
+    companyId,
+    changedBy: req.user.id,
+  })
+
+  if (result.error) {
+    return sendError(res, result.status || 400, result.error)
+  }
+
+  res.json(result)
+})
+
+app.post('/api/vehicles/:id/archive', authenticate, (req, res) => {
+  if (!ensureManager(req, res)) return
+
+  const companyId = req.user.company_id || 'default'
+  const result = archiveVehiclesByIds({
+    ids: [req.params.id],
+    companyId,
+    changedBy: req.user.id,
+  })
+
+  if (result.error) {
+    return sendError(res, result.status || 400, result.error)
+  }
+
+  res.json(result)
+})
+
 app.put('/api/vehicles/:id', authenticate, (req, res) => {
   const { number, name, status, region, reason } = req.body
   const companyId = req.user.company_id || 'default'
+  if (!VEHICLE_STATUSES.has(String(status))) {
+    return sendError(res, 400, 'Неизвестный статус техники')
+  }
 
   const oldVehicle = getVehicleById(req.params.id, companyId)
   if (!oldVehicle) {
@@ -1688,12 +1870,16 @@ app.delete('/api/vehicles/:id', authenticate, (req, res) => {
   if (!ensureManager(req, res)) return
 
   const companyId = req.user.company_id || 'default'
-  const vehicle = getVehicleById(req.params.id, companyId)
-  if (!vehicle) {
-    return sendError(res, 404, API_MESSAGES.vehicleNotFound)
+  const result = archiveVehiclesByIds({
+    ids: [req.params.id],
+    companyId,
+    changedBy: req.user.id,
+  })
+
+  if (result.error) {
+    return sendError(res, result.status || 400, result.error)
   }
 
-  db.prepare('DELETE FROM vehicles WHERE id = ? AND company_id = ?').run(req.params.id, companyId)
   res.status(204).send()
 })
 
@@ -1951,7 +2137,7 @@ app.get('/api/inspections/:id', authenticate, (req, res) => {
   res.json({ ...inspection, checklist_items: checklist, defects, photos })
 })
 
-app.put('/api/inspections/:id', authenticate, (req, res) => {
+app.put('/api/inspections/:id', authenticate, async (req, res) => {
   const companyId = req.user.company_id || 'default'
   const inspection = db.prepare('SELECT * FROM inspections WHERE id = ? AND company_id = ?').get(req.params.id, companyId)
   if (!inspection) {
@@ -2023,9 +2209,11 @@ app.put('/api/inspections/:id', authenticate, (req, res) => {
     SET checklist_item_id = ?, title = ?, comment = ?
     WHERE id = ? AND company_id = ?
   `)
+  const selectDefectPhotos = db.prepare(`SELECT ${PHOTO_SELECT_COLUMNS} FROM photos WHERE defect_id = ? AND company_id = ?`)
   const deleteDefectPhotos = db.prepare('DELETE FROM photos WHERE defect_id = ? AND company_id = ?')
   const deleteDefect = db.prepare('DELETE FROM defects WHERE id = ? AND company_id = ?')
   const retainedChecklistItemIds = new Set()
+  const photosToRemove = []
 
   checklist.forEach((item) => {
     const existingChecklistItem = (item.id && existingChecklistById.get(item.id)) || existingChecklistByTitle.get(item.title)
@@ -2049,6 +2237,7 @@ app.put('/api/inspections/:id', authenticate, (req, res) => {
     }
 
     if (existingDefect) {
+      photosToRemove.push(...selectDefectPhotos.all(existingDefect.id, companyId))
       deleteDefectPhotos.run(existingDefect.id, companyId)
       deleteDefect.run(existingDefect.id, companyId)
     }
@@ -2062,10 +2251,13 @@ app.put('/api/inspections/:id', authenticate, (req, res) => {
 
   existingDefects.forEach((defect) => {
     if (defect.checklist_item_id && !retainedChecklistItemIds.has(defect.checklist_item_id)) {
+      photosToRemove.push(...selectDefectPhotos.all(defect.id, companyId))
       deleteDefectPhotos.run(defect.id, companyId)
       deleteDefect.run(defect.id, companyId)
     }
   })
+
+  await removePhotoFilesForRows(photosToRemove)
 
   const updatedInspection = db.prepare(`
     SELECT i.*, v.number as vehicle_number, v.name as vehicle_name, u.name as inspector_name
@@ -2082,7 +2274,7 @@ app.put('/api/inspections/:id', authenticate, (req, res) => {
   res.json({ ...updatedInspection, checklist_items: updatedChecklist, defects: updatedDefects, photos })
 })
 
-app.delete('/api/inspections/:id', authenticate, (req, res) => {
+app.delete('/api/inspections/:id', authenticate, async (req, res) => {
   const { id } = req.params
   const companyId = req.user.company_id || 'default'
   
@@ -2091,10 +2283,12 @@ app.delete('/api/inspections/:id', authenticate, (req, res) => {
     return sendError(res, 404, API_MESSAGES.inspectionNotFound)
   }
   
+  const photos = db.prepare(`SELECT ${PHOTO_SELECT_COLUMNS} FROM photos WHERE inspection_id = ? AND company_id = ?`).all(id, companyId)
   db.prepare('DELETE FROM checklist_items WHERE inspection_id = ?').run(id)
   db.prepare('DELETE FROM defects WHERE inspection_id = ?').run(id)
-  db.prepare('DELETE FROM photos WHERE inspection_id = ?').run(id)
+  db.prepare('DELETE FROM photos WHERE inspection_id = ? AND company_id = ?').run(id, companyId)
   db.prepare('DELETE FROM inspections WHERE id = ? AND company_id = ?').run(id, companyId)
+  await removePhotoFilesForRows(photos)
   
   res.status(204).send()
 })
@@ -2133,7 +2327,7 @@ app.get('/api/defects', authenticate, (req, res) => {
   const { count } = countQuery.get(...params)
 
   const query = db.prepare(`
-    SELECT d.id, d.title, d.comment, d.created_at as created_at, d.status as status, d.closed_at as closed_at,
+    SELECT d.id, d.inspection_id, d.title, d.comment, d.created_at as created_at, d.status as status, d.closed_at as closed_at,
            i.type as inspection_type, i.created_at as inspection_date, i.created_at as inspection_time,
            i.accident_occurred_at, i.accident_location,
            v.id as vehicle_id, v.number as vehicle_number, v.name as vehicle_name, v.region as vehicle_region,
@@ -2167,7 +2361,7 @@ app.get('/api/defects', authenticate, (req, res) => {
 app.get('/api/defects/:id', authenticate, (req, res) => {
   const companyId = req.user.company_id || 'default'
   const defect = db.prepare(`
-    SELECT d.id, d.inspection_id, d.title, d.comment, d.created_at,
+    SELECT d.id, d.inspection_id, d.title, d.comment, d.created_at, d.status, d.closed_at,
            i.type as inspection_type, i.created_at as inspection_date, i.created_at as inspection_time,
            i.accident_occurred_at, i.accident_location,
            v.id as vehicle_id, v.number as vehicle_number, v.name as vehicle_name, v.region as vehicle_region,
@@ -2292,7 +2486,7 @@ app.post('/api/defects/:id/photos', authenticate, uploadPhoto, async (req, res) 
   res.status(201).json(photo)
 })
 
-app.delete('/api/photos/:id', authenticate, (req, res) => {
+app.delete('/api/photos/:id', authenticate, async (req, res) => {
   const { id } = req.params
   const companyId = req.user.company_id || 'default'
   const photo = db.prepare(`
@@ -2306,7 +2500,7 @@ app.delete('/api/photos/:id', authenticate, (req, res) => {
   }
 
   db.prepare('DELETE FROM photos WHERE id = ?').run(id)
-  removePhotoFiles(photo).catch((err) => console.warn('[uploads] Failed to remove photo files:', err.message))
+  await removePhotoFiles(photo)
   res.status(204).send()
 })
 
@@ -2323,14 +2517,16 @@ app.put('/api/defects/:id', authenticate, (req, res) => {
   res.json(updatedDefect)
 })
 
-app.delete('/api/defects/:id', authenticate, (req, res) => {
+app.delete('/api/defects/:id', authenticate, async (req, res) => {
   const { id } = req.params
   const companyId = req.user.company_id || 'default'
   const defect = db.prepare('SELECT id FROM defects WHERE id = ? AND company_id = ?').get(id, companyId)
   if (!defect) return sendError(res, 404, API_MESSAGES.defectNotFound)
   
-  db.prepare('DELETE FROM photos WHERE defect_id = ?').run(id)
+  const photos = db.prepare(`SELECT ${PHOTO_SELECT_COLUMNS} FROM photos WHERE defect_id = ? AND company_id = ?`).all(id, companyId)
+  db.prepare('DELETE FROM photos WHERE defect_id = ? AND company_id = ?').run(id, companyId)
   db.prepare('DELETE FROM defects WHERE id = ? AND company_id = ?').run(id, companyId)
+  await removePhotoFilesForRows(photos)
   
   res.status(204).send()
 })
