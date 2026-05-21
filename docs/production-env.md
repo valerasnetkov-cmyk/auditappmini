@@ -51,12 +51,19 @@ EXPO_PUBLIC_API_URL=https://api.<project-domain>/api
 | Переменная | Назначение |
 | --- | --- |
 | `NODE_ENV=production` | Включает production-guard backend. |
+| `TRUST_PROXY` | Явно задаёт доверенный reverse proxy для корректного `req.ip` и rate limit; обычно `1` за одним HTTPS proxy. |
+| `SECURITY_HSTS_ENABLED` / `SECURITY_HSTS_MAX_AGE` | Включает HSTS-заголовок для production API. |
+| `GRACEFUL_SHUTDOWN_TIMEOUT_MS` | Таймаут корректного завершения HTTP-сервера при `SIGTERM`/`SIGINT` перед принудительным закрытием соединений. |
+| `REQUEST_ID_HEADER` | Header для request id, по умолчанию `x-request-id`; backend возвращает его в каждом ответе. |
+| `ACCESS_LOG_FORMAT` / `ACCESS_LOG_SLOW_MS` / `ACCESS_LOG_SKIP_PATHS` | Формат access logs (`json`, `text`, `off`), порог slow request и comma-separated список путей, которые не нужно писать в access log. Для production рекомендуется `json` и пропуск частых health-check путей. |
 | `JWT_SECRET` | Длинный уникальный секрет JWT, минимум 32 символа. |
 | `PUBLIC_REGISTRATION_ENABLED=false` | Запрещает публичную саморегистрацию; пользователей компании создаёт владелец компании. |
 | `CORS_ORIGINS` | Реальный origin web-приложения, без `*`. |
 | `DATABASE_PATH` | Постоянный путь к SQLite базе для пилота. |
 | `UPLOAD_DIR` | Постоянный каталог фото, не внутри временной release-папки. |
 | `BACKUP_DIR` | Постоянный каталог локальных backup-снимков. |
+| `SENSITIVE_RATE_LIMIT_WINDOW_MS` / `SENSITIVE_RATE_LIMIT_MAX` | Общий лимит на чувствительные endpoint входа/setup. |
+| `AUTH_ACCOUNT_RATE_LIMIT_MAX` | Дополнительный лимит на попытки входа/setup по конкретному аккаунту/идентификатору. |
 | `ADMIN_EMAIL` / `ADMIN_PASSWORD` | Первичный админ SaaS, если нужен автосид при первом старте. |
 | `WEB_APP_URL` | Публичный URL web-приложения для owner setup ссылок. |
 
@@ -121,6 +128,16 @@ node -r dotenv/config src/server.js dotenv_config_path=.env.production
 ```powershell
 npm --prefix backend run pm2:start
 ```
+
+Для хранения журналов PM2 включите ротацию перед длительным пилотом:
+
+```powershell
+npm --prefix backend run pm2:logrotate:install
+npm --prefix backend run pm2:logrotate:configure
+pm2 conf pm2-logrotate
+```
+
+Рекомендуемые значения в script: размер файла `20M`, хранение `14` архивов и сжатие старых логов. Backend access-log уже содержит `timestamp` и `requestId`, поэтому PM2 timestamp prefix включать не нужно — он может мешать парсингу JSON-логов.
 
 ## 8. Запуск web
 

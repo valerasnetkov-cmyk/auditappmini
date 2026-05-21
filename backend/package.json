@@ -13,12 +13,14 @@
     "pm2:restart": "pm2 restart ecosystem.config.cjs",
     "pm2:logs": "pm2 logs audit-backend",
     "pm2:delete": "pm2 delete audit-backend",
+    "pm2:logrotate:install": "pm2 install pm2-logrotate",
+    "pm2:logrotate:configure": "pm2 set pm2-logrotate:max_size 20M && pm2 set pm2-logrotate:retain 14 && pm2 set pm2-logrotate:compress true && pm2 set pm2-logrotate:dateFormat YYYY-MM-DD_HH-mm-ss",
     "backup:local": "node scripts/backup-local-data.mjs",
     "backup:verify": "node scripts/verify-local-backup.mjs",
     "doctor:launch": "node scripts/launch-doctor.mjs",
     "doctor:production": "node scripts/launch-doctor.mjs --production --doctor-env-file .env.production",
     "audit:launch": "npm audit --audit-level=moderate",
-    "smoke": "npm run smoke:health && npm run smoke:production-guard && npm run smoke:auth && npm run smoke:vehicles && npm run smoke:inspections && npm run smoke:isolation && npm run smoke:analytics && npm run smoke:saas-admin && npm run smoke:company-limits && npm run smoke:company-features && npm run smoke:backup && npm run smoke:directus:service && npm run smoke:directus && npm run smoke:owner-setup",
+    "smoke": "npm run smoke:health && npm run smoke:security && npm run smoke:observability && npm run smoke:shutdown && npm run smoke:production-guard && npm run smoke:auth && npm run smoke:vehicles && npm run smoke:inspections && npm run smoke:isolation && npm run smoke:analytics && npm run smoke:saas-admin && npm run smoke:company-limits && npm run smoke:company-features && npm run smoke:backup && npm run smoke:directus:service && npm run smoke:directus && npm run smoke:owner-setup",
     "smoke:health": "node scripts/smoke-health.mjs",
     "smoke:auth": "node scripts/smoke-auth.mjs",
     "smoke:vehicles": "node scripts/smoke-vehicles.mjs",
@@ -33,7 +35,10 @@
     "smoke:directus": "node scripts/smoke-directus.mjs",
     "smoke:directus:service": "node scripts/smoke-directus-service.mjs",
     "smoke:owner-setup": "node scripts/smoke-owner-setup.mjs",
-    "smoke:production-guard": "node scripts/smoke-production-guard.mjs"
+    "smoke:production-guard": "node scripts/smoke-production-guard.mjs",
+    "smoke:security": "node scripts/smoke-security.mjs",
+    "smoke:shutdown": "node scripts/smoke-shutdown.mjs",
+    "smoke:observability": "node scripts/smoke-observability.mjs"
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",

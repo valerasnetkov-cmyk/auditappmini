@@ -56,8 +56,12 @@
 - **Backup recovery runbook**: добавлен `docs/backup-restore.md` с порядком создания, проверки и ручного восстановления backup перед пилотной миграцией.
 - **Release runbook**: добавлен `docs/release-runbook.md` с единым порядком выкладки: code gate, production env gate, backup gate, build/start, post-release UAT, rollback и release evidence.
 - **Release scripts**: добавлены root-команды `release:verify`, `release:production-check` и `release:check` для предрелизной проверки, production env/backup gate и полного релизного gate.
+- **Release evidence manifest**: добавлен `scripts/collect-release-evidence.mjs` и root-команда `npm run release:evidence`; генератор создаёт локальный JSON-манифест релиза без значений production-секретов и фиксирует git commit/status, production env presence, backup manifest, обязательные gate-команды и PM2 log-retention настройки.
 - **Backend health/readiness endpoints**: добавлены unauthenticated endpoints `/health`, `/api/health`, `/api/health/live` и `/api/health/ready`; readiness проверяет SQLite query и возможность записи во временный файл внутри `UPLOAD_DIR`.
 - **Health smoke gate**: добавлен `backend/scripts/smoke-health.mjs` и `npm --prefix backend run smoke:health`; общий backend smoke теперь начинается с проверки liveness/readiness endpoint.
+- **Backend security smoke gate**: добавлен `backend/scripts/smoke-security.mjs` и `npm --prefix backend run smoke:security`; общий backend smoke теперь проверяет security headers, отключённый `X-Powered-By`, `Cache-Control: no-store` для auth и `429` на sensitive endpoint rate limit.
+- **Backend observability smoke gate**: добавлен `backend/scripts/smoke-observability.mjs` и `npm --prefix backend run smoke:observability`; общий backend smoke теперь проверяет echo `X-Request-Id` и JSON access log с тем же request id.
+- **Backend graceful shutdown smoke gate**: добавлен `backend/scripts/smoke-shutdown.mjs` и `npm --prefix backend run smoke:shutdown`; общий backend smoke теперь проверяет контролируемую остановку HTTP-сервера через тот же graceful shutdown path, который используется для `SIGTERM`/`SIGINT`.
 - **Production guard smoke**: добавлен `backend/scripts/smoke-production-guard.mjs` и `npm --prefix backend run smoke:production-guard`; общий backend smoke теперь проверяет, что production doctor запрещает публичную регистрацию.
 
 ### Changed
@@ -75,12 +79,25 @@
 - **Company features smoke stability**: `backend/scripts/smoke-company-features.mjs` теперь выбирает свободные локальные порты и ждёт `/api/health/ready`, чтобы launch gate не падал случайно из-за занятого порта или чужого HTTP-сервиса.
 - **Backend dependency security**: `uuid` в backend обновлён до `^11.1.1`, чтобы закрыть moderate advisory `uuid <11.1.1` без `npm audit fix --force`.
 - **Web/mobile dependency security**: для web и active Expo mobile добавлен npm override `uuid@^11.1.1`, закрывающий транзитивный advisory через `exceljs` и Expo `xcode` без breaking `npm audit fix --force`.
+- **Backend security perimeter**: Express теперь отключает `X-Powered-By`, задаёт `TRUST_PROXY`, добавляет базовые security headers/HSTS и ограничивает sensitive auth/setup/MFA endpoint через `SENSITIVE_RATE_LIMIT_*` / `AUTH_ACCOUNT_RATE_LIMIT_MAX`.
+- **Backend request tracing**: backend теперь принимает/создаёт `X-Request-Id`, возвращает его в каждом ответе, добавляет header в CORS exposed headers и пишет request id в access logs; `ACCESS_LOG_FORMAT=json` включает структурированные JSON-логи для production.
+- **Backend access log noise control**: добавлен `ACCESS_LOG_SKIP_PATHS` для исключения частых health-check путей из access log; production example, PM2 config, launch doctor и observability smoke учитывают новую настройку.
+- **PM2 log retention**: добавлены backend-команды `pm2:logrotate:install` и `pm2:logrotate:configure`; production/deployment/release docs теперь описывают ротацию PM2-логов без timestamp prefix поверх JSON access-log.
+- **Backend graceful shutdown**: backend теперь обрабатывает `SIGTERM`/`SIGINT`, переводит readiness в `503`, перестаёт принимать новые соединения, закрывает idle keep-alive и форсирует выход только после `GRACEFUL_SHUTDOWN_TIMEOUT_MS`.
 
 ### Verified
 - `node --check backend/src/server.js`
 - `node --check backend/scripts/smoke-health.mjs`
+- `node --check backend/scripts/smoke-security.mjs`
+- `node --check backend/scripts/smoke-observability.mjs`
+- `node --check backend/scripts/smoke-shutdown.mjs`
 - `node --check backend/scripts/smoke-production-guard.mjs`
 - `node --check backend/scripts/smoke-company-features.mjs`
+- `node --check scripts/collect-release-evidence.mjs`
+- `npm run release:evidence -- --dry-run`
+- `npm --prefix backend run smoke:security`
+- `npm --prefix backend run smoke:observability`
+- `npm --prefix backend run smoke:shutdown`
 - `npm --prefix backend run smoke:production-guard`
 - `npm --prefix backend run smoke:company-features`
 - `npm --prefix backend audit --audit-level=moderate`

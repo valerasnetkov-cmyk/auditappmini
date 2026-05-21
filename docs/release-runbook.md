@@ -27,6 +27,8 @@
 
 Подробности: `docs/production-env.md`.
 
+???????? ???????????? checklist ??????? production/staging ???????: `docs/first-production-start.md`.
+
 ## 1. Code gate
 
 На машине разработки или CI:
@@ -62,7 +64,7 @@ npm run doctor:production
 
 Что проверяется:
 
-- backend `JWT_SECRET`, `PUBLIC_REGISTRATION_ENABLED=false`, `CORS_ORIGINS`, persistent `DATABASE_PATH`, `UPLOAD_DIR`, `BACKUP_DIR`, admin seed и Directus token;
+- backend `JWT_SECRET`, `PUBLIC_REGISTRATION_ENABLED=false`, `TRUST_PROXY`, security headers/HSTS/rate limit env, graceful shutdown env, request id/access log env including health-check skip paths, `CORS_ORIGINS`, persistent `DATABASE_PATH`, `UPLOAD_DIR`, `BACKUP_DIR`, admin seed и Directus token;
 - web `NEXT_PUBLIC_API_URL`;
 - mobile `EXPO_PUBLIC_API_URL`.
 
@@ -153,6 +155,12 @@ Invoke-RestMethod https://api.<project-domain>/api/health/ready
 `/health`, `/api/health` и `/api/health/live` — лёгкая проверка процесса.  
 `/api/health/ready` дополнительно проверяет SQLite query и запись в uploads; reverse proxy/monitoring лучше привязывать именно к readiness endpoint.
 
+Также проверьте, что публичный API отвечает с security headers (`X-Frame-Options`, `X-Content-Type-Options`, `Strict-Transport-Security`) и что `POST /api/auth/login` возвращает `429` после превышения production rate limit.
+
+Перед боевым рестартом убедитесь, что PM2/systemd/orchestrator отправляет `SIGTERM` или `SIGINT` и не убивает процесс раньше `GRACEFUL_SHUTDOWN_TIMEOUT_MS`.
+
+Для диагностики проверьте, что ответ backend содержит `X-Request-Id`, а backend/proxy access logs пишут тот же request id для рабочих API-запросов. Health-check пути из `ACCESS_LOG_SKIP_PATHS` могут не попадать в backend access log — это ожидаемо.
+
 После запуска проверьте вручную:
 
 1. вход admin / owner / manager / inspector;
@@ -192,6 +200,20 @@ npm run doctor:production
 Автоматический destructive rollback/restore намеренно не добавлен: для пилота безопаснее выполнять восстановление под контролем администратора ресурса.
 
 ## 8. Release evidence
+
+После успешных gate-команд можно создать локальный JSON-манифест релиза:
+
+```powershell
+npm run release:evidence
+```
+
+Файлы создаются в `release-evidence/`, не попадают в Git и не содержат значения production-секретов. Манифест фиксирует git commit/branch/status, наличие production env-файлов, последний backup manifest, обязательные команды проверки и PM2 log-retention команды.
+
+Для оператора перед первым стартом можно отдельно вывести краткий порядок запуска:
+
+```powershell
+npm run release:first-start
+```
 
 Для каждого production-релиза сохраните:
 

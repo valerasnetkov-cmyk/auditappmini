@@ -119,6 +119,55 @@ Backend отдаёт безопасные unauthenticated health endpoints:
 
 `/api/health/ready` подходит для readiness/monitoring: он проверяет, что backend может выполнить SQLite query и записать временный probe-файл в `UPLOAD_DIR`. Endpoint не возвращает секреты, tenant data или пользовательские данные.
 
+## Backend security perimeter
+
+Production backend должен работать за HTTPS reverse proxy. В backend env задайте `TRUST_PROXY` явно:
+
+```dotenv
+TRUST_PROXY=1
+```
+
+Это нужно для корректного `req.ip` и rate limit, когда перед Express стоит один доверенный proxy.
+
+Backend добавляет базовые security headers (`X-Content-Type-Options`, `X-Frame-Options`, `Referrer-Policy`, `Permissions-Policy`) и HSTS при `SECURITY_HSTS_ENABLED=true`. Чувствительные endpoint входа, owner setup, регистрации и MFA verify ограничиваются `SENSITIVE_RATE_LIMIT_*` / `AUTH_ACCOUNT_RATE_LIMIT_MAX`.
+
+## Graceful shutdown
+
+Backend обрабатывает `SIGTERM` и `SIGINT`: перестаёт принимать новые соединения, переводит readiness в `503`, закрывает idle keep-alive соединения и ждёт активные запросы до `GRACEFUL_SHUTDOWN_TIMEOUT_MS`.
+
+Для production process manager / orchestrator должен давать backend как минимум этот таймаут перед принудительным завершением процесса:
+
+```dotenv
+GRACEFUL_SHUTDOWN_TIMEOUT_MS=10000
+```
+
+## Request ID and access logs
+
+Backend принимает входящий `X-Request-Id` или создаёт новый request id, возвращает его в каждом ответе и пишет его в access log. Для production рекомендуется JSON-формат:
+
+```dotenv
+REQUEST_ID_HEADER=x-request-id
+ACCESS_LOG_FORMAT=json
+ACCESS_LOG_SLOW_MS=1000
+ACCESS_LOG_SKIP_PATHS=/health,/api/health
+```
+
+Reverse proxy должен пробрасывать `X-Request-Id` в backend и логировать тот же header. Это позволяет связать browser/network ошибку, proxy log и backend log одной строкой поиска.
+
+`ACCESS_LOG_SKIP_PATHS` снижает шум от частых liveness/readiness проверок. Request id при этом всё равно возвращается в HTTP-ответе, но выбранные пути не попадают в access log backend.
+
+## PM2 log retention
+
+Для длительного pilot/production запуска настройте ротацию логов PM2:
+
+```powershell
+npm --prefix backend run pm2:logrotate:install
+npm --prefix backend run pm2:logrotate:configure
+pm2 conf pm2-logrotate
+```
+
+Текущая конфигурация задаёт `20M` на файл, `14` хранимых архивов, сжатие старых логов и timestamp в имени rotated-файла. Не включайте PM2 timestamp prefix поверх JSON access-log: backend уже пишет `timestamp` внутри JSON-строки.
+
 ## Regional deployment
 
 Для multi-company SaaS используется несколько региональных окружений:

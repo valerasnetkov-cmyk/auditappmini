@@ -117,6 +117,34 @@ function readBooleanEnv(name, defaultValue = false) {
   return value === 'true'
 }
 
+function hasEnvValue(name) {
+  return process.env[name] != null && process.env[name] !== ''
+}
+
+function readPositiveIntegerEnv(name, defaultValue) {
+  if (!hasEnvValue(name)) return defaultValue
+
+  const parsed = Number(process.env[name])
+  return Number.isInteger(parsed) && parsed > 0 ? parsed : Number.NaN
+}
+
+function readCsvEnv(name) {
+  return (process.env[name] || '')
+    .split(',')
+    .map((value) => value.trim())
+    .filter(Boolean)
+}
+
+function isValidAccessLogSkipPath(pathname) {
+  return (
+    typeof pathname === 'string' &&
+    pathname.startsWith('/') &&
+    pathname.length <= 256 &&
+    !/\s/.test(pathname) &&
+    !pathname.includes('..')
+  )
+}
+
 const jwtSecret = process.env.JWT_SECRET || ''
 requireProduction(Boolean(jwtSecret), 'JWT_SECRET is required')
 requireProduction(![DEFAULT_JWT_SECRET, DEV_JWT_SECRET].includes(jwtSecret), 'JWT_SECRET must not use a development value')
@@ -155,6 +183,30 @@ if (process.env.WEB_APP_URL) {
 
 const publicRegistrationEnabled = readBooleanEnv('PUBLIC_REGISTRATION_ENABLED', !isProduction)
 requireProduction(!publicRegistrationEnabled, 'PUBLIC_REGISTRATION_ENABLED must be false in production')
+requireProduction(hasEnvValue('TRUST_PROXY'), 'TRUST_PROXY must be set explicitly in production')
+
+const securityHstsEnabled = readBooleanEnv('SECURITY_HSTS_ENABLED', isProduction)
+const securityHstsMaxAge = readPositiveIntegerEnv('SECURITY_HSTS_MAX_AGE', 15552000)
+const sensitiveRateLimitWindowMs = readPositiveIntegerEnv('SENSITIVE_RATE_LIMIT_WINDOW_MS', 15 * 60 * 1000)
+const sensitiveRateLimitMax = readPositiveIntegerEnv('SENSITIVE_RATE_LIMIT_MAX', isProduction ? 60 : 500)
+const authAccountRateLimitMax = readPositiveIntegerEnv('AUTH_ACCOUNT_RATE_LIMIT_MAX', isProduction ? 20 : 500)
+const gracefulShutdownTimeoutMs = readPositiveIntegerEnv('GRACEFUL_SHUTDOWN_TIMEOUT_MS', 10000)
+const requestIdHeader = (process.env.REQUEST_ID_HEADER || 'x-request-id').trim().toLowerCase()
+const accessLogFormat = process.env.ACCESS_LOG_FORMAT || (isProduction ? 'json' : 'text')
+const accessLogSlowMs = readPositiveIntegerEnv('ACCESS_LOG_SLOW_MS', 1000)
+const accessLogSkipPaths = readCsvEnv('ACCESS_LOG_SKIP_PATHS')
+
+requireProduction(Number.isInteger(securityHstsMaxAge), 'SECURITY_HSTS_MAX_AGE must be a positive integer')
+requireProduction(Number.isInteger(sensitiveRateLimitWindowMs), 'SENSITIVE_RATE_LIMIT_WINDOW_MS must be a positive integer')
+requireProduction(Number.isInteger(sensitiveRateLimitMax), 'SENSITIVE_RATE_LIMIT_MAX must be a positive integer')
+requireProduction(Number.isInteger(authAccountRateLimitMax), 'AUTH_ACCOUNT_RATE_LIMIT_MAX must be a positive integer')
+requireProduction(Number.isInteger(gracefulShutdownTimeoutMs), 'GRACEFUL_SHUTDOWN_TIMEOUT_MS must be a positive integer')
+requireProduction(Number.isInteger(accessLogSlowMs), 'ACCESS_LOG_SLOW_MS must be a positive integer')
+requireProduction(sensitiveRateLimitMax <= 300, 'SENSITIVE_RATE_LIMIT_MAX should be 300 or lower in production')
+requireProduction(authAccountRateLimitMax <= 100, 'AUTH_ACCOUNT_RATE_LIMIT_MAX should be 100 or lower in production')
+requireProduction(['json', 'text', 'off'].includes(accessLogFormat), 'ACCESS_LOG_FORMAT must be one of: json, text, off')
+requireProduction(/^[a-z0-9!#$%&'*+.^_`|~-]+$/.test(requestIdHeader), 'REQUEST_ID_HEADER must be a valid HTTP header name')
+requireProduction(accessLogSkipPaths.every(isValidAccessLogSkipPath), 'ACCESS_LOG_SKIP_PATHS must contain comma-separated absolute URL paths')
 
 const databasePath = process.env.DATABASE_PATH ? path.resolve(backendRoot, process.env.DATABASE_PATH) : null
 const uploadsDir = process.env.UPLOAD_DIR ? path.resolve(backendRoot, process.env.UPLOAD_DIR) : null
@@ -176,6 +228,17 @@ const result = {
     backupDir,
     adminSeedConfigured: Boolean(process.env.ADMIN_EMAIL),
     publicRegistrationEnabled,
+    trustProxy: process.env.TRUST_PROXY || null,
+    securityHstsEnabled,
+    securityHstsMaxAge,
+    sensitiveRateLimitWindowMs,
+    sensitiveRateLimitMax,
+    authAccountRateLimitMax,
+    gracefulShutdownTimeoutMs,
+    requestIdHeader,
+    accessLogFormat,
+    accessLogSlowMs,
+    accessLogSkipPaths,
     directusConfigured: Boolean(process.env.DIRECTUS_TOKEN && process.env.DIRECTUS_URL),
   },
   warnings,

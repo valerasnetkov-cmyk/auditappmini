@@ -1,0 +1,191 @@
+import { execFileSync } from 'node:child_process'
+import fs from 'node:fs/promises'
+import path from 'node:path'
+import process from 'node:process'
+import { fileURLToPath } from 'node:url'
+
+const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
+const DEFAULT_OUTPUT_DIR = 'release-evidence'
+
+function parseArgs(argv) {
+  const options = {
+    dryRun: false,
+    outDir: DEFAULT_OUTPUT_DIR,
+  }
+
+  for (let index = 0; index < argv.length; index += 1) {
+    const arg = argv[index]
+
+    if (arg === '--dry-run') {
+      options.dryRun = true
+      continue
+    }
+
+    if (arg === '--out-dir') {
+      const value = argv[index + 1]
+      if (!value) throw new Error('--out-dir requires a value')
+      options.outDir = value
+      index += 1
+      continue
+    }
+
+    throw new Error(`Unknown argument: ${arg}`)
+  }
+
+  return options
+}
+
+function runGit(args) {
+  try {
+    return execFileSync('git', args, {
+      cwd: repoRoot,
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'ignore'],
+    }).trim()
+  } catch {
+    return null
+  }
+}
+
+async function exists(targetPath) {
+  try {
+    await fs.access(targetPath)
+    return true
+  } catch {
+    return false
+  }
+}
+
+async function readJsonIfExists(targetPath) {
+  if (!(await exists(targetPath))) return null
+
+  try {
+    return JSON.parse(await fs.readFile(targetPath, 'utf8'))
+  } catch {
+    return null
+  }
+}
+
+async function findLatestBackupManifest() {
+  const backupRoot = path.join(repoRoot, 'backend', 'backups')
+
+  if (!(await exists(backupRoot))) return null
+
+  const entries = await fs.readdir(backupRoot, { withFileTypes: true })
+  const manifests = []
+
+  for (const entry of entries) {
+    if (!entry.isDirectory()) continue
+
+    const manifestPath = path.join(backupRoot, entry.name, 'manifest.json')
+    const manifest = await readJsonIfExists(manifestPath)
+
+    if (manifest) {
+      manifests.push({
+        path: path.relative(repoRoot, manifestPath),
+        createdAt: manifest.createdAt || entry.name,
+        databaseCopied: Boolean(manifest.databaseCopied ?? manifest.database?.copied),
+        uploadsCopied: Boolean(manifest.uploadsCopied ?? manifest.uploads?.copied),
+        databaseSha256: manifest.database?.sha256 || null,
+        uploadsFileCount: manifest.uploads?.fileCount ?? null,
+      })
+    }
+  }
+
+  manifests.sort((left, right) => String(right.createdAt).localeCompare(String(left.createdAt)))
+  return manifests[0] || null
+}
+
+async function collectEvidence() {
+  const createdAt = new Date().toISOString()
+  const packageJson = await readJsonIfExists(path.join(repoRoot, 'package.json'))
+  const backendPackageJson = await readJsonIfExists(path.join(repoRoot, 'backend', 'package.json'))
+  const statusShort = runGit(['status', '--short']) || ''
+
+  return {
+    schemaVersion: 1,
+    project: 'Auditmini',
+    createdAt,
+    repoRoot,
+    git: {
+      branch: runGit(['branch', '--show-current']),
+      commit: runGit(['rev-parse', 'HEAD']),
+      dirty: statusShort.length > 0,
+      statusShort: statusShort.split(/\r?\n/).filter(Boolean),
+    },
+    productionFiles: {
+      backendEnvProductionExists: await exists(path.join(repoRoot, 'backend', '.env.production')),
+      webEnvProductionExists: await exists(path.join(repoRoot, 'web', '.env.production')),
+      mobileEnvProductionExists: await exists(path.join(repoRoot, 'mobile', '.env.production')),
+      backendEcosystemConfigExists: await exists(path.join(repoRoot, 'backend', 'ecosystem.config.cjs')),
+    },
+    latestBackupManifest: await findLatestBackupManifest(),
+    requiredCommands: [
+      {
+        id: 'verify-launch',
+        command: 'npm run verify:launch',
+        expected: 'passes locally or in CI before release',
+      },
+      {
+        id: 'doctor-production',
+        command: 'npm run doctor:production',
+        expected: 'passes on production/staging host without errors',
+      },
+      {
+        id: 'backup-local',
+        command: 'npm run backup:local',
+        expected: 'creates a pre-release backup manifest',
+      },
+      {
+        id: 'backup-verify',
+        command: 'npm run backup:verify',
+        expected: 'verifies the latest backup integrity',
+      },
+    ],
+    operationalEvidenceChecklist: [
+      'Attach terminal output or CI link for npm run verify:launch.',
+      'Attach JSON output for npm run doctor:production without secret values.',
+      'Attach backup manifest path and backup:verify output.',
+      'Record production backend/web/mobile versions or artifact names.',
+      'Record public health/readiness responses and one working API X-Request-Id.',
+      'Record PM2/systemd process status and log rotation configuration.',
+      'Record manual UAT notes for admin, owner, manager and inspector flows.',
+    ],
+    pm2LogRetention: {
+      installCommand: backendPackageJson?.scripts?.['pm2:logrotate:install'] || 'pm2 install pm2-logrotate',
+      configureCommand: backendPackageJson?.scripts?.['pm2:logrotate:configure'] || 'pm2 set pm2-logrotate:max_size 20M && pm2 set pm2-logrotate:retain 14 && pm2 set pm2-logrotate:compress true',
+      inspectCommand: 'pm2 conf pm2-logrotate',
+      logsCommand: backendPackageJson?.scripts?.['pm2:logs'] ? 'npm --prefix backend run pm2:logs' : 'pm2 logs audit-backend',
+    },
+    availableReleaseScripts: {
+      releaseVerify: packageJson?.scripts?.['release:verify'] || null,
+      releaseProductionCheck: packageJson?.scripts?.['release:production-check'] || null,
+      releaseCheck: packageJson?.scripts?.['release:check'] || null,
+      releaseEvidence: packageJson?.scripts?.['release:evidence'] || null,
+    },
+  }
+}
+
+async function main() {
+  const options = parseArgs(process.argv.slice(2))
+  const evidence = await collectEvidence()
+
+  if (options.dryRun) {
+    console.log(JSON.stringify(evidence, null, 2))
+    return
+  }
+
+  const outputDir = path.resolve(repoRoot, options.outDir)
+  await fs.mkdir(outputDir, { recursive: true })
+
+  const safeTimestamp = evidence.createdAt.replace(/[:.]/g, '-')
+  const outputPath = path.join(outputDir, `release-evidence-${safeTimestamp}.json`)
+  await fs.writeFile(outputPath, JSON.stringify(evidence, null, 2), 'utf8')
+
+  console.log(JSON.stringify({ ok: true, outputPath }, null, 2))
+}
+
+main().catch((error) => {
+  console.error(error instanceof Error ? error.message : String(error))
+  process.exit(1)
+})

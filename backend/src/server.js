@@ -41,11 +41,82 @@ const isProduction = process.env.NODE_ENV === 'production'
 const PUBLIC_REGISTRATION_ENABLED = process.env.PUBLIC_REGISTRATION_ENABLED
   ? process.env.PUBLIC_REGISTRATION_ENABLED === 'true'
   : !isProduction
+const TRUST_PROXY = parseTrustProxy(process.env.TRUST_PROXY)
+const SECURITY_HSTS_ENABLED = process.env.SECURITY_HSTS_ENABLED
+  ? process.env.SECURITY_HSTS_ENABLED === 'true'
+  : isProduction
+const SECURITY_HSTS_MAX_AGE = parsePositiveIntegerEnv('SECURITY_HSTS_MAX_AGE', 15552000)
+const SENSITIVE_RATE_LIMIT_WINDOW_MS = parsePositiveIntegerEnv('SENSITIVE_RATE_LIMIT_WINDOW_MS', 15 * 60 * 1000)
+const SENSITIVE_RATE_LIMIT_MAX = parsePositiveIntegerEnv('SENSITIVE_RATE_LIMIT_MAX', isProduction ? 60 : 500)
+const AUTH_ACCOUNT_RATE_LIMIT_MAX = parsePositiveIntegerEnv('AUTH_ACCOUNT_RATE_LIMIT_MAX', isProduction ? 20 : 500)
+const GRACEFUL_SHUTDOWN_TIMEOUT_MS = parsePositiveIntegerEnv('GRACEFUL_SHUTDOWN_TIMEOUT_MS', 10000)
+const REQUEST_ID_HEADER = normalizeHeaderName(process.env.REQUEST_ID_HEADER || 'x-request-id')
+const ACCESS_LOG_FORMAT = process.env.ACCESS_LOG_FORMAT || (isProduction ? 'json' : 'text')
+const ACCESS_LOG_SLOW_MS = parsePositiveIntegerEnv('ACCESS_LOG_SLOW_MS', 1000)
+const ACCESS_LOG_SKIP_PATHS = parseAccessLogSkipPaths(process.env.ACCESS_LOG_SKIP_PATHS || '')
 const corsOrigins = (process.env.CORS_ORIGINS || 'http://localhost:3000,http://localhost:3002,http://localhost:8083,http://localhost:8081,http://localhost:8082')
   .split(',')
   .map(origin => origin.trim())
   .filter(Boolean)
 const allowAllCorsOrigins = corsOrigins.includes('*')
+let isShuttingDown = false
+
+function hasEnvValue(name) {
+  return process.env[name] != null && process.env[name] !== ''
+}
+
+function parsePositiveIntegerEnv(name, fallback) {
+  if (!hasEnvValue(name)) return fallback
+
+  const parsed = Number(process.env[name])
+  return Number.isInteger(parsed) && parsed > 0 ? parsed : Number.NaN
+}
+
+function parseTrustProxy(value) {
+  if (!value) return false
+
+  const normalized = String(value).trim().toLowerCase()
+  if (normalized === 'true') return true
+  if (normalized === 'false') return false
+  if (/^\d+$/.test(normalized)) return Number(normalized)
+
+  return value
+}
+
+function normalizeHeaderName(value) {
+  const headerName = String(value || '').trim().toLowerCase()
+  if (/^[a-z0-9!#$%&'*+.^_`|~-]+$/.test(headerName)) {
+    return headerName
+  }
+
+  return 'x-request-id'
+}
+
+function parseAccessLogSkipPaths(value) {
+  const paths = String(value || '')
+    .split(',')
+    .map(pathname => pathname.trim())
+    .filter(Boolean)
+    .map(pathname => pathname.replace(/\/+$/, '') || '/')
+
+  return Array.from(new Set(paths))
+}
+
+function isValidAccessLogSkipPath(pathname) {
+  return (
+    typeof pathname === 'string' &&
+    pathname.startsWith('/') &&
+    pathname.length <= 256 &&
+    !/\s/.test(pathname) &&
+    !pathname.includes('..')
+  )
+}
+
+function assertPositiveInteger(value, name) {
+  if (!Number.isInteger(value) || value <= 0) {
+    throw new Error(`${name} must be a positive integer`)
+  }
+}
 
 function assertProductionConfig() {
   if (!isProduction) return
@@ -85,6 +156,25 @@ function assertProductionConfig() {
 
   if (PUBLIC_REGISTRATION_ENABLED) {
     throw new Error('PUBLIC_REGISTRATION_ENABLED must be false in production; company users are created by company owners')
+  }
+
+  if (!hasEnvValue('TRUST_PROXY')) {
+    throw new Error('TRUST_PROXY must be set explicitly in production')
+  }
+
+  assertPositiveInteger(SECURITY_HSTS_MAX_AGE, 'SECURITY_HSTS_MAX_AGE')
+  assertPositiveInteger(SENSITIVE_RATE_LIMIT_WINDOW_MS, 'SENSITIVE_RATE_LIMIT_WINDOW_MS')
+  assertPositiveInteger(SENSITIVE_RATE_LIMIT_MAX, 'SENSITIVE_RATE_LIMIT_MAX')
+  assertPositiveInteger(AUTH_ACCOUNT_RATE_LIMIT_MAX, 'AUTH_ACCOUNT_RATE_LIMIT_MAX')
+  assertPositiveInteger(GRACEFUL_SHUTDOWN_TIMEOUT_MS, 'GRACEFUL_SHUTDOWN_TIMEOUT_MS')
+  assertPositiveInteger(ACCESS_LOG_SLOW_MS, 'ACCESS_LOG_SLOW_MS')
+
+  if (!['json', 'text', 'off'].includes(ACCESS_LOG_FORMAT)) {
+    throw new Error('ACCESS_LOG_FORMAT must be one of: json, text, off')
+  }
+
+  if (!ACCESS_LOG_SKIP_PATHS.every(isValidAccessLogSkipPath)) {
+    throw new Error('ACCESS_LOG_SKIP_PATHS must contain comma-separated absolute URL paths')
   }
 }
 
@@ -133,6 +223,90 @@ function uploadPhoto(req, res, next) {
   })
 }
 
+app.disable('x-powered-by')
+app.set('trust proxy', TRUST_PROXY)
+
+function sanitizeRequestId(value) {
+  if (typeof value !== 'string') return null
+  const requestId = value.trim()
+
+  if (!requestId || requestId.length > 128) return null
+  if (!/^[A-Za-z0-9._~:/?#\[\]@!$&'()*+,;=-]+$/.test(requestId)) return null
+
+  return requestId
+}
+
+function createRequestId() {
+  return crypto.randomUUID ? crypto.randomUUID() : uuidv4()
+}
+
+function formatAccessLogEntry(entry) {
+  if (ACCESS_LOG_FORMAT === 'json') {
+    return JSON.stringify(entry)
+  }
+
+  return `[${entry.timestamp}] ${entry.method} ${entry.path} ${entry.statusCode} ${entry.durationMs}ms request_id=${entry.requestId} ip=${entry.ip}`
+}
+
+function shouldSkipAccessLog(req) {
+  if (ACCESS_LOG_SKIP_PATHS.length === 0) return false
+
+  const requestPath = req.path || '/'
+  return ACCESS_LOG_SKIP_PATHS.some((pathname) => {
+    if (pathname === '/') return requestPath === '/'
+    return requestPath === pathname || requestPath.startsWith(`${pathname}/`)
+  })
+}
+
+function logAccess(req, res, startedAt) {
+  if (ACCESS_LOG_FORMAT === 'off') return
+  if (shouldSkipAccessLog(req)) return
+
+  const durationMs = Math.max(0, Math.round(Number(process.hrtime.bigint() - startedAt) / 1_000_000))
+  const entry = {
+    type: 'access',
+    timestamp: new Date().toISOString(),
+    requestId: req.id,
+    method: req.method,
+    path: req.originalUrl,
+    statusCode: res.statusCode,
+    durationMs,
+    slow: durationMs >= ACCESS_LOG_SLOW_MS,
+    ip: req.ip,
+    userId: req.user?.id || null,
+    companyId: req.user?.company_id || null,
+    userAgent: req.get('user-agent') || null,
+  }
+
+  console.log(formatAccessLogEntry(entry))
+}
+
+app.use((req, res, next) => {
+  req.id = sanitizeRequestId(req.get(REQUEST_ID_HEADER)) || createRequestId()
+  res.setHeader(REQUEST_ID_HEADER, req.id)
+  next()
+})
+
+app.use((req, res, next) => {
+  const startedAt = process.hrtime.bigint()
+  res.on('finish', () => logAccess(req, res, startedAt))
+  next()
+})
+
+app.use((req, res, next) => {
+  res.setHeader('X-Content-Type-Options', 'nosniff')
+  res.setHeader('X-Frame-Options', 'DENY')
+  res.setHeader('Referrer-Policy', 'no-referrer')
+  res.setHeader('X-DNS-Prefetch-Control', 'off')
+  res.setHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=()')
+
+  if (SECURITY_HSTS_ENABLED) {
+    res.setHeader('Strict-Transport-Security', `max-age=${SECURITY_HSTS_MAX_AGE}; includeSubDomains`)
+  }
+
+  next()
+})
+
 app.use(cors({
   origin: (origin, callback) => {
     if (!origin || allowAllCorsOrigins || corsOrigins.includes(origin)) {
@@ -143,7 +317,8 @@ app.use(cors({
     callback(new Error(`CORS blocked for origin: ${origin}`))
   },
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization']
+  allowedHeaders: ['Content-Type', 'Authorization', REQUEST_ID_HEADER],
+  exposedHeaders: [REQUEST_ID_HEADER, 'RateLimit-Limit', 'RateLimit-Remaining', 'RateLimit-Reset', 'Retry-After']
 }))
 
 app.use(express.json({ limit: JSON_BODY_LIMIT }))
@@ -151,6 +326,96 @@ app.use(express.json({ limit: JSON_BODY_LIMIT }))
 function sendError(res, status, message) {
   return res.status(status).json({ error: message })
 }
+
+function normalizeRateLimitPath(pathname) {
+  return String(pathname || '')
+    .replace(/^\/api\/users\/[^/]+\/mfa\/verify$/, '/api/users/:id/mfa/verify')
+}
+
+function createRateLimiter({ name, windowMs, max, keyGenerator }) {
+  const hits = new Map()
+  let lastSweepAt = 0
+
+  return (req, res, next) => {
+    if (!Number.isInteger(windowMs) || windowMs <= 0 || !Number.isInteger(max) || max <= 0) {
+      return next()
+    }
+
+    const now = Date.now()
+
+    if (now - lastSweepAt > windowMs) {
+      lastSweepAt = now
+      for (const [key, bucket] of hits.entries()) {
+        if (bucket.resetAt <= now) {
+          hits.delete(key)
+        }
+      }
+    }
+
+    const key = keyGenerator(req)
+    const existing = hits.get(key)
+    const bucket = existing && existing.resetAt > now
+      ? existing
+      : { count: 0, resetAt: now + windowMs }
+
+    bucket.count += 1
+    hits.set(key, bucket)
+
+    const retryAfterSeconds = Math.max(1, Math.ceil((bucket.resetAt - now) / 1000))
+    res.setHeader('RateLimit-Limit', String(max))
+    res.setHeader('RateLimit-Remaining', String(Math.max(0, max - bucket.count)))
+    res.setHeader('RateLimit-Reset', String(retryAfterSeconds))
+
+    if (bucket.count > max) {
+      res.setHeader('Retry-After', String(retryAfterSeconds))
+      return sendError(res, 429, 'Too many requests. Try again later.')
+    }
+
+    return next()
+  }
+}
+
+function sensitiveIpRateLimitKey(req) {
+  return [
+    'ip',
+    req.ip,
+    req.method,
+    normalizeRateLimitPath(req.path),
+  ].join(':')
+}
+
+function sensitiveAccountRateLimitKey(req) {
+  const accountKey = String(req.body?.email || req.params?.id || req.body?.token || '').trim().toLowerCase()
+  return [
+    'account',
+    req.ip,
+    req.method,
+    normalizeRateLimitPath(req.path),
+    accountKey,
+  ].join(':')
+}
+
+function noStore(req, res, next) {
+  res.setHeader('Cache-Control', 'no-store')
+  next()
+}
+
+const sensitiveIpRateLimit = createRateLimiter({
+  name: 'sensitive-ip',
+  windowMs: SENSITIVE_RATE_LIMIT_WINDOW_MS,
+  max: SENSITIVE_RATE_LIMIT_MAX,
+  keyGenerator: sensitiveIpRateLimitKey,
+})
+
+const sensitiveAccountRateLimit = createRateLimiter({
+  name: 'sensitive-account',
+  windowMs: SENSITIVE_RATE_LIMIT_WINDOW_MS,
+  max: AUTH_ACCOUNT_RATE_LIMIT_MAX,
+  keyGenerator: sensitiveAccountRateLimitKey,
+})
+
+const publicAuthRateLimit = [noStore, sensitiveIpRateLimit, sensitiveAccountRateLimit]
+const authenticatedSensitiveRateLimit = [noStore, sensitiveIpRateLimit]
 
 function buildLivenessPayload() {
   return {
@@ -173,10 +438,15 @@ async function checkUploadsWritable() {
 
 async function buildReadinessPayload() {
   const checks = {
+    shutdown: !isShuttingDown,
     database: false,
     uploads: false,
   }
   const errors = []
+
+  if (isShuttingDown) {
+    errors.push('Server is shutting down')
+  }
 
   try {
     const result = db.prepare('SELECT 1 as ok').get()
@@ -215,8 +485,13 @@ app.get('/api/health/ready', async (req, res) => {
 })
 
 app.use((req, res, next) => {
-  console.log(`[${new Date().toISOString()}] ${req.method} ${req.url} from ${req.ip}`)
-  next()
+  if (!isShuttingDown) {
+    next()
+    return
+  }
+
+  res.setHeader('Connection', 'close')
+  return sendError(res, 503, 'Server is shutting down')
 })
 
 // Define authenticate before using it
@@ -1111,7 +1386,7 @@ function getAllowedPhotoTypes(inspectionType) {
 
 // ============ AUTH ============
 
-app.post('/api/auth/login', (req, res) => {
+app.post('/api/auth/login', ...publicAuthRateLimit, (req, res) => {
   const { email, password } = req.body
 
   if (!email || !password) {
@@ -1151,7 +1426,7 @@ app.post('/api/auth/login', (req, res) => {
   })
 })
 
-app.post('/api/auth/owner-setup', (req, res) => {
+app.post('/api/auth/owner-setup', ...publicAuthRateLimit, (req, res) => {
   const { token, password } = req.body || {}
 
   if (!token || typeof password !== 'string') {
@@ -1229,7 +1504,7 @@ app.post('/api/users/:id/mfa/setup', authenticate, (req, res) => {
   res.json({ otpauth_url: secret.otpauth_url, secret: secret.base32 })
 })
 
-app.post('/api/users/:id/mfa/verify', authenticate, (req, res) => {
+app.post('/api/users/:id/mfa/verify', authenticate, ...authenticatedSensitiveRateLimit, (req, res) => {
   const userId = req.params.id
   const { token } = req.body
   const companyId = req.user.company_id || 'default'
@@ -1261,7 +1536,7 @@ app.post('/api/users/:id/mfa/verify', authenticate, (req, res) => {
 // Legacy public registration endpoint for local/mobile experiments.
 // In the SaaS production model companies are created by the resource admin,
 // and company users are created by the company owner from the user panel.
-app.post('/api/auth/register', (req, res) => {
+app.post('/api/auth/register', ...publicAuthRateLimit, (req, res) => {
   if (!PUBLIC_REGISTRATION_ENABLED) {
     return sendError(res, 403, 'Public registration is disabled')
   }
@@ -2999,9 +3274,74 @@ app.use((err, req, res, next) => {
   return next(err)
 })
 
+let server = null
+const openSockets = new Set()
+
+function forceCloseOpenSockets() {
+  for (const socket of openSockets) {
+    socket.destroy()
+  }
+  openSockets.clear()
+}
+
+function gracefulShutdown(signal) {
+  if (isShuttingDown) {
+    console.log(`[shutdown] ${signal} received while shutdown is already in progress`)
+    return
+  }
+
+  isShuttingDown = true
+  console.log(`[shutdown] ${signal} received; stopping HTTP server`)
+
+  if (!server) {
+    process.exit(0)
+    return
+  }
+
+  const shutdownTimer = setTimeout(() => {
+    console.error(`[shutdown] Forced shutdown after ${GRACEFUL_SHUTDOWN_TIMEOUT_MS}ms`)
+    forceCloseOpenSockets()
+    process.exit(1)
+  }, GRACEFUL_SHUTDOWN_TIMEOUT_MS)
+  shutdownTimer.unref?.()
+
+  server.close((err) => {
+    clearTimeout(shutdownTimer)
+
+    if (err) {
+      console.error('[shutdown] HTTP server closed with error:', err)
+      process.exit(1)
+      return
+    }
+
+    console.log('[shutdown] HTTP server closed gracefully')
+    process.exit(0)
+  })
+
+  server.closeIdleConnections?.()
+}
+
+process.once('SIGTERM', () => gracefulShutdown('SIGTERM'))
+process.once('SIGINT', () => gracefulShutdown('SIGINT'))
+
+if (typeof process.send === 'function') {
+  process.on('message', (message) => {
+    if (message === 'shutdown') {
+      gracefulShutdown('IPC_SHUTDOWN')
+    }
+  })
+}
+
 initDatabase().then(() => {
-  app.listen(PORT, '0.0.0.0', () => {
+  server = app.listen(PORT, '0.0.0.0', () => {
     console.log(`вњ… Server running on http://0.0.0.0:${PORT}`)
+  })
+
+  server.on('connection', (socket) => {
+    openSockets.add(socket)
+    socket.on('close', () => {
+      openSockets.delete(socket)
+    })
   })
 }).catch(err => {
   console.error('Failed to initialize database:', err)

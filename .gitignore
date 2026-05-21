@@ -51,6 +51,8 @@ uploads/
 backend/uploads/
 backend/backups/
 backend/data/
+backend/logs/
+release-evidence/
 dist/
 build/
 .next/
