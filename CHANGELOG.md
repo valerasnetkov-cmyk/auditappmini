@@ -44,6 +44,7 @@
 ## 2026-05-22
 
 ### Added
+- **EAS build-контур для active mobile**: добавлен `mobile/eas.json`, скрипт `mobile/scripts/eas-readiness.mjs`, команды `npm run mobile:eas:readiness`, `npm run mobile:eas:preview:android` и `npm run mobile:eas:production`; `mobile/` теперь имеет проверяемый preview/production EAS build-профиль, а runbook фиксирует, что `EXPO_PUBLIC_API_URL` для облачных сборок нужно задавать в EAS environment variables.
 - **Изолированный launch E2E runner**: добавлен `scripts/e2e-local.mjs`, который сам поднимает backend и web на свободных локальных портах, использует временную SQLite-БД/uploads, пробрасывает `CORS_ORIGINS`, запускает Chromium Playwright и очищает временные данные после проверки.
 - **E2E в launch gate**: root-команда `npm run verify:launch` теперь включает `npm run verify:e2e`, а GitHub Actions workflow устанавливает Playwright Chromium перед запуском launch-проверки.
 - **Web E2E helper-команды**: в web-пакет добавлены `prepare:e2e:chromium` и `test:e2e:chromium` для явного запуска/подготовки Chromium-проверок.

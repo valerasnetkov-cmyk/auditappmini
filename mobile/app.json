@@ -19,7 +19,8 @@
         "NSLocationWhenInUseUsageDescription": "Геолокация нужна для фиксации места ДТП.",
         "NSPhotoLibraryUsageDescription": "Доступ к медиатеке нужен для выбора фото осмотра при необходимости.",
         "NSPhotoLibraryAddUsageDescription": "Доступ к сохранению фото нужен для материалов осмотра."
-      }
+      },
+      "bundleIdentifier": "com.vsnetkov.mobile"
     },
     "android": {
       "adaptiveIcon": {

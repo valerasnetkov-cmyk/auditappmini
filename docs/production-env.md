@@ -156,6 +156,15 @@ npm --prefix web run start
 ```powershell
 npm --prefix mobile run doctor:production
 npm --prefix mobile run verify
+npm --prefix mobile run eas:readiness
+```
+
+Для EAS cloud build настройте `EXPO_PUBLIC_API_URL` в EAS environment variables. Локальный `mobile/.env.production` остаётся обязательным для `doctor:production`, но облачная сборка должна получить тот же URL через EAS.
+
+```powershell
+npm run mobile:eas:preview:android
+# или
+npm run mobile:eas:production
 ```
 
 После изменения `mobile/.env.production` production build нужно пересобрать, потому что `EXPO_PUBLIC_*` значения попадают в bundle.

@@ -90,6 +90,7 @@ async function collectReadiness() {
     'backend/.env.production.example',
     'web/.env.production.example',
     'mobile/.env.production.example',
+    'mobile/eas.json',
     'backend/ecosystem.config.cjs',
     'docs/production-env.md',
     'docs/release-runbook.md',
@@ -137,7 +138,7 @@ async function collectReadiness() {
     'pm2:logrotate:configure',
   ])
   addMissingScriptBlockers(blockers, 'web', webPackage, ['build', 'start', 'doctor:production'])
-  addMissingScriptBlockers(blockers, 'mobile', mobilePackage, ['verify', 'doctor:production'])
+  addMissingScriptBlockers(blockers, 'mobile', mobilePackage, ['verify', 'doctor:production', 'eas:readiness'])
 
   const releaseActions = []
   if (statusShort) {
@@ -167,6 +168,12 @@ async function collectReadiness() {
       severity: 'release-action',
       title: 'First-start checklist should be reviewed by the operator',
       action: 'Run npm run release:first-start and attach/review the output before the first production start.',
+    },
+    {
+      id: 'mobile-eas-build',
+      severity: 'release-action',
+      title: 'Mobile EAS build must be created from the active mobile contour',
+      action: 'Configure EAS secrets, run npm run mobile:eas:readiness, then build the preview or production artifact from mobile/.',
     },
   )
 
@@ -241,6 +248,7 @@ async function collectReadiness() {
     auditCommands,
     finalGateCommands: [
       'npm run mobile:status',
+      'npm run mobile:eas:readiness',
       'npm run verify:launch',
       'npm run doctor:production',
       'npm run backup:local',

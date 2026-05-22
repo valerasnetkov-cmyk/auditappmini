@@ -31,6 +31,10 @@
     "verify": "npm run verify:backend && npm run verify:web && npm run verify:mobile",
     "verify:launch": "npm run verify && npm run verify:e2e && npm run doctor:launch && npm run audit:launch",
     "verify:mobile": "npm --prefix mobile run verify",
-    "audit:mobile": "npm --prefix mobile run audit:moderate"
+    "audit:mobile": "npm --prefix mobile run audit:moderate",
+    "mobile:eas:readiness": "npm --prefix mobile run eas:readiness",
+    "mobile:eas:configure": "npm --prefix mobile run eas:configure",
+    "mobile:eas:preview:android": "npm --prefix mobile run eas:preview:android",
+    "mobile:eas:production": "npm --prefix mobile run eas:production"
   }
 }

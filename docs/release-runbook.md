@@ -142,6 +142,21 @@ npm --prefix web run start
 ```powershell
 npm --prefix mobile run doctor:production
 npm --prefix mobile run verify
+npm --prefix mobile run eas:readiness
+```
+
+Для EAS cloud build `EXPO_PUBLIC_API_URL` должен быть настроен в EAS environment variables. Локальный `mobile/.env.production` нужен для operator/doctor-проверки, но сам по себе не передаёт значение в облачную сборку.
+
+Preview Android APK для внутреннего пилота:
+
+```powershell
+npm run mobile:eas:preview:android
+```
+
+Production build для Android/iOS:
+
+```powershell
+npm run mobile:eas:production
 ```
 
 После изменения `EXPO_PUBLIC_API_URL` мобильную сборку нужно пересобрать.

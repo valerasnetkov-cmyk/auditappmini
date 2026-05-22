@@ -132,3 +132,47 @@ Production build нельзя выпускать с `localhost`, `10.0.2.2` ил
 - OCR номера и одометра на backend пока работает как manual-confirmation placeholder: фото принимается, но реальный OCR-провайдер ещё не подключён.
 - Mobile не должен подключаться к Directus напрямую; все операции идут через custom backend.
 - Офлайн-очередь в `src/api.ts` подготовлена, но полноценная UI-синхронизация offline-first ещё не является частью P0.
+
+## EAS build для пилота
+
+Активный production mobile-контур собирается из этой папки: `C:\Projects\Auditmini\auditappmini\mobile`.
+Папка `mobile-app/` остаётся legacy и не должна попадать в production evidence.
+
+Перед первой EAS-сборкой установите/авторизуйте Expo EAS CLI:
+
+```powershell
+npx eas-cli@latest login
+```
+
+Если проект ещё не привязан к Expo/EAS, выполните конфигурацию:
+
+```powershell
+npm run eas:configure
+```
+
+Для EAS cloud build значение `EXPO_PUBLIC_API_URL` нужно настроить в окружении EAS, а не полагаться только на локальный `.env.production`.
+Production-значение должно быть публичным HTTPS URL backend API и заканчиваться на `/api`, например:
+
+```env
+EXPO_PUBLIC_API_URL=https://api.<project-domain>/api
+```
+
+Локальная структурная проверка EAS-контура:
+
+```powershell
+npm run eas:readiness
+```
+
+Preview Android APK для внутреннего пилота:
+
+```powershell
+npm run eas:preview:android
+```
+
+Production build для Android/iOS:
+
+```powershell
+npm run eas:production
+```
+
+После изменения `EXPO_PUBLIC_API_URL` мобильное приложение нужно пересобрать: public Expo env встраивается в JS bundle на этапе сборки.

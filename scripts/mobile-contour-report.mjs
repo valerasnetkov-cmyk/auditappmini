@@ -78,7 +78,7 @@ export async function collectMobileContour() {
   const activePackage = await readJsonIfExists(path.join(repoRoot, 'mobile', 'package.json'))
   const legacyPackage = await readJsonIfExists(path.join(repoRoot, 'mobile-app', 'package.json'))
 
-  const requiredActiveScripts = ['verify', 'doctor:launch', 'doctor:production', 'audit:moderate']
+  const requiredActiveScripts = ['verify', 'doctor:launch', 'doctor:production', 'audit:moderate', 'eas:readiness']
   const expectedLegacyMissingScripts = ['verify', 'doctor:launch', 'doctor:production', 'audit:moderate']
   const activeMissingScripts = missingScripts(activePackage, requiredActiveScripts)
   const legacyMissingScripts = missingScripts(legacyPackage, expectedLegacyMissingScripts)

@@ -14,7 +14,11 @@
     "doctor:online": "expo-doctor",
     "install:check": "npx expo install --check",
     "audit:moderate": "npm audit --audit-level=moderate",
-    "verify": "npm run typecheck && npm run install:check && npm run doctor"
+    "verify": "npm run typecheck && npm run install:check && npm run doctor && npm run eas:readiness",
+    "eas:readiness": "node scripts/eas-readiness.mjs",
+    "eas:configure": "npx eas-cli@latest build:configure",
+    "eas:preview:android": "npx eas-cli@latest build --platform android --profile preview",
+    "eas:production": "npx eas-cli@latest build --platform all --profile production"
   },
   "dependencies": {
     "@react-native-async-storage/async-storage": "2.2.0",

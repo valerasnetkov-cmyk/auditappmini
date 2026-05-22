@@ -23,6 +23,8 @@ Legacy mobile-app retirement note: `docs/mobile-app-retirement.md`.
 - Set `NEXT_PUBLIC_API_URL` in the web environment to the production API URL.
 - Set `EXPO_PUBLIC_API_URL` in the mobile build environment to the production API URL.
 - Run `npm run mobile:status` and confirm that `mobile/` is the active production mobile contour.
+- Run `npm run mobile:eas:readiness` and confirm that `mobile/eas.json` has preview and production build profiles.
+- Configure the same `EXPO_PUBLIC_API_URL` in EAS environment variables before cloud builds; local `mobile/.env.production` is not enough for EAS cloud builds.
 - Run `npm run verify:launch` before publishing.
 - Run `npm run doctor:production` against the backend/web/mobile production environment before starting or building release artifacts.
 - Run `npm run release:readiness` and explicitly accept any remaining pilot risks before production start.
@@ -45,6 +47,7 @@ Legacy mobile-app retirement note: `docs/mobile-app-retirement.md`.
 - Configure automated backups for database and uploads, plus scheduled backup verification.
 - Keep Directus optional; the backend must work when Directus is not configured.
 - Keep `mobile-app` out of production until its dependency tree is upgraded or the folder is retired.
+- Build pilot mobile artifacts from `mobile/` with EAS: `npm run mobile:eas:preview:android` for an internal Android APK or `npm run mobile:eas:production` for store-ready platform builds.
 
 ## Manual UAT
 
