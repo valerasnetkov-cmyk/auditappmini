@@ -2,6 +2,9 @@
 
 Короткий операторский порядок для первого запуска Auditmini на production/staging сервере. Полный релизный порядок остаётся в `docs/release-runbook.md`, а этот файл нужен как быстрый checklist перед реальным стартом сервиса.
 
+Production server command cheat sheet: `docs/production-server-commands.md`.
+Legacy mobile-app retirement note: `docs/mobile-app-retirement.md`.
+
 Интерактивную версию checklist можно вывести командой:
 
 ```powershell
@@ -41,6 +44,7 @@ copy mobile/.env.production.example mobile/.env.production
 До публикации артефактов:
 
 ```powershell
+npm run mobile:status
 npm run verify:launch
 ```
 
@@ -124,6 +128,14 @@ Invoke-RestMethod https://api.<project-domain>/api/health/ready
 - пользователь другой компании не видит чужие данные.
 
 ## 9. Сохранить release evidence
+
+Перед сохранением evidence полезно вывести общий readiness report:
+
+```powershell
+npm run release:readiness
+```
+
+Если в отчёте есть `blockers`, старт откладывается. Если остались только `release-actions` и `accepted-pilot-risks`, их нужно явно пройти/принять и приложить к release notes.
 
 После успешных проверок:
 

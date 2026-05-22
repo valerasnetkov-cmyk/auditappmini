@@ -4,6 +4,8 @@ This checklist is for the first controlled production/pilot launch of Auditmini.
 
 Full release sequence: `docs/release-runbook.md`.
 First production/staging start operator checklist: `docs/first-production-start.md`.
+Production server command cheat sheet: `docs/production-server-commands.md`.
+Legacy mobile-app retirement note: `docs/mobile-app-retirement.md`.
 
 ## Required Before Pilot
 
@@ -20,8 +22,10 @@ First production/staging start operator checklist: `docs/first-production-start.
 - Set `CORS_ORIGINS` to the real web origin list.
 - Set `NEXT_PUBLIC_API_URL` in the web environment to the production API URL.
 - Set `EXPO_PUBLIC_API_URL` in the mobile build environment to the production API URL.
+- Run `npm run mobile:status` and confirm that `mobile/` is the active production mobile contour.
 - Run `npm run verify:launch` before publishing.
 - Run `npm run doctor:production` against the backend/web/mobile production environment before starting or building release artifacts.
+- Run `npm run release:readiness` and explicitly accept any remaining pilot risks before production start.
 - Run `npm run release:first-start` to print the ordered first-start checklist for the operator.
 - Run `npm --prefix backend run backup:local` before and after pilot data migration.
 - Run `npm --prefix backend run backup:verify` after every pilot backup; see `docs/backup-restore.md`.
@@ -60,6 +64,6 @@ First production/staging start operator checklist: `docs/first-production-start.
 
 - SQLite is acceptable for a controlled pilot, but PostgreSQL is recommended for multi-company production.
 - Local uploads are acceptable only with persistent volume and backups.
-- Web audit still reports a moderate PostCSS advisory inside the current Next.js dependency tree; `npm audit fix --force` proposes a breaking downgrade and should not be used blindly.
-- `mobile-app` currently has high-severity dependency advisories; choose `mobile` as the active mobile codebase or schedule a dedicated upgrade.
+- Active `web` and `mobile` codebases must pass their audit gates before release; attach the audit output to release evidence.
+- Legacy `mobile-app` currently has dependency advisories and must stay out of production until it is upgraded or retired; choose `mobile` as the active mobile codebase.
 - Production backend startup intentionally fails when critical values such as `JWT_SECRET`, `TRUST_PROXY`, `DATABASE_PATH`, `UPLOAD_DIR`, `BACKUP_DIR`, wildcard CORS, public registration, disabled/invalid rate limits, or demo admin password are unsafe.

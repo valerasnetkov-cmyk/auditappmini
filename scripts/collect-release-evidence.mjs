@@ -3,6 +3,7 @@ import fs from 'node:fs/promises'
 import path from 'node:path'
 import process from 'node:process'
 import { fileURLToPath } from 'node:url'
+import { collectMobileContour } from './mobile-contour-report.mjs'
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const DEFAULT_OUTPUT_DIR = 'release-evidence'
@@ -119,8 +120,14 @@ async function collectEvidence() {
       mobileEnvProductionExists: await exists(path.join(repoRoot, 'mobile', '.env.production')),
       backendEcosystemConfigExists: await exists(path.join(repoRoot, 'backend', 'ecosystem.config.cjs')),
     },
+    mobileContour: await collectMobileContour(),
     latestBackupManifest: await findLatestBackupManifest(),
     requiredCommands: [
+      {
+        id: 'mobile-status',
+        command: 'npm run mobile:status',
+        expected: 'confirms mobile/ is the active production mobile app and mobile-app/ is excluded',
+      },
       {
         id: 'verify-launch',
         command: 'npm run verify:launch',
@@ -147,6 +154,8 @@ async function collectEvidence() {
       'Attach JSON output for npm run doctor:production without secret values.',
       'Attach backup manifest path and backup:verify output.',
       'Record production backend/web/mobile versions or artifact names.',
+      'Attach or review npm run release:first-start output before the first server start.',
+      'Attach or review npm run release:readiness output and explicitly accept remaining pilot risks.',
       'Record public health/readiness responses and one working API X-Request-Id.',
       'Record PM2/systemd process status and log rotation configuration.',
       'Record manual UAT notes for admin, owner, manager and inspector flows.',
@@ -162,6 +171,9 @@ async function collectEvidence() {
       releaseProductionCheck: packageJson?.scripts?.['release:production-check'] || null,
       releaseCheck: packageJson?.scripts?.['release:check'] || null,
       releaseEvidence: packageJson?.scripts?.['release:evidence'] || null,
+      releaseFirstStart: packageJson?.scripts?.['release:first-start'] || null,
+      releaseReadiness: packageJson?.scripts?.['release:readiness'] || null,
+      mobileStatus: packageJson?.scripts?.['mobile:status'] || null,
     },
   }
 }

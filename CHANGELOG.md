@@ -57,6 +57,11 @@
 - **Release runbook**: добавлен `docs/release-runbook.md` с единым порядком выкладки: code gate, production env gate, backup gate, build/start, post-release UAT, rollback и release evidence.
 - **Release scripts**: добавлены root-команды `release:verify`, `release:production-check` и `release:check` для предрелизной проверки, production env/backup gate и полного релизного gate.
 - **Release evidence manifest**: добавлен `scripts/collect-release-evidence.mjs` и root-команда `npm run release:evidence`; генератор создаёт локальный JSON-манифест релиза без значений production-секретов и фиксирует git commit/status, production env presence, backup manifest, обязательные gate-команды и PM2 log-retention настройки.
+- **First production start checklist**: добавлен `scripts/first-production-start.mjs`, root-команда `npm run release:first-start` и документ `docs/first-production-start.md`; checklist выводит read-only порядок первого production/staging запуска без раскрытия секретов.
+- **Launch readiness report**: добавлен `scripts/launch-readiness-report.mjs` и root-команда `npm run release:readiness`; отчёт показывает structural blockers, обязательные release-actions, accepted pilot risks, final gate commands и audit-команды для evidence без запуска destructive-операций.
+- **Production server commands**: добавлен `docs/production-server-commands.md` с короткой серверной шпаргалкой `doctor -> verify -> backup -> PM2 logrotate -> pm2:start -> web build/start -> health -> evidence`.
+- **mobile-app retirement note**: добавлен `docs/mobile-app-retirement.md`, а `mobile-app/README.md` помечен как legacy; активным мобильным production-контуром зафиксирован `mobile/`.
+- **Mobile contour status report**: добавлен `scripts/mobile-contour-report.mjs` и root-команда `npm run mobile:status`; release readiness/evidence теперь явно показывают, что `mobile/` является рабочим production-контуром, а `mobile-app/` остается исключенным legacy-каталогом до удаления или отдельного upgrade.
 - **Backend health/readiness endpoints**: добавлены unauthenticated endpoints `/health`, `/api/health`, `/api/health/live` и `/api/health/ready`; readiness проверяет SQLite query и возможность записи во временный файл внутри `UPLOAD_DIR`.
 - **Health smoke gate**: добавлен `backend/scripts/smoke-health.mjs` и `npm --prefix backend run smoke:health`; общий backend smoke теперь начинается с проверки liveness/readiness endpoint.
 - **Backend security smoke gate**: добавлен `backend/scripts/smoke-security.mjs` и `npm --prefix backend run smoke:security`; общий backend smoke теперь проверяет security headers, отключённый `X-Powered-By`, `Cache-Control: no-store` для auth и `429` на sensitive endpoint rate limit.
@@ -83,6 +88,9 @@
 - **Backend request tracing**: backend теперь принимает/создаёт `X-Request-Id`, возвращает его в каждом ответе, добавляет header в CORS exposed headers и пишет request id в access logs; `ACCESS_LOG_FORMAT=json` включает структурированные JSON-логи для production.
 - **Backend access log noise control**: добавлен `ACCESS_LOG_SKIP_PATHS` для исключения частых health-check путей из access log; production example, PM2 config, launch doctor и observability smoke учитывают новую настройку.
 - **PM2 log retention**: добавлены backend-команды `pm2:logrotate:install` и `pm2:logrotate:configure`; production/deployment/release docs теперь описывают ротацию PM2-логов без timestamp prefix поверх JSON access-log.
+- **Launch risks cleanup**: `docs/launch-checklist.md` больше не содержит устаревший web PostCSS-риск; вместо этого checklist требует audit evidence для active `web`/`mobile` и явно оставляет legacy `mobile-app` вне production до upgrade/retire.
+- **Readiness docs coverage**: `release:first-start` и `release:readiness` теперь ссылаются на production server commands и mobile-app retirement path, чтобы оператор видел статус legacy mobile-каталога перед запуском.
+- **Generated E2E artifacts cleanup**: `web/test-results/` добавлен в web ignore, чтобы Playwright `.last-run.json` не попадал в merge/commit после launch-проверок.
 - **Backend graceful shutdown**: backend теперь обрабатывает `SIGTERM`/`SIGINT`, переводит readiness в `503`, перестаёт принимать новые соединения, закрывает idle keep-alive и форсирует выход только после `GRACEFUL_SHUTDOWN_TIMEOUT_MS`.
 
 ### Verified
@@ -94,7 +102,19 @@
 - `node --check backend/scripts/smoke-production-guard.mjs`
 - `node --check backend/scripts/smoke-company-features.mjs`
 - `node --check scripts/collect-release-evidence.mjs`
+- `node --check scripts/first-production-start.mjs`
+- `node --check scripts/launch-readiness-report.mjs`
+- `node --check scripts/mobile-contour-report.mjs`
+- `npm run mobile:status`
+- `npm run mobile:status -- --json`
 - `npm run release:evidence -- --dry-run`
+- `npm run release:first-start`
+- `npm run release:first-start -- --json`
+- `npm run release:readiness`
+- `npm run release:readiness -- --json`
+- `npm --prefix web audit --audit-level=moderate`
+- `npm --prefix mobile audit --audit-level=moderate`
+- `npm --prefix mobile-app audit --audit-level=moderate` *(expected legacy advisory output; `mobile-app` remains excluded from production)*
 - `npm --prefix backend run smoke:security`
 - `npm --prefix backend run smoke:observability`
 - `npm --prefix backend run smoke:shutdown`

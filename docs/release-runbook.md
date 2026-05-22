@@ -27,13 +27,16 @@
 
 Подробности: `docs/production-env.md`.
 
-???????? ???????????? checklist ??????? production/staging ???????: `docs/first-production-start.md`.
+First production/staging operator checklist: `docs/first-production-start.md`.
+Production server command cheat sheet: `docs/production-server-commands.md`.
+Legacy mobile-app retirement note: `docs/mobile-app-retirement.md`.
 
 ## 1. Code gate
 
 На машине разработки или CI:
 
 ```powershell
+npm run mobile:status
 npm run verify:launch
 ```
 
@@ -213,6 +216,12 @@ npm run release:evidence
 
 ```powershell
 npm run release:first-start
+```
+
+Перед финальным стартом можно вывести read-only отчёт по структурным блокерам, обязательным release-действиям и оставшимся pilot-рискам:
+
+```powershell
+npm run release:readiness
 ```
 
 Для каждого production-релиза сохраните:

@@ -35,3 +35,8 @@ Getting started (local development)
 Notes
 - We’ll progressively implement features and adjust the plan as the mobile app evolves.
 - After scaffolding, I’ll add a small MVP branch and start implementing authentication and the Defects UI.
+# Legacy mobile-app status
+
+> `mobile-app/` is not the active production mobile client. The active mobile contour is `mobile/`.
+>
+> Keep this folder out of production until it is either removed or separately upgraded. See `../docs/mobile-app-retirement.md`.

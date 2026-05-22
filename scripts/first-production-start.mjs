@@ -63,6 +63,7 @@ async function collectChecklist() {
     backupLocal: hasScript(rootPackage, 'backup:local'),
     backupVerify: hasScript(rootPackage, 'backup:verify'),
     releaseEvidence: hasScript(rootPackage, 'release:evidence'),
+    mobileStatus: hasScript(rootPackage, 'mobile:status'),
     backendPm2Start: hasScript(backendPackage, 'pm2:start'),
     backendPm2Logs: hasScript(backendPackage, 'pm2:logs'),
     backendPm2LogrotateInstall: hasScript(backendPackage, 'pm2:logrotate:install'),
@@ -87,8 +88,11 @@ async function collectChecklist() {
     {
       id: 'code-gate',
       title: 'Run code gate before publishing artifacts',
-      commands: ['npm run verify:launch'],
+      commands: ['npm run mobile:status', 'npm run verify:launch'],
       evidence: 'Terminal output or CI link shows backend smoke, web build, mobile verify, E2E and audits passed.',
+      notes: [
+        'Confirm that mobile/ is the active production mobile app and mobile-app/ remains excluded until deleted or separately upgraded.',
+      ],
     },
     {
       id: 'production-env-gate',
@@ -162,6 +166,8 @@ async function collectChecklist() {
       'docs/production-env.md',
       'docs/release-runbook.md',
       'docs/launch-checklist.md',
+      'docs/production-server-commands.md',
+      'docs/mobile-app-retirement.md',
       'docs/backup-restore.md',
     ],
   }

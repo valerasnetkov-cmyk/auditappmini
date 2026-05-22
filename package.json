@@ -20,6 +20,8 @@
     "release:check": "npm run verify:launch && npm run doctor:production && npm run backup:verify",
     "release:evidence": "node scripts/collect-release-evidence.mjs",
     "release:first-start": "node scripts/first-production-start.mjs",
+    "release:readiness": "node scripts/launch-readiness-report.mjs",
+    "mobile:status": "node scripts/mobile-contour-report.mjs",
     "audit:backend": "npm --prefix backend audit --audit-level=moderate",
     "audit:web:high": "npm --prefix web audit --audit-level=high",
     "audit:launch": "npm run audit:backend && npm run audit:web:high && npm run audit:mobile",
