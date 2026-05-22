@@ -89,6 +89,7 @@ export async function collectMobileContour() {
   const legacyPresent = Boolean(legacyPackage)
   const legacyReferencedByRoot = rootLegacyRefs.length > 0
   const legacyExcluded = legacyPresent && !legacyReferencedByRoot
+  const legacyRemoved = !legacyPresent
 
   return {
     schemaVersion: 1,
@@ -96,13 +97,15 @@ export async function collectMobileContour() {
     activeDirectory: 'mobile',
     legacyDirectory: 'mobile-app',
     status: activeReady
-      ? legacyExcluded
+      ? legacyRemoved
+        ? 'active-mobile-ready-legacy-mobile-app-removed'
+        : legacyExcluded
         ? 'active-mobile-ready-legacy-mobile-app-excluded'
         : 'active-mobile-ready'
       : 'active-mobile-needs-attention',
     recommendation: legacyPresent
       ? 'Use mobile/ for production. Delete mobile-app/ after explicit owner confirmation, or upgrade it as a separate project before any production use.'
-      : 'Use mobile/ for production. The legacy mobile-app/ directory is not present.',
+      : 'Use mobile/ for production. The legacy mobile-app/ directory has been removed from this repository.',
     active: {
       present: Boolean(activePackage),
       readyForLaunchGate: activeReady,
@@ -115,6 +118,7 @@ export async function collectMobileContour() {
       referencedByRootScripts: rootLegacyRefs,
       missingLaunchScripts: legacyMissingScripts,
       package: packageSummary(legacyPackage),
+      removedFromRepository: legacyRemoved,
     },
     rootScripts: {
       referencesToMobile: rootMobileRefs,
@@ -154,7 +158,7 @@ export function renderMobileContourMarkdown(report) {
   lines.push('', '## Legacy mobile-app', '')
 
   if (!report.legacy.present) {
-    lines.push('- `mobile-app/package.json` is missing.')
+    lines.push('- `mobile-app/` has been removed from this repository.')
   } else {
     lines.push(`- Package: ${report.legacy.package.name || '(unnamed)'} ${report.legacy.package.version || ''}`.trim())
     lines.push(`- Expo: ${report.legacy.package.expo || '(not declared)'}`)

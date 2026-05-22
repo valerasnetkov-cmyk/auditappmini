@@ -91,7 +91,7 @@ async function collectChecklist() {
       commands: ['npm run mobile:status', 'npm run verify:launch'],
       evidence: 'Terminal output or CI link shows backend smoke, web build, mobile verify, E2E and audits passed.',
       notes: [
-        'Confirm that mobile/ is the active production mobile app and mobile-app/ remains excluded until deleted or separately upgraded.',
+        'Confirm that mobile/ is the active production mobile app and mobile-app/ is removed from the production repository.',
       ],
     },
     {

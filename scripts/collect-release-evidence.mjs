@@ -126,7 +126,7 @@ async function collectEvidence() {
       {
         id: 'mobile-status',
         command: 'npm run mobile:status',
-        expected: 'confirms mobile/ is the active production mobile app and mobile-app/ is excluded',
+        expected: 'confirms mobile/ is the active production mobile app and mobile-app/ is removed or absent',
       },
       {
         id: 'verify-launch',

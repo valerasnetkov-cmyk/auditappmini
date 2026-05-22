@@ -29,7 +29,7 @@
 
 First production/staging operator checklist: `docs/first-production-start.md`.
 Production server command cheat sheet: `docs/production-server-commands.md`.
-Legacy mobile-app retirement note: `docs/mobile-app-retirement.md`.
+Legacy mobile-app removal record: `docs/mobile-app-retirement.md`.
 
 ## 1. Code gate
 

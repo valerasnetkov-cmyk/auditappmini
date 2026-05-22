@@ -70,6 +70,9 @@
 - **Backend graceful shutdown smoke gate**: добавлен `backend/scripts/smoke-shutdown.mjs` и `npm --prefix backend run smoke:shutdown`; общий backend smoke теперь проверяет контролируемую остановку HTTP-сервера через тот же graceful shutdown path, который используется для `SIGTERM`/`SIGINT`.
 - **Production guard smoke**: добавлен `backend/scripts/smoke-production-guard.mjs` и `npm --prefix backend run smoke:production-guard`; общий backend smoke теперь проверяет, что production doctor запрещает публичную регистрацию.
 
+### Removed
+- **Legacy mobile-app contour**: удалён каталог `mobile-app/` вместе с устаревшим Expo/React Native кодом и ignored-хвостами; production mobile-контур окончательно закреплён за `mobile/`, а release/readiness-документы обновлены под состояние “legacy удалён”.
+
 ### Changed
 - **Mobile doctor без зависимости от внешней сети**: `mobile/scripts/expo-doctor-safe.mjs` запускает Expo Doctor с `EXPO_DOCTOR_WARN_ON_NETWORK_ERRORS=1` и отключённой React Native Directory network-проверкой; строгий сетевой режим оставлен отдельной командой `npm --prefix mobile run doctor:online`.
 - **Launch doctor с явным env-файлом**: `backend/scripts/launch-doctor.mjs` теперь поддерживает `--production`, `--mode`, `--doctor-env-file` и `LAUNCH_ENV_FILE`, показывает `envFileExists` и отлавливает placeholder-значения в JWT, CORS, admin/password и `WEB_APP_URL`.

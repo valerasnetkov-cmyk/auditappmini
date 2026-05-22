@@ -3,7 +3,7 @@
 Короткий операторский порядок для первого запуска Auditmini на production/staging сервере. Полный релизный порядок остаётся в `docs/release-runbook.md`, а этот файл нужен как быстрый checklist перед реальным стартом сервиса.
 
 Production server command cheat sheet: `docs/production-server-commands.md`.
-Legacy mobile-app retirement note: `docs/mobile-app-retirement.md`.
+Legacy mobile-app removal record: `docs/mobile-app-retirement.md`.
 
 Интерактивную версию checklist можно вывести командой:
 

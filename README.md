@@ -192,7 +192,6 @@ auditappmini/
 ├── backend/
 ├── web/
 ├── mobile/
-├── mobile-app/
 ├── scripts/
 ├── docs/
 │   ├── product.md

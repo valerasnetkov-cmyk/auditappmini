@@ -45,7 +45,7 @@ npm --prefix web audit --audit-level=moderate
 npm --prefix mobile audit --audit-level=moderate
 ```
 
-`mobile/` — активный мобильный контур. `mobile-app/` — legacy и не должен участвовать в production, пока отдельно не обновлён или не удалён.
+`mobile/` — активный мобильный контур. Legacy-каталог `mobile-app/` удалён из production-репозитория и не участвует в launch/evidence.
 
 ## 4. Сделать backup перед стартом/миграцией
 

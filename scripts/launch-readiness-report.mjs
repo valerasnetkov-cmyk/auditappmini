@@ -190,13 +190,16 @@ async function collectReadiness() {
       title: 'Local uploads require persistent volume and backup discipline',
       action: 'Keep UPLOAD_DIR on persistent storage and verify backups after every migration/release.',
     },
-    {
+  ]
+
+  if (mobileContour.legacy.present) {
+    acceptedPilotRisks.push({
       id: 'legacy-mobile-app-excluded',
       severity: 'accepted-pilot-risk',
       title: 'Legacy mobile-app must stay out of production',
       action: 'Use mobile/ as the active Expo app; follow docs/mobile-app-retirement.md, then delete or separately upgrade mobile-app before any production use.',
-    },
-  ]
+    })
+  }
 
   const auditCommands = [
     {
@@ -214,12 +217,15 @@ async function collectReadiness() {
       command: 'npm --prefix mobile audit --audit-level=moderate',
       expected: '0 vulnerabilities for the active mobile app',
     },
-    {
+  ]
+
+  if (mobileContour.legacy.present) {
+    auditCommands.push({
       id: 'legacy-mobile-app-audit',
       command: 'npm --prefix mobile-app audit --audit-level=moderate',
       expected: 'Not part of production unless separately upgraded; failures here should keep mobile-app excluded.',
-    },
-  ]
+    })
+  }
 
   const overall = blockers.length > 0
     ? 'blocked'

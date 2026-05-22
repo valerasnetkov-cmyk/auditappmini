@@ -5,7 +5,7 @@ This checklist is for the first controlled production/pilot launch of Auditmini.
 Full release sequence: `docs/release-runbook.md`.
 First production/staging start operator checklist: `docs/first-production-start.md`.
 Production server command cheat sheet: `docs/production-server-commands.md`.
-Legacy mobile-app retirement note: `docs/mobile-app-retirement.md`.
+Legacy mobile-app removal record: `docs/mobile-app-retirement.md`.
 
 ## Required Before Pilot
 
@@ -46,7 +46,7 @@ Legacy mobile-app retirement note: `docs/mobile-app-retirement.md`.
 - Store SQLite and uploads on persistent volume for pilot mode.
 - Configure automated backups for database and uploads, plus scheduled backup verification.
 - Keep Directus optional; the backend must work when Directus is not configured.
-- Keep `mobile-app` out of production until its dependency tree is upgraded or the folder is retired.
+- Confirm that legacy `mobile-app/` is absent from the production repository; use only `mobile/` for mobile builds.
 - Build pilot mobile artifacts from `mobile/` with EAS: `npm run mobile:eas:preview:android` for an internal Android APK or `npm run mobile:eas:production` for store-ready platform builds.
 
 ## Manual UAT
@@ -68,5 +68,5 @@ Legacy mobile-app retirement note: `docs/mobile-app-retirement.md`.
 - SQLite is acceptable for a controlled pilot, but PostgreSQL is recommended for multi-company production.
 - Local uploads are acceptable only with persistent volume and backups.
 - Active `web` and `mobile` codebases must pass their audit gates before release; attach the audit output to release evidence.
-- Legacy `mobile-app` currently has dependency advisories and must stay out of production until it is upgraded or retired; choose `mobile` as the active mobile codebase.
+- Legacy `mobile-app/` has been removed from the production repository; choose `mobile/` as the active mobile codebase.
 - Production backend startup intentionally fails when critical values such as `JWT_SECRET`, `TRUST_PROXY`, `DATABASE_PATH`, `UPLOAD_DIR`, `BACKUP_DIR`, wildcard CORS, public registration, disabled/invalid rate limits, or demo admin password are unsafe.
