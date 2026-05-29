@@ -51,12 +51,12 @@ async function waitForServer(timeoutMs = 15000) {
   throw new Error(`Server did not become ready: ${lastError?.message || 'timeout'}`)
 }
 
-async function postLogin(expectedStatus) {
+async function postLogin(expectedStatus, email = 'admin@example.com') {
   const response = await fetch(`${BASE_URL}/api/auth/login`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
-      email: 'admin@example.com',
+      email,
       password: 'wrong-password',
     }),
   })
@@ -67,6 +67,46 @@ async function postLogin(expectedStatus) {
   }
 
   return { response, body }
+}
+
+async function postValidLogin() {
+  const response = await fetch(`${BASE_URL}/api/auth/login`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      email: 'admin@example.com',
+      password: 'VeryStrongAdminPassword123!',
+    }),
+  })
+  const body = await response.json().catch(() => ({}))
+
+  if (!response.ok || !body?.token) {
+    throw new Error(`/api/auth/login expected token but got ${response.status}: ${JSON.stringify(body)}`)
+  }
+
+  const cookie = response.headers.get('set-cookie')
+  if (!cookie || !cookie.includes('audit_session=') || !cookie.includes('HttpOnly') || !cookie.includes('SameSite=Lax')) {
+    throw new Error(`Login must set an httpOnly auth cookie, got: ${cookie}`)
+  }
+
+  return { response, body, cookie: cookie.split(';')[0] }
+}
+
+async function assertPublicRegistrationDisabled() {
+  const response = await fetch(`${BASE_URL}/api/auth/register`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      email: `smoke-${process.pid}@example.com`,
+      password: 'Strong-password-123',
+      name: 'Smoke User',
+    }),
+  })
+  const body = await response.json().catch(() => ({}))
+
+  if (response.status !== 403) {
+    throw new Error(`/api/auth/register expected 403 by default but got ${response.status}: ${JSON.stringify(body)}`)
+  }
 }
 
 async function run() {
@@ -87,8 +127,10 @@ async function run() {
       SECURITY_HSTS_ENABLED: 'true',
       SECURITY_HSTS_MAX_AGE: '60',
       SENSITIVE_RATE_LIMIT_WINDOW_MS: '60000',
-      SENSITIVE_RATE_LIMIT_MAX: '2',
+      SENSITIVE_RATE_LIMIT_MAX: '4',
       AUTH_ACCOUNT_RATE_LIMIT_MAX: '2',
+      ADMIN_EMAIL: 'admin@example.com',
+      ADMIN_PASSWORD: 'VeryStrongAdminPassword123!',
     },
     stdio: ['ignore', 'pipe', 'pipe'],
   })
@@ -106,6 +148,9 @@ async function run() {
       'x-content-type-options': 'nosniff',
       'x-frame-options': 'DENY',
       'referrer-policy': 'no-referrer',
+      'content-security-policy': "default-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'",
+      'cross-origin-opener-policy': 'same-origin',
+      'cross-origin-resource-policy': 'same-site',
       'strict-transport-security': 'max-age=60; includeSubDomains',
     }
 
@@ -120,9 +165,35 @@ async function run() {
       throw new Error('X-Powered-By header must be disabled')
     }
 
-    await postLogin(401)
+    await assertPublicRegistrationDisabled()
+    const validLogin = await postValidLogin()
+
+    const cookieMe = await fetch(`${BASE_URL}/api/auth/me`, {
+      headers: { Cookie: validLogin.cookie },
+    })
+    const cookieMeBody = await cookieMe.json().catch(() => ({}))
+    if (!cookieMe.ok || cookieMeBody?.email !== 'admin@example.com') {
+      throw new Error(`Cookie auth /api/auth/me failed: ${cookieMe.status} ${JSON.stringify(cookieMeBody)}`)
+    }
+
+    const bearerMe = await fetch(`${BASE_URL}/api/auth/me`, {
+      headers: { Authorization: `Bearer ${validLogin.body.token}` },
+    })
+    const bearerCookie = bearerMe.headers.get('set-cookie')
+    if (!bearerMe.ok || !bearerCookie?.includes('audit_session=')) {
+      throw new Error(`Bearer auth should refresh httpOnly cookie, got ${bearerMe.status} ${bearerCookie}`)
+    }
+
+    const missingUserAttempt = await postLogin(401, 'missing-admin@example.com')
     const secondAttempt = await postLogin(401)
     const limitedAttempt = await postLogin(429)
+
+    if (missingUserAttempt.body?.error !== secondAttempt.body?.error) {
+      throw new Error(`Login errors must not reveal whether an email exists: ${JSON.stringify({
+        missing: missingUserAttempt.body,
+        existing: secondAttempt.body,
+      })}`)
+    }
 
     if (secondAttempt.response.headers.get('cache-control') !== 'no-store') {
       throw new Error('Sensitive auth responses must use Cache-Control: no-store')
@@ -143,6 +214,10 @@ async function run() {
           securityHeaders: true,
           poweredByDisabled: true,
           authNoStore: true,
+          publicRegistrationDisabled: true,
+          httpOnlyCookieSession: true,
+          bearerRefreshesCookieSession: true,
+          loginEnumerationProtected: true,
           authRateLimited: true,
         },
         null,

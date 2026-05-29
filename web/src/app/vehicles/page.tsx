@@ -6,8 +6,11 @@ import Link from 'next/link'
 import { useSearchParams } from 'next/navigation'
 import Layout from '@/components/Layout'
 import NewInspectionModal from '@/components/NewInspectionModal'
+import SubscriptionStatusBanner from '@/components/SubscriptionStatusBanner'
 import api from '@/lib/api/client'
 import { requireAuthToken } from '@/lib/auth'
+import { getCompanyOperationRestriction } from '@/lib/companyAccess'
+import { useCompanyUsage } from '@/lib/useCompanyUsage'
 import { normalizeVehicleNumber, VEHICLE_NUMBER_HELP } from '@/lib/vehicleNumber'
 import type { RegionRecord, VehicleRecord, VehicleStatus } from '@/lib/types'
 
@@ -87,6 +90,19 @@ export default function VehiclesPage() {
   const [formError, setFormError] = useState('')
   const [saving, setSaving] = useState(false)
   const [selectedVehicleIds, setSelectedVehicleIds] = useState<string[]>([])
+  const { usage: companyUsage, loading: companyUsageLoading } = useCompanyUsage()
+  const createRestriction = getCompanyOperationRestriction(companyUsage, 'create')
+  const writeRestriction = getCompanyOperationRestriction(companyUsage, 'write')
+  const createRestrictionMessage = companyUsageLoading
+    ? 'Проверяем статус тарифа компании. Создание техники станет доступно после проверки.'
+    : createRestriction
+      ? `${createRestriction.title}: ${createRestriction.message}`
+      : ''
+  const writeRestrictionMessage = companyUsageLoading
+    ? 'Проверяем статус тарифа компании. Изменения станут доступны после проверки.'
+    : writeRestriction
+      ? `${writeRestriction.title}: ${writeRestriction.message}`
+      : ''
 
   const loadData = async () => {
     try {
@@ -194,6 +210,16 @@ export default function VehiclesPage() {
 
   const handleAdd = async (event: FormEvent) => {
     event.preventDefault()
+    if (companyUsageLoading) {
+      setFormError('Проверяем статус тарифа компании. Повторите добавление через несколько секунд.')
+      return
+    }
+
+    if (createRestriction) {
+      setFormError(`${createRestriction.title}: ${createRestriction.message}`)
+      return
+    }
+
     setSaving(true)
     setFormError('')
 
@@ -228,12 +254,21 @@ export default function VehiclesPage() {
       status: vehicle.status,
       region: vehicle.region || '',
     })
-    setFormError('')
+    setFormError(writeRestrictionMessage)
   }
 
   const handleUpdate = async (event: FormEvent) => {
     event.preventDefault()
     if (!editingVehicle) return
+    if (companyUsageLoading) {
+      setFormError('Проверяем статус тарифа компании. Повторите сохранение через несколько секунд.')
+      return
+    }
+
+    if (writeRestriction) {
+      setFormError(`${writeRestriction.title}: ${writeRestriction.message}`)
+      return
+    }
 
     setSaving(true)
     setFormError('')
@@ -281,6 +316,15 @@ export default function VehiclesPage() {
   const handleArchiveVehicles = async (ids: string[]) => {
     const archiveIds = [...new Set(ids)].filter(Boolean)
     if (archiveIds.length === 0) return
+    if (companyUsageLoading) {
+      setError('Проверяем статус тарифа компании. Повторите действие через несколько секунд.')
+      return
+    }
+
+    if (writeRestriction) {
+      setError(`${writeRestriction.title}: ${writeRestriction.message}`)
+      return
+    }
 
     if (!confirm(`Переместить в архив выбранную технику (${archiveIds.length})?`)) return
 
@@ -296,6 +340,11 @@ export default function VehiclesPage() {
 
   const openAddModal = () => {
     resetForm()
+    if (companyUsageLoading) {
+      setFormError('Проверяем статус тарифа компании. Создание техники станет доступно после проверки.')
+    } else if (createRestriction) {
+      setFormError(`${createRestriction.title}: ${createRestriction.message}`)
+    }
     setShowAddModal(true)
   }
 
@@ -314,14 +363,28 @@ export default function VehiclesPage() {
             <p className="mt-1 text-sm text-foreground-muted">Справочник техники, статусов, регионов и быстрый запуск осмотров.</p>
           </div>
           <div className="flex flex-wrap items-center gap-3">
-            <Link href="/vehicles/new" className="btn btn-secondary">
-              Полная форма
-            </Link>
-            <button onClick={openAddModal} className="btn btn-primary">
+            {createRestrictionMessage ? (
+              <button type="button" disabled className="btn btn-secondary disabled:opacity-50">
+                Полная форма
+              </button>
+            ) : (
+              <Link href="/vehicles/new" className="btn btn-secondary">
+                Полная форма
+              </Link>
+            )}
+            <button onClick={openAddModal} disabled={Boolean(createRestrictionMessage)} className="btn btn-primary disabled:opacity-50">
               + Добавить
             </button>
           </div>
         </header>
+
+        <SubscriptionStatusBanner usage={companyUsage} compact />
+
+        {createRestrictionMessage ? (
+          <div className="alert-danger mb-4 rounded-card px-4 py-3 text-sm">
+            {createRestrictionMessage}
+          </div>
+        ) : null}
 
         {error ? <div className="alert-danger mb-4 rounded-card px-4 py-3 text-sm">{error}</div> : null}
 
@@ -355,7 +418,7 @@ export default function VehiclesPage() {
           {selectedVehicleIds.length > 0 ? (
             <div className="flex flex-wrap items-center gap-3 rounded-card border border-line bg-surface-soft px-4 py-3 text-sm">
               <span className="font-medium text-foreground">Выбрано: {selectedVehicleIds.length}</span>
-              <button type="button" onClick={() => void handleArchiveVehicles(selectedVehicleIds)} className="btn btn-secondary btn-sm">
+              <button type="button" onClick={() => void handleArchiveVehicles(selectedVehicleIds)} disabled={Boolean(writeRestrictionMessage)} className="btn btn-secondary btn-sm disabled:opacity-50">
                 В архив
               </button>
               <button type="button" onClick={clearSelection} className="text-foreground-muted hover:text-foreground">
@@ -377,12 +440,15 @@ export default function VehiclesPage() {
             sortConfig={sortConfig}
             selectedIds={selectedVehicleIdsSet}
             allVisibleSelected={allVisibleSelected}
+            actionsDisabled={Boolean(writeRestrictionMessage)}
+            createActionsDisabled={Boolean(createRestrictionMessage)}
             onSort={handleSort}
             onEdit={handleEdit}
             onArchive={(id) => void handleArchiveVehicles([id])}
             onToggleSelected={toggleVehicleSelection}
             onToggleAllVisible={toggleVisibleSelection}
             onInspect={(vehicle) => {
+              if (createRestrictionMessage) return
               setSelectedVehicleForInspection(vehicle)
               setShowNewInspectionModal(true)
             }}
@@ -407,6 +473,7 @@ export default function VehiclesPage() {
               regions={regions}
               formData={formData}
               formError={formError}
+              restrictionMessage={createRestrictionMessage}
               saving={saving}
               onChange={setFormData}
               onSubmit={handleAdd}
@@ -422,6 +489,7 @@ export default function VehiclesPage() {
               regions={regions}
               formData={formData}
               formError={formError}
+              restrictionMessage={writeRestrictionMessage}
               saving={saving}
               onChange={setFormData}
               onSubmit={handleUpdate}
@@ -531,6 +599,8 @@ function VehiclesTable({
   sortConfig,
   selectedIds,
   allVisibleSelected,
+  actionsDisabled,
+  createActionsDisabled,
   onSort,
   onEdit,
   onArchive,
@@ -543,6 +613,8 @@ function VehiclesTable({
   sortConfig: SortConfig
   selectedIds: Set<string>
   allVisibleSelected: boolean
+  actionsDisabled: boolean
+  createActionsDisabled: boolean
   onSort: (key: SortableVehicleKey) => void
   onEdit: (vehicle: VehicleRecord) => void
   onArchive: (id: string) => void
@@ -560,6 +632,7 @@ function VehiclesTable({
                 <input
                   type="checkbox"
                   checked={allVisibleSelected}
+                  disabled={actionsDisabled}
                   onChange={onToggleAllVisible}
                   aria-label="Выбрать все видимые строки"
                   className="h-4 w-4 rounded border-line"
@@ -590,6 +663,8 @@ function VehiclesTable({
                   vehicle={vehicle}
                   hiddenColumns={hiddenColumns}
                   selected={selectedIds.has(vehicle.id)}
+                  actionsDisabled={actionsDisabled}
+                  createActionsDisabled={createActionsDisabled}
                   onInspect={onInspect}
                   onEdit={onEdit}
                   onArchive={onArchive}
@@ -614,6 +689,8 @@ function VehicleRow({
   vehicle,
   hiddenColumns,
   selected,
+  actionsDisabled,
+  createActionsDisabled,
   onInspect,
   onEdit,
   onArchive,
@@ -622,6 +699,8 @@ function VehicleRow({
   vehicle: VehicleRecord
   hiddenColumns: string[]
   selected: boolean
+  actionsDisabled: boolean
+  createActionsDisabled: boolean
   onInspect: (vehicle: VehicleRecord) => void
   onEdit: (vehicle: VehicleRecord) => void
   onArchive: (id: string) => void
@@ -635,7 +714,7 @@ function VehicleRow({
         <input
           type="checkbox"
           checked={selected}
-          disabled={isArchived}
+          disabled={isArchived || actionsDisabled}
           onChange={() => onToggleSelected(vehicle.id)}
           aria-label={`Выбрать технику ${vehicle.number}`}
           className="h-4 w-4 rounded border-line disabled:opacity-40"
@@ -666,15 +745,15 @@ function VehicleRow({
       ) : null}
       <td className="px-6 py-4 text-center">
         {!isArchived ? (
-          <button onClick={() => onInspect(vehicle)} className="mr-3 text-status-success hover:underline">
+          <button onClick={() => onInspect(vehicle)} disabled={createActionsDisabled} className="mr-3 text-status-success hover:underline disabled:cursor-not-allowed disabled:opacity-50">
             Осмотр
           </button>
         ) : null}
-        <button onClick={() => onEdit(vehicle)} className="mr-3 text-primary hover:underline">
+        <button onClick={() => onEdit(vehicle)} disabled={actionsDisabled} className="mr-3 text-primary hover:underline disabled:cursor-not-allowed disabled:opacity-50">
           Изменить
         </button>
         {!isArchived ? (
-          <button onClick={() => onArchive(vehicle.id)} className="text-status-danger hover:underline">
+          <button onClick={() => onArchive(vehicle.id)} disabled={actionsDisabled} className="text-status-danger hover:underline disabled:cursor-not-allowed disabled:opacity-50">
             В архив
           </button>
         ) : null}
@@ -704,6 +783,7 @@ function VehicleForm({
   regions,
   formData,
   formError,
+  restrictionMessage = '',
   saving,
   onChange,
   onSubmit,
@@ -713,6 +793,7 @@ function VehicleForm({
   regions: RegionRecord[]
   formData: VehicleFormData
   formError: string
+  restrictionMessage?: string
   saving: boolean
   onChange: (value: VehicleFormData) => void
   onSubmit: (event: FormEvent) => void
@@ -722,6 +803,7 @@ function VehicleForm({
     <form onSubmit={onSubmit}>
       <div className="space-y-4">
         {formError ? <div className="alert-danger rounded-card px-4 py-3 text-sm">{formError}</div> : null}
+        {restrictionMessage ? <div className="alert-danger rounded-card px-4 py-3 text-sm">{restrictionMessage}</div> : null}
 
         <div>
           <label className="label">Госномер</label>
@@ -778,7 +860,7 @@ function VehicleForm({
         <button type="button" onClick={onCancel} className="btn btn-secondary">
           Отмена
         </button>
-        <button type="submit" disabled={saving} className="btn btn-primary disabled:opacity-50">
+        <button type="submit" disabled={saving || Boolean(restrictionMessage)} className="btn btn-primary disabled:opacity-50">
           {saving ? 'Сохранение...' : mode === 'create' ? 'Добавить' : 'Сохранить'}
         </button>
       </div>

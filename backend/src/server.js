@@ -19,7 +19,6 @@ import fs from 'fs'
 import { initDatabase, getDb } from './db.js'
 import registerCompleteInspectionRoutes from './routes/completeInspection.js'
 import registerCompanyRoutes from './routes/companies.js'
-import registerDirectusIntegrationRoutes from './routes/directus.js'
 import registerSaasAdminRoutes from './routes/adminSaas.js'
 import { registerOdometerRoutes, registerVehicleNumberRecognitionRoutes } from './routes/odometer.js'
 import { photoRequirements, photoTypeLabels, defectCategories } from './routes/photo-requirements.js'
@@ -40,15 +39,28 @@ const JWT_SECRET = process.env.JWT_SECRET || DEFAULT_JWT_SECRET
 const isProduction = process.env.NODE_ENV === 'production'
 const PUBLIC_REGISTRATION_ENABLED = process.env.PUBLIC_REGISTRATION_ENABLED
   ? process.env.PUBLIC_REGISTRATION_ENABLED === 'true'
-  : !isProduction
+  : false
 const TRUST_PROXY = parseTrustProxy(process.env.TRUST_PROXY)
 const SECURITY_HSTS_ENABLED = process.env.SECURITY_HSTS_ENABLED
   ? process.env.SECURITY_HSTS_ENABLED === 'true'
   : isProduction
 const SECURITY_HSTS_MAX_AGE = parsePositiveIntegerEnv('SECURITY_HSTS_MAX_AGE', 15552000)
+const SECURITY_CSP = process.env.SECURITY_CSP || "default-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'"
+const SECURITY_CROSS_ORIGIN_OPENER_POLICY = process.env.SECURITY_CROSS_ORIGIN_OPENER_POLICY || 'same-origin'
+const SECURITY_CROSS_ORIGIN_RESOURCE_POLICY = process.env.SECURITY_CROSS_ORIGIN_RESOURCE_POLICY || 'same-site'
 const SENSITIVE_RATE_LIMIT_WINDOW_MS = parsePositiveIntegerEnv('SENSITIVE_RATE_LIMIT_WINDOW_MS', 15 * 60 * 1000)
 const SENSITIVE_RATE_LIMIT_MAX = parsePositiveIntegerEnv('SENSITIVE_RATE_LIMIT_MAX', isProduction ? 60 : 500)
 const AUTH_ACCOUNT_RATE_LIMIT_MAX = parsePositiveIntegerEnv('AUTH_ACCOUNT_RATE_LIMIT_MAX', isProduction ? 20 : 500)
+const MFA_LOGIN_TOKEN_TTL = process.env.MFA_LOGIN_TOKEN_TTL || '5m'
+const AUTH_COOKIE_NAME = process.env.AUTH_COOKIE_NAME || 'audit_session'
+const AUTH_COOKIE_MAX_AGE_SECONDS = parsePositiveIntegerEnv('AUTH_COOKIE_MAX_AGE_SECONDS', 7 * 24 * 60 * 60)
+const AUTH_COOKIE_SECURE = process.env.AUTH_COOKIE_SECURE
+  ? process.env.AUTH_COOKIE_SECURE === 'true'
+  : isProduction
+const AUTH_COOKIE_SAME_SITE = process.env.AUTH_COOKIE_SAME_SITE || 'Lax'
+const MAX_FILE_SIZE = Number(process.env.MAX_FILE_SIZE || 15 * 1024 * 1024)
+const MAX_IMAGE_PIXELS = parsePositiveIntegerEnv('MAX_IMAGE_PIXELS', 40_000_000)
+const JSON_BODY_LIMIT = process.env.JSON_BODY_LIMIT || '2mb'
 const GRACEFUL_SHUTDOWN_TIMEOUT_MS = parsePositiveIntegerEnv('GRACEFUL_SHUTDOWN_TIMEOUT_MS', 10000)
 const REQUEST_ID_HEADER = normalizeHeaderName(process.env.REQUEST_ID_HEADER || 'x-request-id')
 const ACCESS_LOG_FORMAT = process.env.ACCESS_LOG_FORMAT || (isProduction ? 'json' : 'text')
@@ -118,6 +130,12 @@ function assertPositiveInteger(value, name) {
   }
 }
 
+function assertOneOf(value, allowedValues, name) {
+  if (!allowedValues.includes(value)) {
+    throw new Error(`${name} must be one of: ${allowedValues.join(', ')}`)
+  }
+}
+
 function assertProductionConfig() {
   if (!isProduction) return
 
@@ -150,10 +168,6 @@ function assertProductionConfig() {
     }
   }
 
-  if (process.env.DIRECTUS_TOKEN && process.env.DIRECTUS_TOKEN.includes('change-me')) {
-    throw new Error('DIRECTUS_TOKEN cannot use a placeholder value in production')
-  }
-
   if (PUBLIC_REGISTRATION_ENABLED) {
     throw new Error('PUBLIC_REGISTRATION_ENABLED must be false in production; company users are created by company owners')
   }
@@ -166,8 +180,26 @@ function assertProductionConfig() {
   assertPositiveInteger(SENSITIVE_RATE_LIMIT_WINDOW_MS, 'SENSITIVE_RATE_LIMIT_WINDOW_MS')
   assertPositiveInteger(SENSITIVE_RATE_LIMIT_MAX, 'SENSITIVE_RATE_LIMIT_MAX')
   assertPositiveInteger(AUTH_ACCOUNT_RATE_LIMIT_MAX, 'AUTH_ACCOUNT_RATE_LIMIT_MAX')
+  assertPositiveInteger(AUTH_COOKIE_MAX_AGE_SECONDS, 'AUTH_COOKIE_MAX_AGE_SECONDS')
+  assertPositiveInteger(MAX_IMAGE_PIXELS, 'MAX_IMAGE_PIXELS')
   assertPositiveInteger(GRACEFUL_SHUTDOWN_TIMEOUT_MS, 'GRACEFUL_SHUTDOWN_TIMEOUT_MS')
   assertPositiveInteger(ACCESS_LOG_SLOW_MS, 'ACCESS_LOG_SLOW_MS')
+
+  if (!SECURITY_CSP.trim()) {
+    throw new Error('SECURITY_CSP must not be empty')
+  }
+
+  if (!SECURITY_CSP.includes("default-src 'none'") || !SECURITY_CSP.includes("frame-ancestors 'none'")) {
+    throw new Error("SECURITY_CSP must include default-src 'none' and frame-ancestors 'none'")
+  }
+
+  assertOneOf(SECURITY_CROSS_ORIGIN_OPENER_POLICY, ['same-origin', 'same-origin-allow-popups', 'unsafe-none'], 'SECURITY_CROSS_ORIGIN_OPENER_POLICY')
+  assertOneOf(SECURITY_CROSS_ORIGIN_RESOURCE_POLICY, ['same-origin', 'same-site', 'cross-origin'], 'SECURITY_CROSS_ORIGIN_RESOURCE_POLICY')
+  assertOneOf(AUTH_COOKIE_SAME_SITE, ['Strict', 'Lax', 'None'], 'AUTH_COOKIE_SAME_SITE')
+
+  if (AUTH_COOKIE_SAME_SITE === 'None' && !AUTH_COOKIE_SECURE) {
+    throw new Error('AUTH_COOKIE_SECURE must be true when AUTH_COOKIE_SAME_SITE=None')
+  }
 
   if (!['json', 'text', 'off'].includes(ACCESS_LOG_FORMAT)) {
     throw new Error('ACCESS_LOG_FORMAT must be one of: json, text, off')
@@ -191,9 +223,12 @@ const storage = multer.diskStorage({
     cb(null, uniqueName)
   }
 })
-const MAX_FILE_SIZE = Number(process.env.MAX_FILE_SIZE || 15 * 1024 * 1024)
-const JSON_BODY_LIMIT = process.env.JSON_BODY_LIMIT || '2mb'
 const ALLOWED_UPLOAD_MIME_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp'])
+const UPLOAD_MIME_FORMATS = new Map([
+  ['image/jpeg', new Set(['jpeg'])],
+  ['image/png', new Set(['png'])],
+  ['image/webp', new Set(['webp'])],
+])
 const VEHICLE_STATUSES = new Set(['active', 'repair', 'archived'])
 const upload = multer({
   storage,
@@ -299,6 +334,9 @@ app.use((req, res, next) => {
   res.setHeader('Referrer-Policy', 'no-referrer')
   res.setHeader('X-DNS-Prefetch-Control', 'off')
   res.setHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=()')
+  res.setHeader('Content-Security-Policy', SECURITY_CSP)
+  res.setHeader('Cross-Origin-Opener-Policy', SECURITY_CROSS_ORIGIN_OPENER_POLICY)
+  res.setHeader('Cross-Origin-Resource-Policy', SECURITY_CROSS_ORIGIN_RESOURCE_POLICY)
 
   if (SECURITY_HSTS_ENABLED) {
     res.setHeader('Strict-Transport-Security', `max-age=${SECURITY_HSTS_MAX_AGE}; includeSubDomains`)
@@ -318,7 +356,8 @@ app.use(cors({
   },
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization', REQUEST_ID_HEADER],
-  exposedHeaders: [REQUEST_ID_HEADER, 'RateLimit-Limit', 'RateLimit-Remaining', 'RateLimit-Reset', 'Retry-After']
+  exposedHeaders: [REQUEST_ID_HEADER, 'RateLimit-Limit', 'RateLimit-Remaining', 'RateLimit-Reset', 'Retry-After'],
+  credentials: true,
 }))
 
 app.use(express.json({ limit: JSON_BODY_LIMIT }))
@@ -330,6 +369,7 @@ function sendError(res, status, message) {
 function normalizeRateLimitPath(pathname) {
   return String(pathname || '')
     .replace(/^\/api\/users\/[^/]+\/mfa\/verify$/, '/api/users/:id/mfa/verify')
+    .replace(/^\/api\/auth\/mfa\/verify$/, '/api/auth/mfa/verify')
 }
 
 function createRateLimiter({ name, windowMs, max, keyGenerator }) {
@@ -400,6 +440,88 @@ function noStore(req, res, next) {
   next()
 }
 
+function parseCookies(header) {
+  const cookies = new Map()
+  if (!header) return cookies
+
+  for (const part of String(header).split(';')) {
+    const separatorIndex = part.indexOf('=')
+    if (separatorIndex === -1) continue
+
+    const name = part.slice(0, separatorIndex).trim()
+    const value = part.slice(separatorIndex + 1).trim()
+    if (!name) continue
+
+    try {
+      cookies.set(name, decodeURIComponent(value))
+    } catch {
+      cookies.set(name, value)
+    }
+  }
+
+  return cookies
+}
+
+function serializeCookie(name, value, options = {}) {
+  const parts = [`${name}=${encodeURIComponent(value)}`]
+
+  if (options.maxAge != null) parts.push(`Max-Age=${options.maxAge}`)
+  if (options.path) parts.push(`Path=${options.path}`)
+  if (options.httpOnly) parts.push('HttpOnly')
+  if (options.secure) parts.push('Secure')
+  if (options.sameSite) parts.push(`SameSite=${options.sameSite}`)
+
+  return parts.join('; ')
+}
+
+function setAuthCookie(res, token) {
+  res.setHeader('Set-Cookie', serializeCookie(AUTH_COOKIE_NAME, token, {
+    httpOnly: true,
+    secure: AUTH_COOKIE_SECURE,
+    sameSite: AUTH_COOKIE_SAME_SITE,
+    maxAge: AUTH_COOKIE_MAX_AGE_SECONDS,
+    path: '/',
+  }))
+}
+
+function clearAuthCookie(res) {
+  res.setHeader('Set-Cookie', serializeCookie(AUTH_COOKIE_NAME, '', {
+    httpOnly: true,
+    secure: AUTH_COOKIE_SECURE,
+    sameSite: AUTH_COOKIE_SAME_SITE,
+    maxAge: 0,
+    path: '/',
+  }))
+}
+
+function getBearerToken(req) {
+  const authHeader = req.headers.authorization
+  if (!authHeader || !authHeader.startsWith('Bearer ')) return null
+  return authHeader.split(' ')[1]
+}
+
+function getCookieToken(req) {
+  return parseCookies(req.headers.cookie).get(AUTH_COOKIE_NAME) || null
+}
+
+function isUnsafeMethod(method) {
+  return !['GET', 'HEAD', 'OPTIONS'].includes(String(method || '').toUpperCase())
+}
+
+function isAllowedRequestOrigin(req) {
+  const origin = req.get('origin')
+  if (!origin) return false
+  return allowAllCorsOrigins || corsOrigins.includes(origin)
+}
+
+function rejectInvalidCookieOrigin(req, res) {
+  if (req.authSource !== 'cookie' || !isUnsafeMethod(req.method)) return false
+  if (isAllowedRequestOrigin(req)) return false
+
+  sendError(res, 403, API_MESSAGES.accessDenied)
+  return true
+}
+
 const sensitiveIpRateLimit = createRateLimiter({
   name: 'sensitive-ip',
   windowMs: SENSITIVE_RATE_LIMIT_WINDOW_MS,
@@ -416,6 +538,28 @@ const sensitiveAccountRateLimit = createRateLimiter({
 
 const publicAuthRateLimit = [noStore, sensitiveIpRateLimit, sensitiveAccountRateLimit]
 const authenticatedSensitiveRateLimit = [noStore, sensitiveIpRateLimit]
+
+function isTenantUserEndpoint(pathname) {
+  const path = String(pathname || '')
+  return [
+    '/api/vehicles',
+    '/api/inspections',
+    '/api/defects',
+    '/api/photos',
+    '/api/users',
+    '/api/dashboard',
+    '/api/analytics',
+    '/api/notifications',
+    '/api/settings',
+    '/api/company',
+    '/api/companies',
+    '/api/regions',
+    '/api/photo-requirements',
+    '/api/defect-categories',
+    '/api/seed',
+    '/uploads',
+  ].some((prefix) => path === prefix || path.startsWith(`${prefix}/`))
+}
 
 function buildLivenessPayload() {
   return {
@@ -496,12 +640,15 @@ app.use((req, res, next) => {
 
 // Define authenticate before using it
 const authenticate = (req, res, next) => {
-  const authHeader = req.headers.authorization
-  if (!authHeader || !authHeader.startsWith('Bearer ')) {
+  const bearerToken = getBearerToken(req)
+  const cookieToken = bearerToken ? null : getCookieToken(req)
+  const token = bearerToken || cookieToken
+  req.authSource = bearerToken ? 'bearer' : cookieToken ? 'cookie' : null
+
+  if (!token) {
     return sendError(res, 401, API_MESSAGES.authRequired)
   }
 
-  const token = authHeader.split(' ')[1]
   try {
     const decoded = jwt.verify(token, JWT_SECRET)
 
@@ -534,6 +681,19 @@ const authenticate = (req, res, next) => {
       role: user.role,
       company_id: user.company_id || 'default',
     }
+
+    if (req.user.role === 'admin' && isTenantUserEndpoint(req.path)) {
+      return sendError(res, 403, API_MESSAGES.accessDenied)
+    }
+
+    if (rejectInvalidCookieOrigin(req, res)) {
+      return
+    }
+
+    if (bearerToken && !cookieToken) {
+      setAuthCookie(res, token)
+    }
+
     next()
   } catch (err) {
     return sendError(res, 401, API_MESSAGES.invalidToken)
@@ -557,6 +717,22 @@ function mimeToExtension(mimetype) {
   if (mimetype === 'image/png') return 'png'
   if (mimetype === 'image/webp') return 'webp'
   return null
+}
+
+function createSharpImage(buffer) {
+  return sharp(buffer, {
+    failOn: 'error',
+    limitInputPixels: MAX_IMAGE_PIXELS,
+  })
+}
+
+function assertUploadedPhotoFormat(metadata, mimetype) {
+  const detectedFormat = String(metadata?.format || '').toLowerCase()
+  const allowedFormats = UPLOAD_MIME_FORMATS.get(mimetype)
+
+  if (!allowedFormats?.has(detectedFormat)) {
+    throw new Error('Photo content does not match the declared image format')
+  }
 }
 
 function normalizeStorageSegment(value) {
@@ -624,14 +800,16 @@ async function processUploadedPhoto({ tempPath, originalName, mimetype, inspecti
 
   try {
     const originalBuffer = await fs.promises.readFile(originalPath)
-    const metadata = await sharp(originalBuffer, { failOn: 'error' }).metadata()
-    await sharp(originalBuffer, { failOn: 'error' })
+    const metadata = await createSharpImage(originalBuffer).metadata()
+    assertUploadedPhotoFormat(metadata, mimetype)
+
+    await createSharpImage(originalBuffer)
       .rotate()
       .resize({ width: 2048, height: 2048, fit: 'inside', withoutEnlargement: true })
       .webp({ quality: 82 })
       .toFile(mainPath)
 
-    await sharp(originalBuffer, { failOn: 'error' })
+    await createSharpImage(originalBuffer)
       .rotate()
       .resize({ width: 480, height: 480, fit: 'inside', withoutEnlargement: true })
       .webp({ quality: 76 })
@@ -884,6 +1062,222 @@ function ensureCompanyFeatureEnabled(req, res, featureField, message = null) {
 
   sendError(res, 403, message || getCompanyFeatureDisabledMessage(featureField))
   return false
+}
+
+function getCompanyOperationalRestriction(companyId, mode = 'write') {
+  const company = db.prepare(`
+    SELECT id, COALESCE(status, 'active') as status
+    FROM companies
+    WHERE id = ?
+  `).get(companyId)
+
+  if (company?.status === 'inactive') {
+    return {
+      status: 'inactive',
+      message: API_MESSAGES.companyInactive,
+    }
+  }
+
+  const subscription = db.prepare(`
+    SELECT status
+    FROM company_subscriptions
+    WHERE company_id = ?
+  `).get(companyId)
+  const status = subscription?.status
+
+  if (status === 'suspended') {
+    return {
+      status,
+      message: API_MESSAGES.subscriptionSuspended,
+    }
+  }
+
+  if (status === 'expired' && mode === 'create') {
+    return {
+      status,
+      message: API_MESSAGES.subscriptionExpired,
+    }
+  }
+
+  return null
+}
+
+function ensureCompanyOperationalWriteAllowed(req, res, { mode = 'write' } = {}) {
+  const companyId = req.user?.company_id || 'default'
+  const restriction = getCompanyOperationalRestriction(companyId, mode)
+  if (!restriction) return true
+
+  sendError(res, 403, restriction.message)
+  return false
+}
+
+function getDaysUntilDate(value) {
+  if (!value) return null
+  const target = new Date(value)
+  if (Number.isNaN(target.getTime())) return null
+
+  const today = new Date()
+  today.setUTCHours(0, 0, 0, 0)
+  target.setUTCHours(0, 0, 0, 0)
+
+  return Math.ceil((target.getTime() - today.getTime()) / (24 * 60 * 60 * 1000))
+}
+
+function getCompanySubscriptionSummary(companyId) {
+  const subscription = db.prepare(`
+    SELECT id, plan_code, status, current_period_start, current_period_end,
+           grace_until, mrr_rub, updated_at
+    FROM company_subscriptions
+    WHERE company_id = ?
+  `).get(companyId)
+
+  if (!subscription) return null
+
+  return {
+    id: subscription.id,
+    planCode: subscription.plan_code || null,
+    status: subscription.status || 'active',
+    currentPeriodStart: subscription.current_period_start || null,
+    currentPeriodEnd: subscription.current_period_end || null,
+    graceUntil: subscription.grace_until || null,
+    mrrRub: Number(subscription.mrr_rub || 0),
+    daysUntilEnd: getDaysUntilDate(subscription.current_period_end),
+    updatedAt: subscription.updated_at || null,
+  }
+}
+
+function buildCompanyServiceWarnings(company, subscription) {
+  const warnings = []
+
+  if (company?.status === 'inactive') {
+    warnings.push({
+      type: 'company_inactive',
+      severity: 'danger',
+      title: 'Компания отключена',
+      message: API_MESSAGES.companyInactive,
+    })
+  }
+
+  if (!subscription) return warnings
+
+  if (subscription.status === 'suspended') {
+    warnings.push({
+      type: 'subscription_suspended',
+      severity: 'danger',
+      title: 'Подписка приостановлена',
+      message: API_MESSAGES.subscriptionSuspended,
+    })
+    return warnings
+  }
+
+  if (subscription.status === 'expired') {
+    warnings.push({
+      type: 'subscription_expired',
+      severity: 'danger',
+      title: 'Тариф истек',
+      message: API_MESSAGES.subscriptionExpired,
+    })
+    return warnings
+  }
+
+  if (subscription.status === 'grace') {
+    warnings.push({
+      type: 'subscription_grace',
+      severity: 'warning',
+      title: 'Идет льготный период',
+      message: subscription.graceUntil
+        ? `Продлите тариф до ${subscription.graceUntil}, чтобы избежать приостановки.`
+        : 'Продлите тариф, чтобы избежать приостановки.',
+    })
+    return warnings
+  }
+
+  if (subscription.status === 'expiring' || (subscription.daysUntilEnd !== null && subscription.daysUntilEnd <= 14)) {
+    const days = subscription.daysUntilEnd
+    warnings.push({
+      type: 'subscription_expiring',
+      severity: days !== null && days <= 3 ? 'warning' : 'info',
+      title: 'Тариф скоро закончится',
+      message: days !== null
+        ? `До окончания тарифа осталось ${Math.max(days, 0)} дн.`
+        : 'Проверьте дату окончания тарифа.',
+    })
+  }
+
+  return warnings
+}
+
+function getCompanyServiceNotifications(companyId, user) {
+  return db.prepare(`
+    SELECT id, type, title, message, status, created_at
+    FROM company_notifications
+    WHERE company_id = ?
+      AND (
+        recipient_user_id = ?
+        OR (recipient_user_id IS NULL AND recipient_role = ?)
+        OR (recipient_user_id IS NULL AND recipient_role IN ('company_owner', 'tenant') AND ? = 'owner')
+      )
+      AND COALESCE(recipient_role, '') != 'admin'
+    ORDER BY CASE WHEN status = 'new' THEN 0 ELSE 1 END, created_at DESC
+    LIMIT 5
+  `).all(companyId, user?.id || '', user?.role || '', user?.role || '').map((item) => ({
+    id: item.id,
+    type: item.type,
+    title: item.title,
+    message: item.message || null,
+    status: item.status || 'new',
+    createdAt: item.created_at || null,
+  }))
+}
+
+function getServiceNotificationRecipients(companyId) {
+  return db.prepare(`
+    SELECT id, email, name, role, status, service_notifications_enabled, service_notification_types
+    FROM users
+    WHERE company_id = ?
+      AND role IN ('owner', 'manager')
+      AND COALESCE(status, 'active') = 'active'
+    ORDER BY CASE role WHEN 'owner' THEN 0 ELSE 1 END, name COLLATE NOCASE
+  `).all(companyId).map((user) => ({
+    id: user.id,
+    email: user.email,
+    name: user.name,
+    role: user.role,
+    status: user.status || 'active',
+    serviceNotificationsEnabled: user.role === 'owner' ? true : Boolean(user.service_notifications_enabled),
+    serviceNotificationTypes: parseJsonArray(user.service_notification_types),
+    locked: user.role === 'owner',
+  }))
+}
+
+function parseJsonArray(value) {
+  if (!value) return []
+  try {
+    const parsed = JSON.parse(value)
+    return Array.isArray(parsed) ? parsed.filter((item) => typeof item === 'string') : []
+  } catch {
+    return []
+  }
+}
+
+function writeTenantAuditLog(req, action, entityType, entityId, payload = null) {
+  try {
+    db.prepare(`
+      INSERT INTO audit_logs (id, company_id, actor_user_id, actor_role, action, entity_type, entity_id, payload_json)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(
+      uuidv4(),
+      req.user?.company_id || 'default',
+      req.user?.id || null,
+      req.user?.role || null,
+      action,
+      entityType,
+      entityId,
+      payload ? JSON.stringify(payload) : null,
+    )
+  } catch (error) {
+    console.warn('Unable to write tenant audit log:', error.message)
+  }
 }
 
 function getRegionByName(name) {
@@ -1154,6 +1548,7 @@ const API_MESSAGES = {
   authRequired: 'Authorization required',
   invalidToken: 'Invalid token',
   loginCredentialsRequired: 'Enter email and password',
+  invalidCredentials: 'Invalid email or password',
   userNotFound: 'User not found',
     invalidPassword: 'Invalid password',
     userInactive: 'User is inactive',
@@ -1179,6 +1574,9 @@ const API_MESSAGES = {
   ocrFeatureDisabled: 'OCR отключен для тарифа компании. Обратитесь к администратору ресурса',
   analyticsFeatureDisabled: 'Аналитика отключена для тарифа компании. Обратитесь к администратору ресурса',
   accidentModuleDisabled: 'Модуль ДТП отключен для тарифа компании. Обратитесь к администратору ресурса',
+  companyInactive: 'Компания отключена администратором ресурса',
+  subscriptionExpired: 'Срок действия тарифа истек. Новые операции временно недоступны до продления',
+  subscriptionSuspended: 'Подписка компании приостановлена. Операционный контур доступен только для чтения',
   regionNameRequired: 'Enter region name',
   regionNotFound: 'Region not found',
   regionInUse: 'Cannot delete region while it is used in vehicle cards',
@@ -1199,14 +1597,14 @@ const API_MESSAGES = {
 }
 
 // Register the complete-inspection route after API_MESSAGES is defined
-registerCompleteInspectionRoutes({ app, db, API_MESSAGES, getInspectionById, authenticate, photoRequirements })
+registerCompleteInspectionRoutes({ app, db, API_MESSAGES, getInspectionById, authenticate, photoRequirements, ensureOperationalWriteAllowed: ensureCompanyOperationalWriteAllowed })
 
 // Register company routes
 registerCompanyRoutes({ app, db, authenticate, isAdmin })
 
 // Register odometer and vehicle number recognition routes
-registerOdometerRoutes({ app, db, authenticate, API_MESSAGES, upload, ensureFeatureEnabled: ensureCompanyFeatureEnabled })
-registerVehicleNumberRecognitionRoutes({ app, db, authenticate, API_MESSAGES, upload, ensureFeatureEnabled: ensureCompanyFeatureEnabled })
+registerOdometerRoutes({ app, db, authenticate, API_MESSAGES, upload, ensureFeatureEnabled: ensureCompanyFeatureEnabled, ensureOperationalWriteAllowed: ensureCompanyOperationalWriteAllowed })
+registerVehicleNumberRecognitionRoutes({ app, db, authenticate, API_MESSAGES, upload, ensureFeatureEnabled: ensureCompanyFeatureEnabled, ensureOperationalWriteAllowed: ensureCompanyOperationalWriteAllowed })
 
 function sendInternalError(res, scope, err) {
   console.error(`${scope}:`, err)
@@ -1257,7 +1655,7 @@ function ensureVehicleNumberAvailable(number, currentVehicleId = null, companyId
 const ASSIGNABLE_USER_ROLES = new Set(['inspector', 'manager'])
 
 function isManager(req) {
-  return req.user?.role === 'manager' || req.user?.role === 'owner' || req.user?.role === 'admin'
+  return req.user?.role === 'manager' || req.user?.role === 'owner'
 }
 
 function isAdmin(req) {
@@ -1265,7 +1663,7 @@ function isAdmin(req) {
 }
 
 function isCompanyOwner(req) {
-  return req.user?.role === 'owner' || isAdmin(req)
+  return req.user?.role === 'owner'
 }
 
 function isSelf(req, userId) {
@@ -1322,8 +1720,37 @@ function getOwnerSetupFingerprint(passwordHash) {
     .digest('hex')
 }
 
+function parseDurationSeconds(value, fallbackSeconds) {
+  if (typeof value === 'number' && Number.isFinite(value) && value > 0) {
+    return Math.floor(value)
+  }
+
+  const text = String(value || '').trim()
+  if (/^\d+$/.test(text)) {
+    return Number(text)
+  }
+
+  const match = text.match(/^(\d+)\s*([smhd])$/i)
+  if (!match) return fallbackSeconds
+
+  const amount = Number(match[1])
+  const unit = match[2].toLowerCase()
+  const multipliers = {
+    s: 1,
+    m: 60,
+    h: 60 * 60,
+    d: 24 * 60 * 60,
+  }
+
+  return amount * multipliers[unit]
+}
+
 function createOwnerSetupInvitation(user) {
   const expiresIn = process.env.OWNER_SETUP_TOKEN_TTL || '7d'
+  const expiresInSeconds = parseDurationSeconds(expiresIn, 7 * 24 * 60 * 60)
+  const nonce = uuidv4()
+  const issuedAt = new Date()
+  const expiresAt = new Date(issuedAt.getTime() + expiresInSeconds * 1000)
   const owner = db.prepare(`
     SELECT id, email, password, role, status, company_id
     FROM users
@@ -1334,6 +1761,15 @@ function createOwnerSetupInvitation(user) {
     throw new Error('Owner setup invitation requires an active owner user')
   }
 
+  db.prepare(`
+    UPDATE users
+    SET owner_setup_nonce = ?,
+        owner_setup_issued_at = ?,
+        owner_setup_expires_at = ?,
+        owner_setup_accepted_at = NULL
+    WHERE id = ?
+  `).run(nonce, issuedAt.toISOString(), expiresAt.toISOString(), owner.id)
+
   const token = jwt.sign(
     {
       purpose: 'owner_setup',
@@ -1341,7 +1777,7 @@ function createOwnerSetupInvitation(user) {
       email: owner.email,
       company_id: owner.company_id || 'default',
       setup_fingerprint: getOwnerSetupFingerprint(owner.password),
-      setup_nonce: uuidv4(),
+      setup_nonce: nonce,
     },
     JWT_SECRET,
     { expiresIn },
@@ -1351,11 +1787,52 @@ function createOwnerSetupInvitation(user) {
     token,
     setup_url: `${getWebAppUrl()}/owner-setup?token=${encodeURIComponent(token)}`,
     expires_in: expiresIn,
+    expires_at: expiresAt.toISOString(),
   }
 }
 
-registerDirectusIntegrationRoutes({ app, db, authenticate, ensureAdmin, sendError, API_MESSAGES, createOwnerSetupInvitation })
-registerSaasAdminRoutes({ app, db, authenticate, ensureAdmin, sendError, API_MESSAGES })
+function createAuthToken(user) {
+  const companyId = user.company_id || 'default'
+  return jwt.sign(
+    { id: user.id, email: user.email, role: user.role, name: user.name, company_id: companyId },
+    JWT_SECRET,
+    { expiresIn: '7d' },
+  )
+}
+
+function createMfaLoginToken(user) {
+  return jwt.sign(
+    {
+      purpose: 'mfa_login',
+      id: user.id,
+      email: user.email,
+      company_id: user.company_id || 'default',
+    },
+    JWT_SECRET,
+    { expiresIn: MFA_LOGIN_TOKEN_TTL },
+  )
+}
+
+function toAuthUser(user) {
+  return {
+    id: user.id,
+    email: user.email,
+    name: user.name,
+    role: user.role,
+    company_id: user.company_id || 'default',
+  }
+}
+
+function sendAuthSession(res, user) {
+  const token = createAuthToken(user)
+  setAuthCookie(res, token)
+  return res.json({
+    token,
+    user: toAuthUser(user),
+  })
+}
+
+registerSaasAdminRoutes({ app, db, authenticate, ensureAdmin, sendError, API_MESSAGES, createOwnerSetupInvitation })
 
 function validateAccidentDetails(type, accidentOccurredAt, accidentLocation) {
   if (type !== 'accident') {
@@ -1386,6 +1863,14 @@ function getAllowedPhotoTypes(inspectionType) {
 
 // ============ AUTH ============
 
+function markUserLogin(userId) {
+  try {
+    db.prepare("UPDATE users SET last_login_at = datetime('now') WHERE id = ?").run(userId)
+  } catch (error) {
+    console.warn('Unable to update last_login_at:', error.message)
+  }
+}
+
 app.post('/api/auth/login', ...publicAuthRateLimit, (req, res) => {
   const { email, password } = req.body
 
@@ -1393,37 +1878,81 @@ app.post('/api/auth/login', ...publicAuthRateLimit, (req, res) => {
     return sendError(res, 400, API_MESSAGES.loginCredentialsRequired)
   }
 
-  const user = db.prepare('SELECT id, email, password, name, role, status, company_id, mfa_enabled, mfa_secret FROM users WHERE email = ?').get(email)
+  const normalizedEmail = String(email).trim().toLowerCase()
+  const user = db.prepare('SELECT id, email, password, name, role, status, company_id, mfa_enabled, mfa_secret FROM users WHERE email = ?').get(normalizedEmail)
+  const passwordHash = user?.password || '$2a$10$J9e3WdYLmopA7LzXnxjx7Oq4FMdt0MBGDGg2po7GTL58e86qfqxxK'
+  const passwordOk = bcrypt.compareSync(String(password), passwordHash)
 
-  if (!user) {
-    return sendError(res, 401, API_MESSAGES.userNotFound)
+  if (!user || !passwordOk) {
+    return sendError(res, 401, API_MESSAGES.invalidCredentials)
   }
 
   if (user.status === 'inactive') {
     return sendError(res, 403, API_MESSAGES.userInactive)
   }
 
-  const passwordOk = bcrypt.compareSync(password, user.password)
-  if (!passwordOk) {
-    return sendError(res, 401, API_MESSAGES.invalidPassword)
-  }
-
   // MFA check: if enabled, require MFA verification before issuing JWT
   if (user.mfa_enabled) {
-    return res.json({ mfaRequired: true, user: { id: user.id, email: user.email, name: user.name, role: user.role } })
+    return res.json({
+      mfaRequired: true,
+      mfaToken: createMfaLoginToken(user),
+      user: toAuthUser(user),
+    })
   }
 
-  const companyId = user.company_id || 'default'
-  const token = jwt.sign(
-    { id: user.id, email: user.email, role: user.role, name: user.name, company_id: companyId },
-    JWT_SECRET,
-    { expiresIn: '7d' }
-  )
+  markUserLogin(user.id)
+  return sendAuthSession(res, user)
+})
 
-  res.json({
-    token,
-    user: { id: user.id, email: user.email, name: user.name, role: user.role, company_id: companyId }
+app.post('/api/auth/mfa/verify', ...publicAuthRateLimit, (req, res) => {
+  const { mfaToken, token } = req.body || {}
+
+  if (!mfaToken || !token) {
+    return sendError(res, 400, 'MFA token and verification code are required')
+  }
+
+  let decoded
+  try {
+    decoded = jwt.verify(mfaToken, JWT_SECRET)
+  } catch {
+    return sendError(res, 401, API_MESSAGES.invalidToken)
+  }
+
+  if (decoded?.purpose !== 'mfa_login' || !decoded.id || !decoded.email) {
+    return sendError(res, 401, API_MESSAGES.invalidToken)
+  }
+
+  const user = db.prepare(`
+    SELECT id, email, password, name, role, status, company_id, mfa_enabled, mfa_secret
+    FROM users
+    WHERE id = ? AND email = ?
+  `).get(decoded.id, decoded.email)
+
+  if (!user) {
+    return sendError(res, 401, API_MESSAGES.invalidToken)
+  }
+
+  if (user.status === 'inactive') {
+    return sendError(res, 403, API_MESSAGES.userInactive)
+  }
+
+  if (!user.mfa_enabled || !user.mfa_secret) {
+    return sendError(res, 400, 'MFA is not enabled for this user')
+  }
+
+  const verified = speakeasy.totp.verify({
+    secret: user.mfa_secret,
+    encoding: 'base32',
+    token: String(token),
+    window: 1,
   })
+
+  if (!verified) {
+    return sendError(res, 401, 'Invalid MFA token')
+  }
+
+  markUserLogin(user.id)
+  return sendAuthSession(res, user)
 })
 
 app.post('/api/auth/owner-setup', ...publicAuthRateLimit, (req, res) => {
@@ -1449,7 +1978,7 @@ app.post('/api/auth/owner-setup', ...publicAuthRateLimit, (req, res) => {
   }
 
   const user = db.prepare(`
-    SELECT id, email, password, name, role, status, company_id, created_at
+    SELECT id, email, password, name, role, status, company_id, created_at, owner_setup_nonce
     FROM users
     WHERE id = ? AND company_id = ?
   `).get(decoded.id, decoded.company_id)
@@ -1465,22 +1994,25 @@ app.post('/api/auth/owner-setup', ...publicAuthRateLimit, (req, res) => {
   if (
     decoded.email !== user.email ||
     !decoded.setup_fingerprint ||
-    decoded.setup_fingerprint !== getOwnerSetupFingerprint(user.password)
+    decoded.setup_fingerprint !== getOwnerSetupFingerprint(user.password) ||
+    !decoded.setup_nonce ||
+    decoded.setup_nonce !== user.owner_setup_nonce
   ) {
     return sendError(res, 401, API_MESSAGES.invalidToken)
   }
 
   const passwordHash = bcrypt.hashSync(password, 10)
   updateUserRecord(user.id, { passwordHash, status: 'active', companyId: user.company_id })
+  db.prepare(`
+    UPDATE users
+    SET owner_setup_nonce = NULL,
+        owner_setup_accepted_at = datetime('now')
+    WHERE id = ?
+  `).run(user.id)
 
   const updatedUser = getUserSummaryById(user.id, user.company_id)
-  const authToken = jwt.sign(
-    { id: updatedUser.id, email: updatedUser.email, role: updatedUser.role, name: updatedUser.name, company_id: updatedUser.company_id },
-    JWT_SECRET,
-    { expiresIn: '7d' },
-  )
-
-  res.json({ token: authToken, user: updatedUser })
+  markUserLogin(user.id)
+  return sendAuthSession(res, updatedUser)
 })
 
 // MFA: setup for company owners to configure managed users; self-service is also allowed.
@@ -1524,13 +2056,10 @@ app.post('/api/users/:id/mfa/verify', authenticate, ...authenticatedSensitiveRat
   if (!verified) return sendError(res, 401, API_MESSAGES.invalidMfaCode)
   // Activate MFA for user
   db.prepare('UPDATE users SET mfa_enabled = 1 WHERE id = ? AND company_id = ?').run(userId, companyId)
-  // Issue new token as if login successful
-  const tokenJwt = jwt.sign(
-    { id: user.id, email: user.email, name: user.name, role: user.role, company_id: user.company_id || companyId },
-    JWT_SECRET,
-    { expiresIn: '7d' }
-  )
-  res.json({ token: tokenJwt, user: { id: user.id, email: user.email, name: user.name, role: user.role, company_id: user.company_id || companyId } })
+  return sendAuthSession(res, {
+    ...user,
+    company_id: user.company_id || companyId,
+  })
 })
 
 // Legacy public registration endpoint for local/mobile experiments.
@@ -1557,12 +2086,12 @@ app.post('/api/auth/register', ...publicAuthRateLimit, (req, res) => {
   createUserRecord({ id, email, passwordHash: hashedPassword, name, role })
 
   const user = getUserSummaryById(id)
-  const token = jwt.sign(
-    { id: user.id, email: user.email, name: user.name, role: user.role, company_id: user.company_id },
-    JWT_SECRET,
-    { expiresIn: '7d' }
-  )
-  res.json({ token, user })
+  return sendAuthSession(res, user)
+})
+
+app.post('/api/auth/logout', noStore, (req, res) => {
+  clearAuthCookie(res)
+  res.status(204).end()
 })
 
 app.get('/api/auth/me', authenticate, (req, res) => {
@@ -1583,12 +2112,16 @@ app.get('/api/company/usage', authenticate, (req, res) => {
     status: 'active',
   }
   const limits = getCompanyLimits(companyId)
+  const subscription = getCompanySubscriptionSummary(companyId)
 
   res.json({
     company,
     plan: {
-      code: limits?.plan_code || null,
+      code: limits?.plan_code || subscription?.planCode || null,
     },
+    subscription,
+    serviceWarnings: buildCompanyServiceWarnings(company, subscription),
+    alerts: getCompanyServiceNotifications(companyId, req.user),
     usage: {
       vehicles: buildCompanyResourceUsage(companyId, 'vehicles'),
       users: buildCompanyResourceUsage(companyId, 'users'),
@@ -1603,6 +2136,60 @@ app.get('/api/company/usage', authenticate, (req, res) => {
       apiAccess: buildCompanyFeatureAccess(limits, 'api_access_enabled'),
     },
     updatedAt: limits?.updated_at || null,
+  })
+})
+
+app.get('/api/company/service-notification-recipients', authenticate, (req, res) => {
+  if (!ensureCompanyOwner(req, res)) return
+
+  const companyId = req.user.company_id || 'default'
+  res.json({
+    recipients: getServiceNotificationRecipients(companyId),
+  })
+})
+
+app.put('/api/company/service-notification-recipients', authenticate, (req, res) => {
+  if (!ensureCompanyOwner(req, res)) return
+
+  const companyId = req.user.company_id || 'default'
+  const recipients = Array.isArray(req.body?.recipients) ? req.body.recipients : []
+  const managerIds = new Set(
+    recipients
+      .filter((item) => item && typeof item.id === 'string')
+      .filter((item) => Boolean(item.serviceNotificationsEnabled))
+      .map((item) => item.id),
+  )
+
+  const managers = db.prepare(`
+    SELECT id
+    FROM users
+    WHERE company_id = ? AND role = 'manager' AND COALESCE(status, 'active') = 'active'
+  `).all(companyId)
+  const validManagerIds = new Set(managers.map((manager) => manager.id))
+  const enabledIds = [...managerIds].filter((id) => validManagerIds.has(id))
+
+  db.prepare(`
+    UPDATE users
+    SET service_notifications_enabled = 0,
+        service_notification_types = NULL
+    WHERE company_id = ? AND role = 'manager'
+  `).run(companyId)
+
+  if (enabledIds.length) {
+    db.prepare(`
+      UPDATE users
+      SET service_notifications_enabled = 1,
+          service_notification_types = ?
+      WHERE company_id = ? AND role = 'manager' AND id IN (${enabledIds.map(() => '?').join(',')})
+    `).run(JSON.stringify(['subscription', 'system', 'limits']), companyId, ...enabledIds)
+  }
+
+  writeTenantAuditLog(req, 'service_notification_recipients_updated', 'company', companyId, {
+    enabledManagerIds: enabledIds,
+  })
+
+  res.json({
+    recipients: getServiceNotificationRecipients(companyId),
   })
 })
 
@@ -1632,6 +2219,8 @@ app.get('/api/users/:id', authenticate, (req, res) => {
 
 app.post('/api/users', authenticate, (req, res) => {
   if (!ensureCompanyOwner(req, res)) return
+  if (!ensureCompanyOperationalWriteAllowed(req, res, { mode: 'write' })) return
+
   const companyId = req.user.company_id || 'default'
   
   const { email, password, name, role = 'inspector' } = req.body
@@ -1665,6 +2254,8 @@ app.post('/api/users', authenticate, (req, res) => {
 
 app.put('/api/users/:id', authenticate, (req, res) => {
   if (!ensureCompanyOwnerOrSelf(req, res, req.params.id)) return
+  if (!ensureCompanyOperationalWriteAllowed(req, res, { mode: 'write' })) return
+
   const companyId = req.user.company_id || 'default'
   const targetUser = getUserRecordById(req.params.id, isSelf(req, req.params.id) ? null : companyId)
   if (!targetUser) {
@@ -1709,6 +2300,7 @@ app.put('/api/users/:id', authenticate, (req, res) => {
 
 app.delete('/api/users/:id', authenticate, (req, res) => {
   if (!ensureCompanyOwner(req, res)) return
+  if (!ensureCompanyOperationalWriteAllowed(req, res, { mode: 'write' })) return
   
   if (isSelf(req, req.params.id)) {
     return sendError(res, 400, API_MESSAGES.selfDeleteForbidden)
@@ -1744,6 +2336,7 @@ app.get('/api/regions', authenticate, (req, res) => {
 
 app.post('/api/regions', authenticate, (req, res) => {
   if (!ensureManager(req, res)) return
+  if (!ensureCompanyOperationalWriteAllowed(req, res, { mode: 'write' })) return
 
   const regionName = normalizeRegionName(req.body?.name)
   if (!regionName) {
@@ -1761,6 +2354,8 @@ app.post('/api/regions', authenticate, (req, res) => {
 
 app.put('/api/regions/:id', authenticate, (req, res) => {
   if (!ensureManager(req, res)) return
+  if (!ensureCompanyOperationalWriteAllowed(req, res, { mode: 'write' })) return
+
   const companyId = req.user.company_id || 'default'
   
   const region = getRegionForMutation(req.params.id, req.body?.currentName, companyId)
@@ -1805,6 +2400,8 @@ app.put('/api/regions/:id', authenticate, (req, res) => {
 
 app.delete('/api/regions/:id', authenticate, (req, res) => {
   if (!ensureManager(req, res)) return
+  if (!ensureCompanyOperationalWriteAllowed(req, res, { mode: 'write' })) return
+
   const companyId = req.user.company_id || 'default'
 
   const region = getRegionById(req.params.id)
@@ -1957,6 +2554,8 @@ app.get('/api/vehicles/:id', authenticate, (req, res) => {
 })
 
 app.post('/api/vehicles', authenticate, (req, res) => {
+  if (!ensureCompanyOperationalWriteAllowed(req, res, { mode: 'create' })) return
+
   const { number, name, status = 'active', region } = req.body
   const companyId = req.user.company_id || 'default'
   if (!VEHICLE_STATUSES.has(String(status))) {
@@ -1996,6 +2595,8 @@ app.post('/api/vehicles', authenticate, (req, res) => {
 // POST /api/vehicles/import - bulk import vehicles from CSV
 app.post('/api/vehicles/import', authenticate, (req, res) => {
   if (!ensureManager(req, res)) return
+  if (!ensureCompanyOperationalWriteAllowed(req, res, { mode: 'create' })) return
+
   const companyId = req.user.company_id || 'default'
   
   const { vehicles } = req.body
@@ -2065,6 +2666,7 @@ app.post('/api/vehicles/import', authenticate, (req, res) => {
 
 app.post('/api/vehicles/archive', authenticate, (req, res) => {
   if (!ensureManager(req, res)) return
+  if (!ensureCompanyOperationalWriteAllowed(req, res, { mode: 'write' })) return
 
   const companyId = req.user.company_id || 'default'
   const result = archiveVehiclesByIds({
@@ -2082,6 +2684,7 @@ app.post('/api/vehicles/archive', authenticate, (req, res) => {
 
 app.post('/api/vehicles/:id/archive', authenticate, (req, res) => {
   if (!ensureManager(req, res)) return
+  if (!ensureCompanyOperationalWriteAllowed(req, res, { mode: 'write' })) return
 
   const companyId = req.user.company_id || 'default'
   const result = archiveVehiclesByIds({
@@ -2098,6 +2701,8 @@ app.post('/api/vehicles/:id/archive', authenticate, (req, res) => {
 })
 
 app.put('/api/vehicles/:id', authenticate, (req, res) => {
+  if (!ensureCompanyOperationalWriteAllowed(req, res, { mode: 'write' })) return
+
   const { number, name, status, region, reason } = req.body
   const companyId = req.user.company_id || 'default'
   if (!VEHICLE_STATUSES.has(String(status))) {
@@ -2143,6 +2748,7 @@ app.put('/api/vehicles/:id', authenticate, (req, res) => {
 
 app.delete('/api/vehicles/:id', authenticate, (req, res) => {
   if (!ensureManager(req, res)) return
+  if (!ensureCompanyOperationalWriteAllowed(req, res, { mode: 'write' })) return
 
   const companyId = req.user.company_id || 'default'
   const result = archiveVehiclesByIds({
@@ -2254,6 +2860,8 @@ app.get('/api/vehicles/:vehicleId/inspections', authenticate, (req, res) => {
 })
 
 app.post('/api/inspections', authenticate, (req, res) => {
+  if (!ensureCompanyOperationalWriteAllowed(req, res, { mode: 'create' })) return
+
   const { vehicle_id, type = 'quick', checklist = [], accident_occurred_at = null, accident_location = null } = req.body
   const companyId = req.user.company_id || 'default'
 
@@ -2300,6 +2908,8 @@ app.post('/api/inspections', authenticate, (req, res) => {
 
 // Create a defect for a specific inspection
 app.post('/api/inspections/:id/defects', authenticate, (req, res) => {
+  if (!ensureCompanyOperationalWriteAllowed(req, res, { mode: 'write' })) return
+
   const inspectionId = req.params.id
   const { title, comment } = req.body
   const companyId = req.user.company_id || 'default'
@@ -2312,7 +2922,10 @@ app.post('/api/inspections/:id/defects', authenticate, (req, res) => {
   res.status(201).json(defect)
 })
 
-app.post('/api/inspections/:id/photos', authenticate, uploadPhoto, async (req, res) => {
+app.post('/api/inspections/:id/photos', authenticate, (req, res, next) => {
+  if (!ensureCompanyOperationalWriteAllowed(req, res, { mode: 'create' })) return
+  next()
+}, uploadPhoto, async (req, res) => {
   const inspectionId = req.params.id
   const companyId = req.user.company_id || 'default'
   const inspection = db.prepare('SELECT id, type FROM inspections WHERE id = ? AND company_id = ?').get(inspectionId, companyId)
@@ -2413,6 +3026,8 @@ app.get('/api/inspections/:id', authenticate, (req, res) => {
 })
 
 app.put('/api/inspections/:id', authenticate, async (req, res) => {
+  if (!ensureCompanyOperationalWriteAllowed(req, res, { mode: 'write' })) return
+
   const companyId = req.user.company_id || 'default'
   const inspection = db.prepare('SELECT * FROM inspections WHERE id = ? AND company_id = ?').get(req.params.id, companyId)
   if (!inspection) {
@@ -2550,6 +3165,8 @@ app.put('/api/inspections/:id', authenticate, async (req, res) => {
 })
 
 app.delete('/api/inspections/:id', authenticate, async (req, res) => {
+  if (!ensureCompanyOperationalWriteAllowed(req, res, { mode: 'write' })) return
+
   const { id } = req.params
   const companyId = req.user.company_id || 'default'
   
@@ -2658,6 +3275,8 @@ app.get('/api/defects/:id', authenticate, (req, res) => {
 
 // Close a defect (set status to 'closed' and log history)
 app.post('/api/defects/:id/close', authenticate, (req, res) => {
+  if (!ensureCompanyOperationalWriteAllowed(req, res, { mode: 'write' })) return
+
   const defectId = req.params.id
   const companyId = req.user.company_id || 'default'
   const defect = db.prepare('SELECT id, status, closed_at FROM defects WHERE id = ? AND company_id = ?').get(defectId, companyId)
@@ -2676,6 +3295,8 @@ app.post('/api/defects/:id/close', authenticate, (req, res) => {
 
 // Reopen a defect (set status to 'open', clear closed_at, add history)
 app.post('/api/defects/:id/reopen', authenticate, (req, res) => {
+  if (!ensureCompanyOperationalWriteAllowed(req, res, { mode: 'write' })) return
+
   const defectId = req.params.id
   const companyId = req.user.company_id || 'default'
   const defect = db.prepare('SELECT id, status FROM defects WHERE id = ? AND company_id = ?').get(defectId, companyId)
@@ -2703,7 +3324,10 @@ app.get('/api/defects/:id/history', authenticate, (req, res) => {
   res.json(history)
 })
 
-app.post('/api/defects/:id/photos', authenticate, uploadPhoto, async (req, res) => {
+app.post('/api/defects/:id/photos', authenticate, (req, res, next) => {
+  if (!ensureCompanyOperationalWriteAllowed(req, res, { mode: 'create' })) return
+  next()
+}, uploadPhoto, async (req, res) => {
   const { geo } = req.body
   const companyId = req.user.company_id || 'default'
   const defect = db.prepare('SELECT id, inspection_id FROM defects WHERE id = ? AND company_id = ?').get(req.params.id, companyId)
@@ -2762,6 +3386,8 @@ app.post('/api/defects/:id/photos', authenticate, uploadPhoto, async (req, res) 
 })
 
 app.delete('/api/photos/:id', authenticate, async (req, res) => {
+  if (!ensureCompanyOperationalWriteAllowed(req, res, { mode: 'write' })) return
+
   const { id } = req.params
   const companyId = req.user.company_id || 'default'
   const photo = db.prepare(`
@@ -2780,6 +3406,8 @@ app.delete('/api/photos/:id', authenticate, async (req, res) => {
 })
 
 app.put('/api/defects/:id', authenticate, (req, res) => {
+  if (!ensureCompanyOperationalWriteAllowed(req, res, { mode: 'write' })) return
+
   const { title, comment } = req.body
   const companyId = req.user.company_id || 'default'
   const defect = db.prepare('SELECT id FROM defects WHERE id = ? AND company_id = ?').get(req.params.id, companyId)
@@ -2793,6 +3421,8 @@ app.put('/api/defects/:id', authenticate, (req, res) => {
 })
 
 app.delete('/api/defects/:id', authenticate, async (req, res) => {
+  if (!ensureCompanyOperationalWriteAllowed(req, res, { mode: 'write' })) return
+
   const { id } = req.params
   const companyId = req.user.company_id || 'default'
   const defect = db.prepare('SELECT id FROM defects WHERE id = ? AND company_id = ?').get(id, companyId)
@@ -2814,6 +3444,7 @@ app.get('/api/settings', authenticate, (req, res) => {
 
 app.put('/api/settings', authenticate, (req, res) => {
   if (!ensureManager(req, res, API_MESSAGES.settingsManagerOnly)) return
+  if (!ensureCompanyOperationalWriteAllowed(req, res, { mode: 'write' })) return
   
   const { scheduled_inspection_days, notification_days_before, timezone_offset } = req.body
   

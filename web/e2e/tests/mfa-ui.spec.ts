@@ -2,7 +2,7 @@ import { expect, test } from '@playwright/test'
 import * as speakeasy from 'speakeasy'
 import { createUser, deleteUser, getAdminToken, loginAsAdmin, WEB_BASE } from './helpers'
 
-test('MFA UI: end-to-end flow (admin per-user) - UI path', async ({ page, request }) => {
+test('MFA UI: end-to-end flow (owner per-user) - UI path', async ({ page, request }) => {
   await loginAsAdmin(page)
 
   const adminToken = await getAdminToken(request)

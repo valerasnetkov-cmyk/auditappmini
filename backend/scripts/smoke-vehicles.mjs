@@ -1,6 +1,7 @@
 import { spawn } from 'node:child_process'
 import fs from 'node:fs/promises'
 import process from 'node:process'
+import { seedSmokeTenantOwner } from './smoke-helpers.mjs'
 
 const HOST = '127.0.0.1'
 const PORT = Number(process.env.PORT || 3514 + (process.pid % 500))
@@ -20,8 +21,8 @@ async function waitForServer(timeoutMs = 30000) {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          email: 'admin@example.com',
-          password: 'admin123',
+          email: 'owner@example.com',
+          password: 'owner123',
         }),
       })
 
@@ -68,6 +69,8 @@ async function expectStatus(path, expectedStatus, options = {}) {
 }
 
 async function run() {
+  const owner = await seedSmokeTenantOwner({ databasePath: DATABASE_PATH })
+
   const server = spawn(process.execPath, ['src/server.js'], {
     cwd: process.cwd(),
     env: { ...process.env, PORT: String(PORT), DATABASE_PATH },
@@ -87,8 +90,8 @@ async function run() {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        email: 'admin@example.com',
-        password: 'admin123',
+        email: owner.email,
+        password: owner.password,
       }),
     })
 

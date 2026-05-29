@@ -1,4 +1,4 @@
-import { clearAuthToken, endAuthSession, getAuthToken, setAuthToken } from '@/lib/auth'
+import { clearAuthToken, endAuthSession, getAuthToken, hasAuthSession, setAuthToken } from '@/lib/auth'
 import type {
   AnalyticsOverview,
   ApiResponse,
@@ -13,7 +13,6 @@ import type {
   DashboardStats,
   DefectHistoryEntry,
   DefectRecord,
-  DirectusIntegrationStatus,
   ExportRow,
   ExportType,
   InspectionCreateResponse,
@@ -25,7 +24,16 @@ import type {
   NotificationItem,
   PhotoRequirementsResponse,
   RegionRecord,
+  ResourceCompanyLimitsPayload,
+  ResourcePaymentPayload,
+  ResourcePlanPayload,
+  SaasAlertsResponse,
   SaasAdminStats,
+  SaasCompanyDetailsResponse,
+  SaasCompanyLimits,
+  SaasPaymentsResponse,
+  SaasPlan,
+  ServiceNotificationRecipient,
   SettingsResponse,
   UpdateCompanyPayload,
   UpdateDefectPayload,
@@ -145,8 +153,8 @@ class ApiClient {
   }
 
   private shouldHandleSessionFailure(endpoint: string, token: string | null) {
-    if (!token) return false
-    return !endpoint.startsWith('/auth/login') && !endpoint.startsWith('/auth/owner-setup')
+    if (!token && !hasAuthSession()) return false
+    return !endpoint.startsWith('/auth/login') && !endpoint.startsWith('/auth/mfa/verify') && !endpoint.startsWith('/auth/owner-setup')
   }
 
   private handleSessionFailure(status: number, endpoint: string, token: string | null, error?: string) {
@@ -181,6 +189,7 @@ class ApiClient {
       const response = await fetch(`${API_URL}${endpoint}`, {
         ...options,
         headers,
+        credentials: 'include',
       })
 
       if (!response.ok) {
@@ -228,6 +237,19 @@ class ApiClient {
     return result
   }
 
+  async verifyLoginMfa(mfaToken: string, token: string) {
+    const result = await this.request<LoginResponse>('/auth/mfa/verify', {
+      method: 'POST',
+      body: JSON.stringify({ mfaToken, token }),
+    })
+
+    if (result.data?.token) {
+      this.setToken(result.data.token)
+    }
+
+    return result
+  }
+
   async completeOwnerSetup(token: string, password: string) {
     const result = await this.request<LoginResponse>('/auth/owner-setup', {
       method: 'POST',
@@ -242,6 +264,7 @@ class ApiClient {
   }
 
   async logout() {
+    await this.request<void>('/auth/logout', { method: 'POST' })
     this.setToken(null)
   }
 
@@ -383,6 +406,7 @@ class ApiClient {
     const response = await fetch(`${API_URL}/defects/${defectId}/photos`, {
       method: 'POST',
       headers: token ? { Authorization: `Bearer ${token}` } : {},
+      credentials: 'include',
       body: formData,
     })
 
@@ -408,6 +432,7 @@ class ApiClient {
     const response = await fetch(`${API_URL}/inspections/${inspectionId}/photos`, {
       method: 'POST',
       headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+      credentials: 'include',
       body: formData,
     })
 
@@ -515,6 +540,17 @@ class ApiClient {
     return this.request<CompanyUsageResponse>('/company/usage')
   }
 
+  async getServiceNotificationRecipients() {
+    return this.request<{ recipients: ServiceNotificationRecipient[] }>('/company/service-notification-recipients')
+  }
+
+  async updateServiceNotificationRecipients(recipients: Pick<ServiceNotificationRecipient, 'id' | 'serviceNotificationsEnabled'>[]) {
+    return this.request<{ recipients: ServiceNotificationRecipient[] }>('/company/service-notification-recipients', {
+      method: 'PUT',
+      body: JSON.stringify({ recipients }),
+    })
+  }
+
   async updateSettings(data: SettingsResponse) {
     return this.request<SettingsResponse>('/settings', {
       method: 'PUT',
@@ -522,16 +558,119 @@ class ApiClient {
     })
   }
 
-  async getDirectusStatus() {
-    return this.request<DirectusIntegrationStatus>('/integrations/directus/status')
-  }
-
   async getAnalyticsOverview(params?: string) {
     return this.request<AnalyticsOverview>(`/analytics/overview${params || ''}`)
   }
 
   async getSaasAdminStats() {
-    return this.request<SaasAdminStats>('/admin/saas/stats')
+    return this.request<SaasAdminStats>('/admin/resource/stats')
+  }
+
+  async getResourcePayments() {
+    return this.request<SaasPaymentsResponse>('/admin/resource/payments')
+  }
+
+  async createResourcePayment(data: ResourcePaymentPayload) {
+    return this.request<{ payment: SaasPaymentsResponse['payments'][number] }>('/admin/resource/payments', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    })
+  }
+
+  async cancelResourcePayment(id: string, comment?: string) {
+    return this.request<{ payment: SaasPaymentsResponse['payments'][number] }>(`/admin/resource/payments/${id}/cancel`, {
+      method: 'POST',
+      body: JSON.stringify({ comment }),
+    })
+  }
+
+  async getResourceAlerts() {
+    return this.request<SaasAlertsResponse>('/admin/resource/alerts')
+  }
+
+  async scanResourceAlerts() {
+    return this.request<SaasAlertsResponse>('/admin/resource/alerts/scan', {
+      method: 'POST',
+      body: JSON.stringify({}),
+    })
+  }
+
+  async markResourceAlertRead(id: string) {
+    return this.request<SaasAlertsResponse['alerts'][number]>(`/admin/resource/alerts/${id}/read`, {
+      method: 'POST',
+      body: JSON.stringify({}),
+    })
+  }
+
+  async createResourceCompany(data: CreateCompanyPayload & { id?: string; status?: string; limits?: unknown }) {
+    return this.request<CompanyRecord>('/admin/resource/companies', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    })
+  }
+
+  async getResourceCompanyDetails(id: string) {
+    return this.request<SaasCompanyDetailsResponse>(`/admin/resource/companies/${id}`)
+  }
+
+  async updateResourceCompany(id: string, data: UpdateCompanyPayload) {
+    return this.request<CompanyRecord>(`/admin/resource/companies/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    })
+  }
+
+  async createResourceOwner(companyId: string, data: { email: string; name: string; status?: string; issue_setup_link?: boolean }) {
+    return this.request<UserRecord & { setup?: { token: string; setup_url: string; expires_in: string; expires_at?: string } }>(`/admin/resource/companies/${companyId}/owners`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    })
+  }
+
+  async issueResourceOwnerSetupLink(id: string) {
+    return this.request<UserRecord & { setup?: { token: string; setup_url: string; expires_in: string; expires_at?: string } }>(`/admin/resource/owners/${id}/setup-link`, {
+      method: 'POST',
+    })
+  }
+
+  async updateResourceOwner(id: string, data: { email?: string; name?: string; status?: string }) {
+    return this.request<UserRecord>(`/admin/resource/owners/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    })
+  }
+
+  async deleteResourceOwner(id: string) {
+    return this.request<void>(`/admin/resource/owners/${id}`, {
+      method: 'DELETE',
+    })
+  }
+
+  async updateResourceCompanyLimits(companyId: string, data: ResourceCompanyLimitsPayload) {
+    return this.request<SaasCompanyLimits>(`/admin/resource/companies/${companyId}/limits`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    })
+  }
+
+  async createResourcePlan(data: ResourcePlanPayload & { code: string; name: string }) {
+    return this.request<SaasPlan>('/admin/resource/plans', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    })
+  }
+
+  async updateResourcePlan(code: string, data: ResourcePlanPayload) {
+    return this.request<SaasPlan>(`/admin/resource/plans/${code}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    })
+  }
+
+  async deleteResourcePlan(code: string) {
+    return this.request<void>(`/admin/resource/plans/${code}`, {
+      method: 'DELETE',
+    })
   }
 
   async exportData(type: ExportType) {

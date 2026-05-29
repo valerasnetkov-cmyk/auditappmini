@@ -24,6 +24,7 @@ export type LoginResponse = {
   token?: string
   user?: AuthUser
   mfaRequired?: boolean
+  mfaToken?: string
 }
 
 export type UserRole = 'inspector' | 'manager' | 'owner' | 'admin' | string
@@ -336,13 +337,6 @@ export type SettingsResponse = {
   timezone_offset?: number
 }
 
-export type DirectusIntegrationStatus = {
-  configured: boolean
-  url: string
-  collections: string[]
-  legacy_sync_collections?: string[]
-}
-
 export type CompanyResourceUsage = {
   current: number
   max: number | null
@@ -357,6 +351,33 @@ export type CompanyFeatureAccess = {
   configured: boolean | null
 }
 
+export type CompanyServiceWarning = {
+  type: string
+  severity: 'info' | 'warning' | 'danger' | string
+  title: string
+  message: string
+}
+
+export type CompanyServiceAlert = {
+  id: string
+  type: string
+  title: string
+  message?: string | null
+  status: string
+  createdAt?: string | null
+}
+
+export type ServiceNotificationRecipient = {
+  id: string
+  email: string
+  name: string
+  role: 'owner' | 'manager' | string
+  status: 'active' | 'inactive' | string
+  serviceNotificationsEnabled: boolean
+  serviceNotificationTypes?: string[]
+  locked?: boolean
+}
+
 export type CompanyUsageResponse = {
   company: {
     id: string
@@ -369,6 +390,19 @@ export type CompanyUsageResponse = {
   plan: {
     code?: string | null
   }
+  subscription?: {
+    id?: string | null
+    planCode?: string | null
+    status: 'active' | 'expiring' | 'grace' | 'expired' | 'suspended' | string
+    currentPeriodStart?: string | null
+    currentPeriodEnd?: string | null
+    graceUntil?: string | null
+    mrrRub?: number
+    daysUntilEnd?: number | null
+    updatedAt?: string | null
+  } | null
+  serviceWarnings?: CompanyServiceWarning[]
+  alerts?: CompanyServiceAlert[]
   usage: {
     vehicles: CompanyResourceUsage
     users: CompanyResourceUsage
@@ -388,34 +422,63 @@ export type CompanyUsageResponse = {
 export type SaasAdminTotals = {
   companies: number
   activeCompanies: number
+  activeCompanies7d?: number
+  activeCompanies30d?: number
   inactiveCompanies: number
-  users: number
+  tenantUsers: number
   owners: number
-  managers: number
-  inspectors: number
+  managers?: number
+  inspectors?: number
+  plans: number
   vehicles: number
-  activeVehicles: number
-  repairVehicles: number
   inspections: number
-  completedInspections: number
+  inspections24h?: number
+  inspections7d?: number
   accidents: number
   defects: number
-  openDefects: number
-  closedDefects: number
   photos: number
-  inspections7d: number
-  defects7d: number
-  accidents7d: number
-}
-
-export type SaasOperationalHealth = {
+  inspections30d: number
+  accidents30d: number
+  quickInspections30d?: number
+  scheduledInspections30d?: number
+  completedInspections?: number
+  unfinishedInspections?: number
+  activeInspectors30d?: number
+  openDefects: number
+  activeVehicles: number
+  repairVehicles: number
   companiesWithoutOwner: number
   companiesWithoutLimits: number
+}
+
+export type SaasServiceHealth = {
+  companiesWithoutOwner: number
+  companiesWithoutLimits: number
+  companiesWithoutPlan?: number
+  inactiveCompanies14d?: number
+  unfinishedInspectionsOlderThan24h?: number
+  defectsWithoutPhotos?: number
+  accidentInspectionsWithoutRequiredData?: number
+  orphanRecords?: {
+    vehicles: number
+    inspections: number
+    defects: number
+    photos: number
+    users: number
+  }
+  items?: SaasHealthItem[]
   companiesWithoutOwnerList?: SaasHealthCompany[]
   companiesWithoutLimitsList?: SaasHealthCompany[]
-  unassignedVehicles: number
-  unassignedInspections: number
-  unassignedDefects: number
+}
+
+export type SaasHealthItem = {
+  key: string
+  severity: 'ok' | 'medium' | 'high' | string
+  title: string
+  description: string
+  count: number
+  actionLabel?: string
+  actionHref?: string
 }
 
 export type SaasHealthCompany = {
@@ -434,6 +497,27 @@ export type SaasCompanyLimits = {
   accidentModuleEnabled?: boolean | null
   analyticsEnabled?: boolean | null
   apiAccessEnabled?: boolean | null
+  updatedAt?: string | null
+}
+
+export type SaasOwner = {
+  id: string
+  email: string
+  name: string
+  role: 'owner' | string
+  status: 'active' | 'inactive' | string
+  company_id: string
+  created_at?: string | null
+  last_login_at?: string | null
+  setup?: {
+    status: 'not_sent' | 'pending' | 'accepted' | 'expired' | string
+    issued_at?: string | null
+    expires_at?: string | null
+    accepted_at?: string | null
+    token?: string
+    setup_url?: string
+    expires_in?: string
+  } | null
 }
 
 export type SaasCompanyStats = {
@@ -446,26 +530,431 @@ export type SaasCompanyStats = {
   created_at?: string | null
   users: number
   owners: number
-  vehicles: number
-  activeVehicles: number
-  repairVehicles: number
+  lastActivityAt?: string | null
+  inspections30d?: number
+  previousInspections30d?: number
+  activityDropPercent?: number | null
+  vehiclesLimit?: number | null
+  usersLimit?: number | null
+  vehiclesUsagePercent?: number | null
+  usersUsagePercent?: number | null
+  healthStatus?: 'ok' | 'attention' | 'inactive' | string
+  riskStatus?: 'ok' | 'watch' | 'upsell' | 'blocked' | 'churn' | string
+  usage?: {
+    vehicles: number
+    inspections: number
+    accidents: number
+    defects: number
+    photos: number
+  }
+  billing?: {
+    planName?: string | null
+    monthlyPriceRub: number
+    monthlyRevenueRub: number
+  }
+  subscription?: SaasSubscription | null
+  ownerUsers?: SaasOwner[]
+  limits?: SaasCompanyLimits | null
+}
+
+export type SaasSubscription = {
+  id: string
+  companyId: string
+  planCode?: string | null
+  status: 'active' | 'expiring' | 'grace' | 'expired' | 'suspended' | string
+  currentPeriodStart?: string | null
+  currentPeriodEnd?: string | null
+  graceUntil?: string | null
+  lastPaymentId?: string | null
+  mrrRub: number
+  autoSuspendEnabled?: boolean
+  daysUntilEnd?: number | null
+}
+
+export type SaasPayment = {
+  id: string
+  companyId: string
+  companyName?: string | null
+  planCode?: string | null
+  amount: number
+  currency: string
+  paymentDate?: string | null
+  periodStart?: string | null
+  periodEnd?: string | null
+  paymentMethod?: string | null
+  documentNumber?: string | null
+  comment?: string | null
+  status: 'active' | 'cancelled' | string
+  createdBy?: string | null
+  createdByName?: string | null
+  createdAt?: string | null
+  updatedAt?: string | null
+}
+
+export type SaasExpiringSubscription = {
+  id: string
+  companyId: string
+  companyName: string
+  companySlug?: string | null
+  ownerEmail?: string | null
+  ownerName?: string | null
+  planCode?: string | null
+  status: 'active' | 'expiring' | 'grace' | 'expired' | 'suspended' | string
+  currentPeriodStart?: string | null
+  currentPeriodEnd?: string | null
+  graceUntil?: string | null
+  daysUntilEnd?: number | null
+  lastPaymentId?: string | null
+  lastPaymentDate?: string | null
+  lastPaymentAmount: number
+  mrrRub: number
+}
+
+export type SaasPaymentsResponse = {
+  payments: SaasPayment[]
+  expiringSubscriptions: SaasExpiringSubscription[]
+  summary: {
+    paidThisMonthRub: number
+    paymentsThisMonth: number
+    averagePaymentRub: number
+    expectedRenewalsRub: number
+    expiringCount: number
+    graceCount: number
+    expiredCount: number
+    suspendedCount: number
+  }
+  companies: SaasCompanyStats[]
+  plans: SaasPlan[]
+}
+
+export type SaasAlert = {
+  id: string
+  companyId?: string | null
+  companyName?: string | null
+  recipientUserId?: string | null
+  recipientRole?: string | null
+  type: string
+  channel: string
+  title: string
+  message?: string | null
+  status: 'new' | 'read' | string
+  sentAt?: string | null
+  readAt?: string | null
+  createdAt?: string | null
+}
+
+export type SaasAlertsResponse = {
+  alerts: SaasAlert[]
+  summary: {
+    total: number
+    unread: number
+    expiring: number
+    critical: number
+  }
+  expiringSubscriptions: SaasExpiringSubscription[]
+  result?: {
+    scannedSubscriptions: number
+    updatedSubscriptions: number
+    createdNotifications: number
+    summary: SaasAlertsResponse['summary']
+  }
+}
+
+export type SaasAuditLog = {
+  id: string
+  companyId?: string | null
+  actorUserId?: string | null
+  actorName?: string | null
+  actorEmail?: string | null
+  actorRole?: string | null
+  action: string
+  entityType?: string | null
+  entityId?: string | null
+  payload?: Record<string, unknown> | null
+  createdAt?: string | null
+}
+
+export type SaasCompanyDetailsResponse = {
+  company: SaasCompanyStats
+  owners: SaasOwner[]
+  limits: SaasCompanyLimits | null
+  subscription: SaasSubscription | null
+  payments: SaasPayment[]
+  alerts: SaasAlert[]
+  auditLogs: SaasAuditLog[]
+  plans: SaasPlan[]
+}
+
+export type ResourcePaymentPayload = {
+  companyId: string
+  planCode: string
+  amount: number
+  currency?: string
+  paymentDate: string
+  periodStart: string
+  periodEnd: string
+  paymentMethod?: string
+  documentNumber?: string
+  comment?: string
+}
+
+export type ResourceCompanyLimitsPayload = {
+  planCode?: string
+  maxVehicles?: number | null
+  maxUsers?: number | null
+  maxStorageMb?: number | null
+  ocrEnabled?: boolean | null
+  accidentModuleEnabled?: boolean | null
+  analyticsEnabled?: boolean | null
+  apiAccessEnabled?: boolean | null
+}
+
+export type ResourcePlanPayload = {
+  code?: string
+  name?: string
+  status?: 'active' | 'archived' | string
+  maxVehicles?: number | null
+  maxUsers?: number | null
+  maxStorageMb?: number | null
+  ocrEnabled?: boolean | null
+  accidentModuleEnabled?: boolean | null
+  analyticsEnabled?: boolean | null
+  apiAccessEnabled?: boolean | null
+  monthlyPriceRub?: number | null
+}
+
+export type SaasPlan = {
+  code: string
+  name: string
+  status: 'active' | 'archived' | string
+  monthlyPriceRub?: number
+  limits: {
+    maxVehicles?: number | null
+    maxUsers?: number | null
+    maxStorageMb?: number | null
+  }
+  features: {
+    ocrEnabled?: boolean | null
+    accidentModuleEnabled?: boolean | null
+    analyticsEnabled?: boolean | null
+    apiAccessEnabled?: boolean | null
+  }
+  createdAt?: string | null
+  updatedAt?: string | null
+}
+
+export type SaasBillingSummary = {
+  currency: 'RUB' | string
+  monthlyRevenueRub: number
+  annualRevenueRub: number
+  paidCompanies: number
+  freeCompanies: number
+  trialCompanies?: number
+  activeFreeCompanies?: number
+  potentialMrr?: number
+  recommendedPlanCode?: string | null
+  trialToPaidConversionRate?: number | null
+  paidThisMonthRub?: number
+  paymentsThisMonth?: number
+  averagePaymentRub?: number
+  expectedRenewalsRub?: number
+  expiringCount?: number
+  graceCount?: number
+  expiredCount?: number
+  suspendedCount?: number
+  averageRevenuePerActiveCompanyRub: number
+}
+
+export type SaasPlanBreakdown = {
+  planCode: string
+  planName: string
+  monthlyPriceRub: number
+  companies: number
+  activeCompanies: number
+  monthlyRevenueRub: number
+  usage: {
+    vehicles: number
+    inspections: number
+    accidents: number
+  }
+}
+
+export type SaasActivityTrend = {
+  date: string
   inspections: number
   accidents: number
+}
+
+export type SaasProductActivitySeriesItem = {
+  date: string
+  inspections: number
   defects: number
-  openDefects: number
-  lastInspectionAt?: string | null
-  limits?: SaasCompanyLimits | null
+  accidents: number
+  photos: number
+}
+
+export type SaasInspectionTypesSeriesItem = {
+  date: string
+  quick: number
+  scheduled: number
+  accident: number
+}
+
+export type SaasCompanyWorkloadItem = {
+  companyId: string
+  companyName: string
+  vehicles: number
+  inspections: number
+  defects: number
+  accidents: number
+  photos: number
+}
+
+export type SaasProductActivity = {
+  kpi: {
+    inspections24h: number
+    inspections7d: number
+    inspections30d: number
+    quickInspections30d: number
+    scheduledInspections30d: number
+    accidentInspections30d: number
+    completedInspections: number
+    unfinishedInspections: number
+    completionRate: number
+    averagePhotosPerInspection: number
+    defectsPer100Inspections: number
+    activeInspectors30d: number
+    averageInspectionsPerActiveCompany30d: number
+  }
+  series30d: SaasProductActivitySeriesItem[]
+  inspectionTypesSeries30d: SaasInspectionTypesSeriesItem[]
+  companyWorkload: SaasCompanyWorkloadItem[]
+}
+
+export type SaasStorageStats = {
+  totalPhotos: number
+  photos30d: number
+  totalStorageBytes: number
+  avgOriginalSizeBytes?: number | null
+  avgWebpSizeBytes?: number | null
+  estimatedSavedBytes?: number | null
+  uploadErrors: number
+  webpErrors: number
+  byCompany: Array<{
+    companyId: string
+    companyName: string
+    photos: number
+    storageBytes: number
+  }>
+}
+
+export type SaasOcrStats = {
+  plateAttempts: number
+  plateSuccess: number
+  plateSuccessRate?: number | null
+  plateManualCorrections: number
+  odometerAttempts: number
+  odometerSuccess: number
+  odometerSuccessRate?: number | null
+  avgConfidence?: number | null
+  errors: number
+  companiesWithOcrDisabled?: number
+}
+
+export type SaasActivationStats = {
+  activationRate: number
+  funnel: {
+    companiesCreated: number
+    ownerAssigned: number
+    ownerLoggedIn: number
+    vehicleAdded: number
+    firstInspectionCreated: number
+    fiveInspectionsReached: number
+    active30d: number
+  }
+}
+
+export type SaasLimitUsageCompany = {
+  companyId: string
+  companyName: string
+  planCode?: string | null
+  vehiclesUsed: number
+  vehiclesLimit?: number | null
+  vehiclesUsagePercent?: number | null
+  usersUsed: number
+  usersLimit?: number | null
+  usersUsagePercent?: number | null
+  ocrEnabled: boolean
+  accidentModuleEnabled: boolean
+  analyticsEnabled: boolean
+  apiAccessEnabled: boolean
+  riskLevel: 'ok' | 'watch' | 'upsell' | 'blocked' | string
+}
+
+export type SaasLimitUsage = {
+  companiesNearVehicleLimit: number
+  companiesNearUserLimit: number
+  disabledModules: {
+    ocr: number
+    accidentModule: number
+    analytics: number
+    apiAccess: number
+  }
+  usage: SaasLimitUsageCompany[]
+}
+
+export type SaasChurnRiskCompany = {
+  companyId: string
+  companyName: string
+  planCode?: string | null
+  lastActivityAt?: string | null
+  inspections30d: number
+  previousInspections30d?: number
+  activityDropPercent?: number | null
+  riskLevel: 'medium' | 'high' | string
+  reasons: string[]
+  recommendedAction: string
+}
+
+export type SaasUpsellCandidate = {
+  companyId: string
+  companyName: string
+  currentPlanCode?: string | null
+  recommendedPlanCode?: string | null
+  reason: string
+  potentialMrr: number
+  vehiclesUsagePercent?: number | null
+  usersUsagePercent?: number | null
+  inspections30d: number
+}
+
+export type SaasRiskCenter = {
+  churnRiskCompanies: number
+  upsellCandidates: number
+  churn: SaasChurnRiskCompany[]
+  upsell: SaasUpsellCandidate[]
 }
 
 export type SaasAdminStats = {
   generated_at: string
-  window: {
-    recent_days: number
-    from: string
-  }
   totals: SaasAdminTotals
-  operational_health: SaasOperationalHealth
+  billing?: SaasBillingSummary
+  plan_breakdown?: SaasPlanBreakdown[]
+  activity_trend?: SaasActivityTrend[]
+  activity?: SaasProductActivity
+  storage?: SaasStorageStats
+  ocr?: SaasOcrStats
+  alerts?: SaasAlertsResponse['summary']
+  recent_alerts?: SaasAlert[]
+  recent_payments?: SaasPayment[]
+  expiring_subscriptions?: SaasExpiringSubscription[]
+  service_health: SaasServiceHealth
+  activation?: SaasActivationStats
+  health_center?: SaasServiceHealth
+  limit_usage?: SaasLimitUsage
+  risk_center?: SaasRiskCenter
   companies: SaasCompanyStats[]
+  plans: SaasPlan[]
 }
 
 export type CountByRegion = {

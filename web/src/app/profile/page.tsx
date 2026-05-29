@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react'
 import Layout from '@/components/Layout'
 import api from '@/lib/api/client'
-import { clearAuthToken, requireAuthToken } from '@/lib/auth'
+import { clearAuthToken, isAdminRole, requireAuthToken } from '@/lib/auth'
 import type { AnalyticsOverview, AuthUser, DashboardStats } from '@/lib/types'
 
 type ProfileStats = {
@@ -11,6 +11,9 @@ type ProfileStats = {
   totalInspections: number
   totalDefects: number
   weekInspections: number
+  companies?: number
+  monthlyRevenueRub?: number
+  adminSummary?: boolean
 }
 
 function getRoleLabel(role: string) {
@@ -44,13 +47,9 @@ export default function ProfilePage() {
       setError('')
       setAnalyticsDisabled(false)
 
-      const [authResult, usageResult, dashboardResult] = await Promise.all([
-        api.getAuth(),
-        api.getCompanyUsage(),
-        api.getDashboardStats(),
-      ])
+      const authResult = await api.getAuth()
 
-      if ([authResult, usageResult, dashboardResult].some((result) => result.error === 'AUTH_REQUIRED')) {
+      if (authResult.error === 'AUTH_REQUIRED') {
         setError('AUTH_REQUIRED')
         return
       }
@@ -62,6 +61,36 @@ export default function ProfilePage() {
 
       if (authResult.data) {
         setUser(authResult.data)
+      }
+
+      if (isAdminRole(authResult.data?.role)) {
+        const resourceResult = await api.getSaasAdminStats()
+
+        if (resourceResult.error) {
+          setError(resourceResult.error)
+          return
+        }
+
+        setStats({
+          totalVehicles: resourceResult.data?.totals.vehicles || 0,
+          totalInspections: resourceResult.data?.totals.inspections || 0,
+          totalDefects: resourceResult.data?.totals.defects || 0,
+          weekInspections: resourceResult.data?.totals.inspections30d || 0,
+          companies: resourceResult.data?.totals.activeCompanies || 0,
+          monthlyRevenueRub: resourceResult.data?.billing?.monthlyRevenueRub || 0,
+          adminSummary: true,
+        })
+        return
+      }
+
+      const [usageResult, dashboardResult] = await Promise.all([
+        api.getCompanyUsage(),
+        api.getDashboardStats(),
+      ])
+
+      if ([usageResult, dashboardResult].some((result) => result.error === 'AUTH_REQUIRED')) {
+        setError('AUTH_REQUIRED')
+        return
       }
 
       const analyticsAllowed = usageResult.data?.features.analytics.enabled !== false
@@ -140,28 +169,28 @@ export default function ProfilePage() {
 
           {stats ? (
             <div className="mb-6 rounded-lg bg-white p-6 shadow">
-              <h3 className="mb-4 font-semibold">Статистика системы</h3>
-              {analyticsDisabled ? (
+              <h3 className="mb-4 font-semibold">{stats.adminSummary ? 'Сводка ресурса' : 'Статистика системы'}</h3>
+              {analyticsDisabled && !stats.adminSummary ? (
                 <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
                   Аналитика отключена тарифом компании. Ниже показана краткая оперативная сводка без расширенной аналитики.
                 </div>
               ) : null}
               <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
                 <div className="rounded-lg bg-blue-50 p-4 text-center">
-                  <div className="text-2xl font-bold text-blue-600">{stats.totalVehicles}</div>
-                  <div className="text-sm text-gray-600">Техника</div>
+                  <div className="text-2xl font-bold text-blue-600">{stats.adminSummary ? stats.companies : stats.totalVehicles}</div>
+                  <div className="text-sm text-gray-600">{stats.adminSummary ? 'Компании' : 'Техника'}</div>
                 </div>
                 <div className="rounded-lg bg-green-50 p-4 text-center">
-                  <div className="text-2xl font-bold text-green-600">{stats.totalInspections}</div>
-                  <div className="text-sm text-gray-600">Осмотры</div>
+                  <div className="text-2xl font-bold text-green-600">{stats.adminSummary ? stats.totalVehicles : stats.totalInspections}</div>
+                  <div className="text-sm text-gray-600">{stats.adminSummary ? 'Техника' : 'Осмотры'}</div>
                 </div>
                 <div className="rounded-lg bg-orange-50 p-4 text-center">
                   <div className="text-2xl font-bold text-orange-600">{stats.totalDefects}</div>
-                  <div className="text-sm text-gray-600">{analyticsDisabled ? 'Техника с дефектами' : 'Дефекты'}</div>
+                  <div className="text-sm text-gray-600">{stats.adminSummary ? 'Дефекты' : analyticsDisabled ? 'Техника с дефектами' : 'Дефекты'}</div>
                 </div>
                 <div className="rounded-lg bg-purple-50 p-4 text-center">
-                  <div className="text-2xl font-bold text-purple-600">{stats.weekInspections}</div>
-                  <div className="text-sm text-gray-600">{analyticsDisabled ? 'Сегодня' : 'За неделю'}</div>
+                  <div className="text-2xl font-bold text-purple-600">{stats.adminSummary ? `${Number(stats.monthlyRevenueRub || 0).toLocaleString('ru-RU')} ₽` : stats.weekInspections}</div>
+                  <div className="text-sm text-gray-600">{stats.adminSummary ? 'MRR' : analyticsDisabled ? 'Сегодня' : 'За неделю'}</div>
                 </div>
               </div>
             </div>

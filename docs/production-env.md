@@ -61,7 +61,13 @@ EXPO_PUBLIC_API_URL=https://api.<project-domain>/api
 | `CORS_ORIGINS` | Реальный origin web-приложения, без `*`. |
 | `DATABASE_PATH` | Постоянный путь к SQLite базе для пилота. |
 | `UPLOAD_DIR` | Постоянный каталог фото, не внутри временной release-папки. |
+| `MAX_IMAGE_PIXELS` | Максимальное число пикселей в исходном фото; защищает обработку изображений от слишком больших файлов. |
 | `BACKUP_DIR` | Постоянный каталог локальных backup-снимков. |
+| `SECURITY_CSP` | CSP для API-ответов; по умолчанию запрещает загрузку ресурсов, формы и встраивание во фрейм. |
+| `SECURITY_CROSS_ORIGIN_OPENER_POLICY` | COOP-заголовок, по умолчанию `same-origin`. |
+| `SECURITY_CROSS_ORIGIN_RESOURCE_POLICY` | CORP-заголовок, по умолчанию `same-site`. |
+| `AUTH_COOKIE_NAME` / `AUTH_COOKIE_MAX_AGE_SECONDS` | Имя и срок жизни httpOnly session-cookie для web-клиента. |
+| `AUTH_COOKIE_SECURE` / `AUTH_COOKIE_SAME_SITE` | Атрибуты auth-cookie; в production `AUTH_COOKIE_SECURE=true`, для `SameSite=None` secure обязателен. |
 | `SENSITIVE_RATE_LIMIT_WINDOW_MS` / `SENSITIVE_RATE_LIMIT_MAX` | Общий лимит на чувствительные endpoint входа/setup. |
 | `AUTH_ACCOUNT_RATE_LIMIT_MAX` | Дополнительный лимит на попытки входа/setup по конкретному аккаунту/идентификатору. |
 | `ADMIN_EMAIL` / `ADMIN_PASSWORD` | Первичный админ SaaS, если нужен автосид при первом старте. |

@@ -1,7 +1,9 @@
-﻿export default function registerCompleteInspectionRoutes({ app, db, API_MESSAGES, getInspectionById, authenticate, photoRequirements }) {
+﻿export default function registerCompleteInspectionRoutes({ app, db, API_MESSAGES, getInspectionById, authenticate, photoRequirements, ensureOperationalWriteAllowed = null }) {
   const sendError = (res, status, message) => res.status(status).json({ error: message })
 
   app.post('/api/inspections/:id/complete', authenticate, async (req, res) => {
+    if (ensureOperationalWriteAllowed && !ensureOperationalWriteAllowed(req, res, { mode: 'write' })) return
+
     const inspectionId = req.params.id
     const companyId = req.user.company_id || 'default'
     const inspection = db.prepare('SELECT * FROM inspections WHERE id = ? AND company_id = ?').get(inspectionId, companyId)

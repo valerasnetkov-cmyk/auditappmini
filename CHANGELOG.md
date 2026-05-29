@@ -2,15 +2,125 @@
 
 ## Unreleased
 
+### Changed
+- **Resource admin вместо Directus CMS**: принято архитектурное решение отказаться от Directus как активной части проекта. Управление компаниями, владельцами, тарифами и лимитами переносится во встроенный backend/web контур "Администрирование ресурса".
+- **Границы роли `admin`**: администратор ресурса отвечает за весь сервисный уровень проекта, но не является владельцем или менеджером компаний и не получает доступ к технике, осмотрам, дефектам, фото и пользовательскому назначению внутри tenant-контуров.
+- **Smoke-gate**: backend smoke больше не содержит Directus service/mock проверки и включает MFA login flow, resource-admin CRUD, tenant isolation и лимиты компаний.
+
+### Added
+- **Рабочий roadmap**: добавлен `plan.md` с целями, архитектурным решением, границами ролей, этапами реализации и проверками перед пилотом.
+- **Статус roadmap**: `plan.md` дополнен статусом выполненных этапов и оставшимися release-actions перед пилотом.
+- **Resource-admin контур**: добавлен встроенный API/UI для компаний, владельцев компаний, тарифов, лимитов, статусов и сервисных health-индикаторов без операционных данных компаний.
+- **Управление ресурсом в web-панели**: `/saas-admin` расширен формами создания компаний, назначения владельцев, настройки лимитов/модулей и управления тарифами без перехода в CMS.
+- **MFA challenge login**: добавлен `/api/auth/mfa/verify` и web-форма ввода TOTP после password login для пользователей с включенным MFA.
+
+### Removed
+- **Directus из целевой архитектуры**: Directus больше не рассматривается как optional CMS для MVP-пилота; удалены Directus runtime routes/services, bootstrap/seed scripts, provisioning sync, endpoints, env-переменные, active docs и каталог `directus/`.
+
+### Security
+- **Audit findings security hardening**: закрыты первые критичные замечания из audit findings: `/api/auth/login` больше не различает несуществующий email и неверный пароль, загрузка фото сверяет фактический формат изображения через `sharp` с заявленным MIME-типом, добавлен лимит `MAX_IMAGE_PIXELS` и проверка этого параметра в launch doctor.
+- **Web httpOnly session cookie**: web-клиент переведён с постоянного JWT в `localStorage` на httpOnly `audit_session` cookie; `Authorization: Bearer` сохранён для mobile/smoke/API-совместимости, старый web-token удаляется из `localStorage` при первом чтении и обменивается на cookie, unsafe cookie-запросы требуют разрешённый `Origin`.
+- **Owner setup invitations**: resource-admin контур получил полноценную выдачу доступа владельцу компании без передачи пароля: setup-ссылки хранят статус `not_sent`/`pending`/`accepted`/`expired`, старые ссылки инвалидируются при повторной выдаче или смене email, добавлен API повторной генерации ссылки, кнопки копирования и mailto-приглашение в реестре/карточке компании.
+- **Security headers and safer registration defaults**: закрыты дополнительные замечания audit findings: backend теперь выставляет `Content-Security-Policy`, `Cross-Origin-Opener-Policy` и `Cross-Origin-Resource-Policy`, публичная регистрация отключена по умолчанию и включается только явным `PUBLIC_REGISTRATION_ENABLED=true`; smoke и launch doctor проверяют новые параметры.
+- **Production guard runtime boot**: `smoke:production-guard` теперь проверяет не только launch doctor, но и короткий реальный старт backend в `NODE_ENV=production` с валидным env и security headers.
+- **Repository hygiene guardrails**: `.gitignore` приведён к единой форме без дублей и явно исключает runtime SQLite, uploads/backups/logs, `.tmp-*`, `.tmp-runtime`, `.tmp-e2e` и release artifacts, сохраняя разрешёнными только env-шаблоны.
+- **Audit vulnerabilities**: backend и web зависимости обновлены через `npm audit fix`; backend/web/mobile audit gates возвращают 0 vulnerabilities на уровне `moderate`.
+- **Tenant isolation для resource admin**: роль `admin` заблокирована на пользовательских tenant endpoints (`vehicles`, `inspections`, `defects`, `photos`, `users`, dashboard/analytics/company usage и др.) и работает только через resource-admin API.
+- **Pre-launch blockers**: перед полноценным стартом обязательны production doctor на реальном pilot env, backup/restore verification и release evidence.
+
+### Fixed
+- **Tenant read-only UX для журналов и карточек**: списки и карточки осмотров, техники, дефектов и настройки компании теперь показывают статус тарифа компании и заранее блокируют создание, удаление, закрытие/переоткрытие дефектов, сохранение осмотра, завершение осмотра, загрузку/удаление фото, импорт, справочники и сервисные настройки при `suspended`, отключенной компании или `expired` там, где создается новая операционная запись.
+- **Resource-admin KPI dashboard 2.0**: `/saas-admin/dashboard` расширен SaaS-агрегатами для администратора ресурса: activation funnel, health center, limit usage heatmap, churn/upsell candidates, Companies 2.0, фиксация `last_login_at` при входе и smoke-проверки новых агрегатов без доступа к tenant endpoints.
+- **Resource-admin dashboard analytics**: дашборд дополнен Product Activity, типами осмотров, фото/storage аналитикой, Potential MRR, OCR service summary, фильтрами Companies 2.0 и action-ссылками health center; backend stats возвращает безопасные activity/storage/ocr агрегаты и smoke проверяет их наличие.
+- **Resource-admin responsive layout**: админский layout теперь переключает боковое меню в верхнюю панель на мобильных экранах, чтобы `/saas-admin/dashboard` не сжимался в узкую колонку.
+- **Offline payments MVP**: добавлены таблицы `company_payments`, `company_subscriptions`, `company_notifications`, `audit_logs`, API `/api/admin/resource/payments`, ручное добавление/отмена оффлайн-платежей, пересчет подписки/MRR, финансовые агрегаты в stats и страница `/saas-admin/payments`.
+- **Resource-admin subscription alerts**: добавлены API `/api/admin/resource/alerts`, ручной/скриптовый сканер сроков подписок `npm --prefix backend run subscriptions:check`, read-status уведомлений и страница `/saas-admin/alerts` для контроля 14/7/3/1 дней до окончания, grace period, просрочки и приостановки.
+- **Resource-admin company card**: добавлены API `/api/admin/resource/companies/:id`, audit-события для действий resource-admin и страница `/saas-admin/companies/[id]` с обзором компании, владельцами, тарифом/лимитами, платежами, уведомлениями и журналом действий без перехода к tenant endpoints.
+- **Resource-admin section split**: `/saas-admin` превращен в обзор ресурса с KPI, быстрыми действиями, срочными подписками и последними платежами; управление компаниями вынесено в `/saas-admin/companies`, управление тарифами в `/saas-admin/plans`, навигация администратора ресурса обновлена под новую структуру без Directus.
+- **Subscription guard**: backend теперь оставляет историю компании доступной для чтения, но при `expired` блокирует новые операционные действия, импорт и OCR, а при `suspended` переводит tenant-контур в read-only; добавлен smoke `npm --prefix backend run smoke:subscription-guard`.
+- **Resource-admin stats**: API теперь отдаёт список владельцев компаний и тарифы, но не раскрывает операционные данные tenant-контуров.
+- **Частичное обновление тарифов**: `PUT /api/admin/resource/plans/:code` сохраняет существующие лимиты и feature flags, если меняется только статус или название.
+- **Resource-admin smoke**: smoke-проверка покрывает CRUD компаний/владельцев/тарифов/лимитов, запрет `admin` на tenant endpoints (`vehicles`, `inspections`, `defects`, `users`, dashboard, analytics, company usage), запрет resource-admin API для `owner`/`manager`/`inspector`, список владельцев и сохранение лимитов при частичном обновлении тарифа.
+- **Mobile Directus note**: active mobile README больше не описывает Directus как внешний контур и фиксирует работу только через custom backend.
+- **Web role docs**: web-документация больше не относит resource admin к ролям, которые видят технику, осмотры, фото, дефекты или OCR-диагностику внутри компании.
+- **Company owner docs**: README, product/data-model/backend/web/MFA/measurement/theme docs обновлены под модель, где tenant-настройки, MFA пользователей компании и единицы пробега администрирует `owner`, а resource admin не участвует в операционной настройке компаний.
+- **Launch E2E runner**: `scripts/e2e-local.mjs` теперь собирает web с изолированным `NEXT_PUBLIC_API_URL` и запускает его через `next start`, чтобы `verify:launch` не падал из-за уже открытого локального `next dev` lock или build-time env из `.env.local`.
+- **Launch E2E роли**: операционные Playwright-сценарии теперь используют company owner credentials (`E2E_OWNER_EMAIL`/`E2E_OWNER_PASSWORD`) вместо resource admin, а изолированная E2E SQLite-база автоматически получает owner tenant с лимитами.
+- **Launch gate**: локальный `npm run verify:launch` теперь проходит полностью, включая backend smoke, web build, mobile verify/EAS readiness, isolated Chromium E2E, launch doctors и audits.
+- **Resource-admin navigation**: для роли `admin` web-layout больше не показывает tenant-разделы компании и поиск техники; в меню остаются только контур "Админ ресурса" и профиль.
+- **Resource-admin hydration**: layout больше не читает роль из `localStorage` во время первого рендера, поэтому `/saas-admin` не получает hydration mismatch между SSR и клиентом.
+- **Resource-admin dashboard**: `/saas-admin` получил агрегированный дашборд на Chart.js со статистикой компаний, техники, осмотров, ДТП, тарифов и расчётной MRR/ARR без доступа к операционным карточкам tenant-данных.
+- **Resource-admin profile**: профиль роли `admin` больше не вызывает tenant endpoints `/company/usage`, `/dashboard/stats` и `/analytics/overview`; вместо 403 показывает сервисную сводку resource-admin контура.
+- **Resource-admin UI polish**: страница `/saas-admin` получила отдельный визуальный слой с отступами, мягкими панелями, светлыми границами, hover-состояниями таблиц и более аккуратной иерархией dashboard-блоков.
+- **Resource-admin dashboard split**: KPI, Chart.js-графики, тарифная сводка и статистические агрегаты вынесены из `/saas-admin` на отдельную страницу `/saas-admin/dashboard`; `/saas-admin` оставлен для управления компаниями, владельцами, лимитами и тарифами.
+
+- **Tenant subscription visibility**: `/api/company/usage` теперь возвращает безопасный статус подписки, срок тарифа, MRR и предупреждения только для текущей компании; dashboard и настройки компании показывают владельцу/пользователям баннер тарифа при `expiring`, `grace`, `expired`, `suspended` или отключенной компании, без доступа к resource-admin API.
+- **Company service notifications**: добавлены поля `service_notifications_enabled`/`service_notification_types`, tenant API `/api/company/service-notification-recipients` и блок настроек для owner; scanner подписок теперь доставляет уведомления не только resource-admin, но и владельцу компании плюс выбранным manager, при этом inspector не получает сервисные уведомления.
+- **Tenant read-only UX**: web-контур компании теперь заранее блокирует создание техники, запуск новых осмотров, импорт Excel, генерацию demo-data, редактирование/архивирование техники, управление пользователями и справочник регионов при `suspended` подписке или отключенной компании; при `expired` дополнительно блокируются новые операционные записи. Пользователю показывается причина ограничения до отправки запроса в backend.
+
+### Audit findings (2026-05-27)
+
+Раздел добавлен после ручного аудита проекта (backend, web, mobile, конфигурация). Пункты без отметки "закрыто" остаются backlog-задачами; закрытые пункты описаны в `Unreleased`.
+
+#### Архитектура и хранилище данных
+- **SQLite через sql.js (WASM, in-memory)**: backend использует `sql.js` вместо нативного `better-sqlite3`. База держится целиком в памяти Node.js и сериализуется на диск через `db.export()`. Это даёт большой расход RAM на крупных компаниях, отсутствие реальных транзакций и риск потери данных при крэше процесса. Рекомендуется миграция на `better-sqlite3` или внешний RDBMS (Postgres).
+- **`saveDatabase()` после каждой записи**: обёртка `getDb()` в `backend/src/db.js` вызывает полную запись всей БД на диск (`fs.writeFileSync`) после каждого `run`/`exec`. С ростом БД операции деградируют до O(N) на каждый insert/update, блокируют event loop и создают повышенный износ диска.
+- **Файл БД лежит внутри `backend/src`**: путь по умолчанию `backend/src/database.sqlite` находится в каталоге исходников. Любая ошибка в `.gitignore` приведёт к утечке боевых данных в репозиторий, а `node --watch` может реагировать на изменения файла данных.
+- **Монолитный `server.js` (~2 837 строк)**: `backend/src/server.js` содержит конфиг, security middleware, rate limiting, auth, MFA, vehicles, inspections, defects, analytics, seed и dashboard. Это затрудняет ревью, повышает риск регрессий и мешает писать модульные тесты.
+- **Тяжёлые миграции на каждом старте**: `repairDatabaseEncoding()`, `repairVehicleNumbers()` и `syncRegionDirectory()` запускаются при каждом `initDatabase()`. На больших таблицах это удлинит холодный старт и readiness probe.
+- **`.tmp-*` и `*.log` файлы в корне репозитория**: `backend-dev.log`, `backend-run.log`, `stderr.log`, `stdout.log`, `.tmp-backend-dev.out.log`, `.tmp-e2e`, `.tmp-runtime` и т.п. лежат рядом с исходниками. Они шумят, могут содержать чувствительные данные из stack trace и должны быть выведены в отдельные каталоги вне корня.
+
+#### Аутентификация, MFA и сессии
+- **JWT-секрет с дефолтом**: `backend/src/server.js` использует `DEFAULT_JWT_SECRET = 'audit-secret-key-2024'` при отсутствии `JWT_SECRET`. В dev-режиме это удобно, но любая случайная сборка без `.env` поднимется с предсказуемым секретом.
+- **MFA login flow был неполным**: исходный аудит выявил, что при `mfa_enabled=1` пользователь не мог завершить вход без уже выданного JWT. В текущей реализации добавлен отдельный login challenge через `/api/auth/mfa/verify` и web-форма ввода TOTP.
+- **MFA активируется по первому совпадению TOTP**: `mfa/verify` одновременно подтверждает токен и выставляет `mfa_enabled = 1`. Нет отдельных эндпоинтов `enable` и `challenge`, нет backup-кодов, нет ограничения по времени между `setup` и `verify`, нет окна допустимого дрейфа (`window`).
+- **JWT хранится в `localStorage` web-клиента — закрыто в Unreleased**: web-клиент переведен на httpOnly `audit_session` cookie, а legacy token удаляется из `localStorage` при первом чтении; `Authorization: Bearer` оставлен для mobile/smoke/API-совместимости.
+- **Срок жизни токена 7 дней без refresh/rotation**: `jwt.sign(... { expiresIn: '7d' })` без revocation list и refresh-токенов. Отзыв скомпрометированного токена возможен только через смену `JWT_SECRET` для всех пользователей.
+- **Информативные ошибки логина — закрыто в Unreleased**: `/api/auth/login` больше не различает несуществующий email и неверный пароль.
+- **Owner setup-токен повторно используем**: `/api/auth/owner-setup` валидирует `setup_fingerprint` от текущего `user.password`, но не сохраняет одноразовый признак использования — пока пароль не сменён повторно, та же setup-ссылка остаётся валидной.
+
+#### Безопасность приложения
+- **CORS по умолчанию открыт на множество dev-портов**: список `http://localhost:3000,3002,8083,8081,8082` зашит как fallback. В non-production средах с публичным URL это легко проглядеть. Стоит требовать явный `CORS_ORIGINS` даже в dev.
+- **Rate limit только in-memory**: `createRateLimiter` в `backend/src/server.js` использует локальную `Map`. При запуске нескольких реплик (PM2 cluster, blue/green) лимит обходится переключением воркера. Нужен распределённый счётчик (Redis) для production.
+- **`PUBLIC_REGISTRATION_ENABLED` зависит от `NODE_ENV` по умолчанию — закрыто в Unreleased**: публичная регистрация отключена по умолчанию и включается только явным opt-in.
+- **Загрузка фотографий — закрыто в Unreleased**: загрузка фото проверяет фактический формат через `sharp`, сверяет его с заявленным MIME-типом и ограничивает декодирование через `MAX_IMAGE_PIXELS`.
+- **Пути загрузок**: `resolveUploadPath` корректно блокирует traversal, но `buildUploadUrl` строит URL из имени файла без подписи. Кэширование на CDN/прокси возможно только при добавлении подписанных URL.
+- **Заголовки безопасности минимальны — закрыто в Unreleased**: backend теперь выставляет `Content-Security-Policy`, `Cross-Origin-Resource-Policy` и `Cross-Origin-Opener-Policy`.
+- **Speakeasy зашит в зависимости web-клиента**: `web/package.json` содержит `speakeasy` в `dependencies`. Серверная TOTP-библиотека в SSR/CSR-бандле не нужна и потенциально может попасть в клиентский bundle.
+
+#### Качество кода и поддержка
+- **N+1 запросы в списке техники**: `GET /api/vehicles` после основного запроса делает `lastInspection` и `defectsCount` по каждому ряду в `.map` отдельными `db.prepare(...).get(...)`. На больших парках это даст линейное замедление.
+- **Толстые страницы web-клиента**: `web/src/app/inspections/[id]/page.tsx` (922 строки), `web/src/app/vehicles/page.tsx` (714), `web/src/app/page.tsx` (548), `web/src/app/vehicles/[id]/page.tsx` (541) — монолитные client-компоненты с большим числом состояний. Рекомендуется выделить хуки данных и презентационные компоненты, перевести часть на серверные компоненты Next 16.
+- **Mojibake-словари в `backend/src/db.js`**: жёстко зашитые карты исправления повреждённых русских строк. Это исторический технический долг и индикатор того, что когда-то БД писалась в неправильной кодировке. Нужно зафиксировать корневую причину (import-скрипт/драйвер) и удалить миграцию после очистки данных.
+- **Тесты разрозненные**: в `backend/tests` собраны `debug-*`, `fix-*`, `reset-db`, `add-test-vehicle` и подобные одноразовые скрипты вперемешку с `role-tests.js`, `integration.resolve-number.test.mjs`, `transliteration.test.mjs`. Нет единого test runner, нет coverage. Smoke-скрипты заменяют unit/integration-тесты.
+- **Mobile `App.tsx` 944 строки**: один файл содержит `Login`, `CompanySelect`, `InspectionFlow` и StyleSheet (~793 строк стилей). Разнести по `src/screens/*` и `src/styles`.
+- **`mobile/src` почти пустой**: только `api.ts`, `CameraCapture.tsx`, `types.ts`, `theme.tsx`. Вся бизнес-логика осталась в `App.tsx`.
+- **Документация раздроблена**: в корне лежат `backend.md`, `web.md`, `mobile.md`, `data-model.md`, `product.md`, `eb-first_SystemAdmin.md`, `codex-vehicle-inspection-photo-webp.md`, `workflow-reference-dark-theme-transfer.md`, плюс `docs/`. Стоит свести в единое содержание `docs/README.md`.
+
+#### Конфигурация и репозиторий
+- **`.env.local` лежит в рабочей копии**: файл присутствует на диске (содержит публичный Supabase anon-key и URL-плейсхолдер). В `git ls-files` его нет, но он по-прежнему рискует попасть в коммит — стоит хранить только в `.env.example`.
+- **`backend/.env.example` содержит небезопасные dev-дефолты**: `JWT_SECRET=dev-secret-change-in-production` и `ADMIN_PASSWORD=admin123`. Это шаблон, но dev может скопировать его в `.env` и так уйти в продакшн; Directus-переменные из шаблона удалены.
+- **Дублирующиеся записи в `.gitignore`**: `.env`, `.next/`, `*.log` встречаются дважды. Файл стоит привести к канонической форме.
+- **`package-lock.json` в корне почти пуст (139 байт)**: при наличии независимых `package-lock.json` в `backend`, `web`, `mobile` корневой lock-файл бесполезен и вводит в заблуждение.
+- **Нерелевантные артефакты в рабочей копии**: логи (`backend-run.log` ~140 КБ, `backend-dev.log` ~32 КБ) и временные каталоги. Следует исключить из истории и не публиковать.
+
+#### CI/CD и эксплуатация
+- **Production guard зависит от `NODE_ENV`**: `assertProductionConfig()` срабатывает только при `NODE_ENV=production`. Случайный запуск backend без переменной в production-окружении не выкинет ошибок про слабый JWT или `CORS_ORIGINS=*`.
+- **`pm2-logrotate` настраивается вручную**: скрипт `pm2:logrotate:configure` живёт в `backend/package.json`. Без него логи могут забить диск; стоит включить в установочный runbook.
+- **Большое количество smoke-скриптов выполняется последовательно**: `npm --prefix backend run smoke` запускает 16+ subprocess. Это медленно и затрудняет параллелизацию в CI.
+- **Нет lint-команды для backend и mobile на верхнем уровне**: `web` имеет `eslint`, остальные проекты не имеют статического анализа JS. Стоит добавить минимум `eslint` + `prettier` единым правилом для всех воркспейсов.
+- **Отсутствует `SECURITY.md` и `CODEOWNERS`**: для проекта с MFA, multi-tenant и фотодоказательствами стоит зафиксировать процесс ответственного раскрытия уязвимостей и владельцев критичных модулей.
+
+
 ### Fixed
 - **Безопасность web-зависимостей**: `next` и `eslint-config-next` обновлены до 16.2.6, закрыт high-risk advisory из `npm audit` для Next.js.
 - **Изоляция техники по компании**: основные endpoint техники теперь фильтруют список, карточку, дефекты, создание, импорт, редактирование и удаление по `company_id` текущего пользователя.
-- **Права администратора**: backend guard для manager-операций теперь также пропускает роль `admin`, чтобы администратор мог управлять справочниками, техникой и компаниями.
-- **Защита company API**: `/api/companies` закрыт manager/admin-доступом вместо доступа для любого авторизованного пользователя.
+- **Права администратора ресурса**: прежний доступ `admin` к manager-операциям заменён отдельным resource-admin контуром; администратор ресурса больше не управляет техникой, справочниками и пользователями внутри компаний.
+- **Защита company API**: `/api/companies` и tenant-level company endpoints исключены из resource-admin доступа; компании администрируются через `/api/admin/resource/*`.
 - **Ограничения загрузок**: для `multer` добавлены лимит размера файла и whitelist image MIME-типов; JSON body limit вынесен в `JSON_BODY_LIMIT`.
 - **Изоляция осмотров и дефектов**: создание, просмотр, закрытие/переоткрытие, история, фото и аналитика дефектов дополнительно привязаны к компании текущего пользователя.
 - **Данные дашборда и уведомлений**: статистика, уведомления и агрегаты аналитики теперь не смешивают технику разных компаний.
-- **Изоляция пользователей и MFA**: просмотр, редактирование, удаление пользователей и MFA-операции ограничены компанией текущего manager/admin или самим пользователем.
+- **Изоляция пользователей и MFA**: просмотр, редактирование, удаление пользователей и MFA-операции ограничены компанией текущего owner или самим пользователем; resource admin не назначает пользователей внутри компаний.
 - **Регионы в multi-company режиме**: счётчики, переименование и удаление регионов теперь затрагивают только технику компании текущего пользователя и не ломают регионы, используемые другими компаниями.
 - **Оdometer/номер по компании**: запись одометра и поиск техники по номеру дополнительно проверяют `company_id`, чтобы нельзя было обратиться к чужому осмотру или авто.
 
@@ -31,7 +141,7 @@
 
 ### Added
 - **Импорт техники из Excel**: массовый импорт vehicle с авто-созданием регионов. Endpoint `POST /api/vehicles/import` принимает массив `{number, name, region}` и автоматически создаёт отсутствующие регионы в справочнике перед импортом.
-- **Управление регионами**: CRUD операции в Settings для manager/admin. Endpoint `GET/POST/PUT/DELETE /api/regions` с поддержкой слияния регионов при переименовании (техника переносится в целевой регион).
+- **Управление регионами**: CRUD операции в Settings для owner/manager внутри компании. Endpoint `GET/POST/PUT/DELETE /api/regions` с поддержкой слияния регионов при переименовании (техника переносится в целевой регион).
 
 ### Changed
 - **Seed регионов**: добавлены 76 основных российских регионов (Москва, Санкт-Петербург, Сахалинская область и др.) при инициализации пустой базы.
@@ -48,7 +158,7 @@
 - **Изолированный launch E2E runner**: добавлен `scripts/e2e-local.mjs`, который сам поднимает backend и web на свободных локальных портах, использует временную SQLite-БД/uploads, пробрасывает `CORS_ORIGINS`, запускает Chromium Playwright и очищает временные данные после проверки.
 - **E2E в launch gate**: root-команда `npm run verify:launch` теперь включает `npm run verify:e2e`, а GitHub Actions workflow устанавливает Playwright Chromium перед запуском launch-проверки.
 - **Web E2E helper-команды**: в web-пакет добавлены `prepare:e2e:chromium` и `test:e2e:chromium` для явного запуска/подготовки Chromium-проверок.
-- **Production env шаблоны**: добавлены `backend/.env.production.example`, `web/.env.production.example` и `mobile/.env.production.example` с обязательными production-переменными для JWT, CORS, persistent storage, публичных API URL, owner setup и опциональной Directus-интеграции.
+- **Production env шаблоны**: добавлены `backend/.env.production.example`, `web/.env.production.example` и `mobile/.env.production.example` с обязательными production-переменными для JWT, CORS, persistent storage, публичных API URL и owner setup; Directus-переменные удалены из активных шаблонов.
 - **Production runbook**: добавлен `docs/production-env.md` с порядком подготовки секретов, persistent storage, проверки `doctor:production`, запуска backend/PM2, web build и mobile production build.
 - **Production doctor команда**: добавлен root/backend/web/mobile script `doctor:production`, который проверяет отдельные `.env.production` в строгом production-режиме.
 - **Mobile launch doctor**: добавлен `mobile/scripts/launch-doctor.mjs`, который проверяет `EXPO_PUBLIC_API_URL` и запрещает localhost/emulator/LAN/placeholder URL в production.
@@ -78,7 +188,7 @@
 - **Launch doctor с явным env-файлом**: `backend/scripts/launch-doctor.mjs` теперь поддерживает `--production`, `--mode`, `--doctor-env-file` и `LAUNCH_ENV_FILE`, показывает `envFileExists` и отлавливает placeholder-значения в JWT, CORS, admin/password и `WEB_APP_URL`.
 - **Web launch doctor**: `web/scripts/launch-doctor.mjs` получил `--production`, `--mode`, `--doctor-env-file`, `LAUNCH_ENV_FILE`, проверку placeholder URL и HTTPS-требование для `NEXT_PUBLIC_API_URL` в production.
 - **Root launch doctor**: `npm run doctor:launch` и `npm run verify:launch` теперь проверяют backend, web и mobile env-контуры, а не только backend.
-- **PM2 production env**: `backend/ecosystem.config.cjs` автоматически подхватывает `backend/.env.production`, если он есть, и пробрасывает production-секреты/лимиты/Directus-настройки в backend-процесс.
+- **PM2 production env**: `backend/ecosystem.config.cjs` автоматически подхватывает `backend/.env.production`, если он есть, и пробрасывает production-секреты, лимиты и runtime-настройки custom backend без Directus-контура.
 - **Launch checklist и README**: `docs/launch-checklist.md`, `web/README.md` и `mobile/README.md` теперь описывают production env для backend/web/mobile и обязательную проверку `npm run doctor:production` перед релизом.
 - **Backup manifest**: `backend/scripts/backup-local-data.mjs` теперь дополняет manifest размером и SHA-256 SQLite-файла, статистикой uploads и структурированными `database`/`uploads` блоками, сохраняя старые поля `databaseCopied`/`uploadsCopied`.
 - **Launch/production docs**: `docs/launch-checklist.md` и `docs/production-env.md` теперь требуют запуск `backup:verify` после каждого pilot backup.
@@ -298,10 +408,10 @@
 ### Added
 - **SaaS admin статистика**: добавлен admin-only endpoint `GET /api/admin/saas/stats` с глобальными агрегатами по всем компаниям: компании, владельцы, пользователи, техника, осмотры, дефекты, ДТП, фото, активность за 7 дней и health-индикаторы записей без владельца/company_id.
 - **Страница `/saas-admin`**: добавлена web-страница администратора ресурса с карточками глобальных метрик, Chart.js-графиком активности компаний и таблицей breakdown по tenant-компаниям; пункт меню видит только роль `admin`.
-- **Health-списки SaaS-админа**: `GET /api/admin/saas/stats` теперь возвращает короткие списки компаний без активного владельца и без лимитов, а `/saas-admin` показывает их с понятным действием: создать владельца в `company_owners` или синхронизировать `company_limits`.
+- **Health-списки resource-admin**: `GET /api/admin/resource/stats` возвращает короткие списки компаний без активного владельца и без лимитов, а `/saas-admin` показывает их как сервисные health-индикаторы без перехода к операционным данным компаний.
 - **Smoke-тест SaaS admin**: добавлен `backend/scripts/smoke-saas-admin.mjs` и команда `npm --prefix backend run smoke:saas-admin`; общий backend smoke теперь проверяет admin-доступ к глобальной статистике и отказ manager-роли.
-- **Smoke-тест лимитов компаний**: добавлен `backend/scripts/smoke-company-limits.mjs`, который через mocked Directus с integer company id синхронизирует лимиты и проверяет блокировку второй техники/второго пользователя.
-- **Smoke-тест feature flags компаний**: добавлен `backend/scripts/smoke-company-features.mjs`, который через mocked Directus отключает OCR/ДТП/аналитику и проверяет backend-блокировки, а также отображение флагов в SaaS admin stats и пользовательском endpoint `GET /api/company/usage`.
+- **Smoke-тест лимитов компаний**: `backend/scripts/smoke-company-limits.mjs` проверяет лимиты из встроенной таблицы `company_limits` и блокировку второй техники/второго пользователя без Directus sync.
+- **Smoke-тест feature flags компаний**: `backend/scripts/smoke-company-features.mjs` проверяет backend-блокировки OCR/ДТП/аналитики и отображение флагов в resource-admin stats и пользовательском endpoint `GET /api/company/usage` без Directus sync.
 - **Legacy operational schema Directus**: старый вариант operational-коллекций сохранен в `directus/schema/legacy-operational-schema.json` как историческая справка, но не используется активным bootstrap.
 
 ### Verified
@@ -358,7 +468,7 @@
 
 ### Changed
 - **Граница CMS и пользовательской панели**: Directus/CMS закреплен как внутренний инструмент администратора ресурса; из web-панели удалены навигация и экран управления компаниями, а настройки больше не показывают CMS/Directus-статус пользователям компаний.
-- **Роль владельца компании**: добавлена роль `owner`; владелец компании и `admin` могут управлять пользователями своей компании, но создавать/назначать через пользовательскую панель можно только роли `manager` и `inspector`.
+- **Роль владельца компании**: добавлена роль `owner`; владелец компании управляет пользователями своей компании, а resource admin работает в отдельном сервисном контуре.
 - **Жизненный цикл компаний вне user panel**: `POST/PUT/DELETE /api/companies` теперь возвращают `403`, чтобы компании создавались/удалялись только во внутреннем административном контуре, а не в пользовательской панели.
 - **Directus-схема владельцев компаний**: MVP-схема Directus дополнена `company_owners` и `companies.slug`; документация ролей обновлена под модель `Resource Admin` + `Service Token` без доступа компаний к Directus Studio.
 - **Provisioning владельцев из CMS**: добавлен admin-only endpoint `POST /api/integrations/directus/provisioning/sync`, который синхронизирует `companies`/`company_owners` из Directus в локальную auth-базу и выдает setup-ссылки владельцам компаний без хранения пароля в CMS.

@@ -6,10 +6,12 @@ import { useRouter } from 'next/navigation'
 import ExcelJS from 'exceljs'
 import Layout from '@/components/Layout'
 import LocaleSwitcher from '@/components/LocaleSwitcher'
+import SubscriptionStatusBanner from '@/components/SubscriptionStatusBanner'
 import ThemeSwitcher from '@/components/ThemeSwitcher'
 import api from '@/lib/api/client'
-import { getAuthToken, isManagerRole } from '@/lib/auth'
-import type { CompanyFeatureAccess, CompanyResourceUsage, CompanyUsageResponse, RegionRecord } from '@/lib/types'
+import { hasAuthSession, isManagerRole } from '@/lib/auth'
+import { getCompanyOperationRestriction } from '@/lib/companyAccess'
+import type { CompanyFeatureAccess, CompanyResourceUsage, CompanyUsageResponse, RegionRecord, ServiceNotificationRecipient } from '@/lib/types'
 
 type ImportResult = {
   imported: number
@@ -164,6 +166,8 @@ function CompanyUsagePanel({
         </button>
       </div>
 
+      <SubscriptionStatusBanner usage={usage} compact />
+
       <div className="grid gap-3 sm:grid-cols-2">
         <ResourceUsageCard title="Техника" usage={usage.usage.vehicles} unit="ед." />
         <ResourceUsageCard title="Пользователи" usage={usage.usage.users} unit="чел." />
@@ -182,14 +186,78 @@ function CompanyUsagePanel({
   )
 }
 
+function ServiceNotificationRecipientsPanel({
+  recipients,
+  loading,
+  saving,
+  disabled,
+  disabledMessage,
+  onToggle,
+}: {
+  recipients: ServiceNotificationRecipient[]
+  loading: boolean
+  saving: boolean
+  disabled: boolean
+  disabledMessage: string
+  onToggle: (id: string, enabled: boolean) => void
+}) {
+  return (
+    <div className="card mb-4 p-4">
+      <div className="mb-4">
+        <h2 className="text-lg font-semibold text-foreground">Сервисные уведомления</h2>
+        <p className="mt-1 text-sm text-foreground-secondary">
+          Владелец получает уведомления всегда. Менеджеров можно подключить к предупреждениям по тарифу, лимитам и сервисным событиям.
+        </p>
+      </div>
+
+      {disabledMessage ? (
+        <div className="alert-danger mb-4 rounded-card px-4 py-3 text-sm">
+          {disabledMessage}
+        </div>
+      ) : null}
+
+      {loading ? (
+        <div className="h-20 animate-pulse rounded-card bg-soft-surface" />
+      ) : (
+        <div className="space-y-2">
+          {recipients.map((recipient) => (
+            <label key={recipient.id} className="flex items-center justify-between gap-4 rounded-card border border-line bg-muted-surface px-4 py-3">
+              <span>
+                <span className="block text-sm font-semibold text-foreground">{recipient.name}</span>
+                <span className="block text-xs text-foreground-muted">{recipient.email} · {recipient.role === 'owner' ? 'Владелец' : 'Менеджер'}</span>
+              </span>
+              <input
+                type="checkbox"
+                checked={recipient.serviceNotificationsEnabled}
+                disabled={recipient.locked || saving || disabled}
+                onChange={(event) => onToggle(recipient.id, event.target.checked)}
+                className="h-5 w-5 rounded border-line text-blue-600 disabled:opacity-50"
+              />
+            </label>
+          ))}
+          {!recipients.length ? (
+            <p className="rounded-card border border-line bg-muted-surface px-4 py-3 text-sm text-foreground-muted">
+              Активных владельцев и менеджеров пока нет.
+            </p>
+          ) : null}
+        </div>
+      )}
+    </div>
+  )
+}
+
 export default function SettingsPage() {
   const router = useRouter()
   const fileRef = useRef<HTMLInputElement>(null)
 
   const [loading, setLoading] = useState(true)
   const [isManager, setIsManager] = useState(false)
+  const [currentRole, setCurrentRole] = useState('')
   const [companyUsage, setCompanyUsage] = useState<CompanyUsageResponse | null>(null)
   const [companyUsageLoading, setCompanyUsageLoading] = useState(false)
+  const [serviceRecipients, setServiceRecipients] = useState<ServiceNotificationRecipient[]>([])
+  const [serviceRecipientsLoading, setServiceRecipientsLoading] = useState(false)
+  const [serviceRecipientsSaving, setServiceRecipientsSaving] = useState(false)
   const [importing, setImporting] = useState(false)
   const [importResult, setImportResult] = useState<ImportResult | null>(null)
   const [status, setStatus] = useState<StatusMessage | null>(null)
@@ -230,25 +298,85 @@ export default function SettingsPage() {
     setRegions((result.data || []).filter((region) => getRegionVehicleCount(region) > 0))
   }
 
+  const loadServiceRecipients = async () => {
+    setServiceRecipientsLoading(true)
+    const result = await api.getServiceNotificationRecipients()
+
+    if (result.error) {
+      setStatus({ tone: 'danger', text: `Не удалось загрузить получателей уведомлений: ${result.error}` })
+    } else {
+      setServiceRecipients(result.data?.recipients || [])
+    }
+
+    setServiceRecipientsLoading(false)
+  }
+
+  const handleServiceRecipientToggle = async (id: string, enabled: boolean) => {
+    if (companyUsageLoading) {
+      setStatus({ tone: 'info', text: 'Проверяем статус тарифа компании. Повторите действие через несколько секунд.' })
+      return
+    }
+
+    if (writeRestriction) {
+      setStatus({ tone: 'danger', text: `${writeRestriction.title}: ${writeRestriction.message}` })
+      return
+    }
+
+    const nextRecipients = serviceRecipients.map((recipient) => (
+      recipient.id === id ? { ...recipient, serviceNotificationsEnabled: enabled } : recipient
+    ))
+    setServiceRecipients(nextRecipients)
+    setServiceRecipientsSaving(true)
+    setStatus(null)
+
+    const result = await api.updateServiceNotificationRecipients(
+      nextRecipients.map((recipient) => ({
+        id: recipient.id,
+        serviceNotificationsEnabled: recipient.serviceNotificationsEnabled,
+      })),
+    )
+
+    if (result.error) {
+      setStatus({ tone: 'danger', text: `Не удалось сохранить получателей уведомлений: ${result.error}` })
+      await loadServiceRecipients()
+    } else {
+      setServiceRecipients(result.data?.recipients || [])
+      setStatus({ tone: 'success', text: 'Получатели сервисных уведомлений обновлены.' })
+    }
+
+    setServiceRecipientsSaving(false)
+  }
+
   useEffect(() => {
-    const token = getAuthToken()
-    if (!token) {
+    if (!hasAuthSession()) {
       router.push('/login')
       return
     }
 
-    let managerRole = false
-    try {
-      const payload = JSON.parse(atob(token.split('.')[1]))
-      managerRole = isManagerRole(payload.role)
+    let cancelled = false
+
+    const loadAccess = async () => {
+      const result = await api.getMe()
+      if (cancelled) return
+
+      const role = result.data?.role || ''
+      const managerRole = isManagerRole(role)
+      setCurrentRole(role)
       setIsManager(managerRole)
-    } catch {
-      setIsManager(false)
+
+      setLoading(false)
+      if (managerRole) {
+        void Promise.all([loadRegions(), loadCompanyUsage()])
+      }
+      if (role === 'owner') {
+        void loadServiceRecipients()
+      }
     }
 
-    setLoading(false)
-    if (managerRole) {
-      void Promise.all([loadRegions(), loadCompanyUsage()])
+    void loadAccess()
+
+    return () => {
+      cancelled = true
     }
   }, [router])
 
@@ -300,6 +428,17 @@ export default function SettingsPage() {
   }
 
   const handleImport = async () => {
+    if (companyUsageLoading) {
+      setStatus({ tone: 'info', text: 'Проверяем статус тарифа компании. Повторите импорт через несколько секунд.' })
+      return
+    }
+
+    const createRestriction = getCompanyOperationRestriction(companyUsage, 'create')
+    if (createRestriction) {
+      setStatus({ tone: 'danger', text: `${createRestriction.title}: ${createRestriction.message}` })
+      return
+    }
+
     const file = fileRef.current?.files?.[0]
     if (!file) {
       setStatus({ tone: 'warning', text: 'Выберите Excel-файл для импорта.' })
@@ -340,6 +479,15 @@ export default function SettingsPage() {
 
     const name = newRegion.trim()
     if (!name) return
+    if (companyUsageLoading) {
+      setStatus({ tone: 'info', text: 'Проверяем статус тарифа компании. Повторите действие через несколько секунд.' })
+      return
+    }
+
+    if (writeRestriction) {
+      setStatus({ tone: 'danger', text: `${writeRestriction.title}: ${writeRestriction.message}` })
+      return
+    }
 
     setStatus(null)
     const result = await api.createRegion({ name })
@@ -357,6 +505,11 @@ export default function SettingsPage() {
   }
 
   const startEditRegion = (region: RegionRecord) => {
+    if (writeRestrictionMessage) {
+      setStatus({ tone: writeRestriction ? 'danger' : 'info', text: writeRestrictionMessage })
+      return
+    }
+
     setEditingRegionId(region.id)
     setEditingRegionName(region.name)
     setStatus(null)
@@ -371,6 +524,15 @@ export default function SettingsPage() {
     const name = editingRegionName.trim()
     if (!name || name === region.name) {
       cancelEditRegion()
+      return
+    }
+    if (companyUsageLoading) {
+      setStatus({ tone: 'info', text: 'Проверяем статус тарифа компании. Повторите действие через несколько секунд.' })
+      return
+    }
+
+    if (writeRestriction) {
+      setStatus({ tone: 'danger', text: `${writeRestriction.title}: ${writeRestriction.message}` })
       return
     }
 
@@ -398,6 +560,16 @@ export default function SettingsPage() {
   }
 
   const handleDeleteRegion = async (region: RegionRecord) => {
+    if (companyUsageLoading) {
+      setStatus({ tone: 'info', text: 'Проверяем статус тарифа компании. Повторите действие через несколько секунд.' })
+      return
+    }
+
+    if (writeRestriction) {
+      setStatus({ tone: 'danger', text: `${writeRestriction.title}: ${writeRestriction.message}` })
+      return
+    }
+
     const count = getRegionVehicleCount(region)
     const confirmed = window.confirm(
       `Удалить регион "${region.name}"? У ${count} машин регион будет очищен, сами карточки техники не удалятся.`,
@@ -427,6 +599,14 @@ export default function SettingsPage() {
       setImportResult(null)
     }
   }
+
+  const createRestriction = getCompanyOperationRestriction(companyUsage, 'create')
+  const writeRestriction = getCompanyOperationRestriction(companyUsage, 'write')
+  const writeRestrictionMessage = companyUsageLoading
+    ? 'Проверяем статус тарифа компании. Изменения станут доступны после проверки.'
+    : writeRestriction
+      ? `${writeRestriction.title}: ${writeRestriction.message}`
+      : ''
 
   if (loading) {
     return (
@@ -464,6 +644,17 @@ export default function SettingsPage() {
           <CompanyUsagePanel usage={companyUsage} loading={companyUsageLoading} onRefresh={() => void loadCompanyUsage()} />
         ) : null}
 
+        {currentRole === 'owner' ? (
+          <ServiceNotificationRecipientsPanel
+            recipients={serviceRecipients}
+            loading={serviceRecipientsLoading}
+            saving={serviceRecipientsSaving}
+            disabled={Boolean(writeRestrictionMessage)}
+            disabledMessage={writeRestrictionMessage}
+            onToggle={(id, enabled) => void handleServiceRecipientToggle(id, enabled)}
+          />
+        ) : null}
+
         {isManager ? (
           <div className="card mb-4 p-4">
             <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
@@ -482,12 +673,19 @@ export default function SettingsPage() {
                 type="file"
                 accept=".xlsx,.xls"
                 onChange={handleFileChange}
+                disabled={companyUsageLoading || Boolean(createRestriction)}
                 className="block w-full text-sm text-foreground-muted file:mr-4 file:rounded-pill file:border-0 file:bg-blue-50 file:px-4 file:py-2 file:text-sm file:font-semibold file:text-blue-700 hover:file:bg-blue-100"
               />
-              <button onClick={handleImport} disabled={importing} className="btn btn-primary whitespace-nowrap disabled:opacity-50">
-                {importing ? 'Импорт...' : 'Импортировать'}
+              <button onClick={handleImport} disabled={importing || companyUsageLoading || Boolean(createRestriction)} className="btn btn-primary whitespace-nowrap disabled:opacity-50">
+                {companyUsageLoading ? 'Проверка...' : importing ? 'Импорт...' : 'Импортировать'}
               </button>
             </div>
+
+            {createRestriction ? (
+              <div className="alert-danger mt-4 rounded-card px-4 py-3 text-sm">
+                {createRestriction.title}: {createRestriction.message}
+              </div>
+            ) : null}
 
             {importResult ? (
               <div className="alert-success mt-4 rounded-card p-4">
@@ -517,15 +715,22 @@ export default function SettingsPage() {
               </p>
             </div>
 
+            {writeRestrictionMessage ? (
+              <div className="alert-danger mb-4 rounded-card px-4 py-3 text-sm">
+                {writeRestrictionMessage}
+              </div>
+            ) : null}
+
             <form onSubmit={handleAddRegion} className="mb-4 flex flex-col gap-2 sm:flex-row">
               <input
                 type="text"
                 value={newRegion}
                 onChange={(event) => setNewRegion(event.target.value)}
                 placeholder="Название региона"
+                disabled={Boolean(writeRestrictionMessage)}
                 className="input flex-1"
               />
-              <button type="submit" disabled={!newRegion.trim()} className="btn btn-success whitespace-nowrap disabled:opacity-50">
+              <button type="submit" disabled={!newRegion.trim() || Boolean(writeRestrictionMessage)} className="btn btn-success whitespace-nowrap disabled:opacity-50">
                 Добавить
               </button>
             </form>
@@ -555,6 +760,7 @@ export default function SettingsPage() {
                                 }
                               }}
                               className="input"
+                              disabled={Boolean(writeRestrictionMessage)}
                               autoFocus
                             />
                           ) : (
@@ -571,7 +777,7 @@ export default function SettingsPage() {
                               <button
                                 type="button"
                                 onClick={() => void handleSaveRegion(region)}
-                                disabled={savingRegionId === region.id}
+                                disabled={savingRegionId === region.id || Boolean(writeRestrictionMessage)}
                                 className="btn btn-primary btn-sm disabled:opacity-50"
                               >
                                 {savingRegionId === region.id ? 'Сохранение...' : 'Сохранить'}
@@ -582,13 +788,13 @@ export default function SettingsPage() {
                             </>
                           ) : (
                             <>
-                              <button type="button" onClick={() => startEditRegion(region)} className="btn btn-secondary btn-sm">
+                              <button type="button" onClick={() => startEditRegion(region)} disabled={Boolean(writeRestrictionMessage)} className="btn btn-secondary btn-sm disabled:opacity-50">
                                 Редактировать
                               </button>
                               <button
                                 type="button"
                                 onClick={() => void handleDeleteRegion(region)}
-                                disabled={deletingRegionId === region.id}
+                                disabled={deletingRegionId === region.id || Boolean(writeRestrictionMessage)}
                                 className="btn btn-danger btn-sm disabled:opacity-50"
                               >
                                 {deletingRegionId === region.id ? 'Удаление...' : 'Удалить'}

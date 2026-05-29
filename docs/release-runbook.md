@@ -1,4 +1,4 @@
-# Release runbook
+﻿# Release runbook
 
 Этот runbook описывает один воспроизводимый порядок выкладки Auditmini в пилот/production.
 
@@ -42,7 +42,7 @@ npm run verify:launch
 
 Команда проверяет:
 
-- backend smoke, включая изоляцию компаний, дефекты, SaaS-admin, лимиты, Directus service mock и backup smoke;
+- backend smoke, включая изоляцию компаний, дефекты, resource-admin, лимиты, MFA и backup smoke;
 - production build web;
 - mobile typecheck / Expo install check / Expo doctor;
 - изолированный Chromium E2E;
@@ -67,7 +67,7 @@ npm run doctor:production
 
 Что проверяется:
 
-- backend `JWT_SECRET`, `PUBLIC_REGISTRATION_ENABLED=false`, `TRUST_PROXY`, security headers/HSTS/rate limit env, graceful shutdown env, request id/access log env including health-check skip paths, `CORS_ORIGINS`, persistent `DATABASE_PATH`, `UPLOAD_DIR`, `BACKUP_DIR`, admin seed и Directus token;
+- backend `JWT_SECRET`, `PUBLIC_REGISTRATION_ENABLED=false`, `TRUST_PROXY`, security headers/HSTS/rate limit env, graceful shutdown env, request id/access log env including health-check skip paths, `CORS_ORIGINS`, persistent `DATABASE_PATH`, `UPLOAD_DIR`, `BACKUP_DIR`, admin seed и owner setup env;
 - web `NEXT_PUBLIC_API_URL`;
 - mobile `EXPO_PUBLIC_API_URL`.
 
@@ -182,7 +182,7 @@ Invoke-RestMethod https://api.<project-domain>/api/health/ready
 После запуска проверьте вручную:
 
 1. вход admin / owner / manager / inspector;
-2. создание компании через CMS/admin-контур;
+2. создание компании через resource-admin контур;
 3. создание владельца компании и owner setup;
 4. отсутствие публичной саморегистрации в production;
 5. создание техники и импорт техники;

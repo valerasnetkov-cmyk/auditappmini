@@ -5,7 +5,7 @@ import type { FormEvent } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import api from '@/lib/api/client'
-import { getAuthToken, isAdminRole, isCompanyOwnerRole, isManagerRole } from '@/lib/auth'
+import { getAuthToken, hasAuthSession, isAdminRole, isCompanyOwnerRole, isManagerRole } from '@/lib/auth'
 
 interface LayoutProps {
   children: React.ReactNode
@@ -40,8 +40,7 @@ export default function Layout({ children, currentPage }: LayoutProps) {
   const [currentRole, setCurrentRole] = useState<string | null>(null)
 
   useEffect(() => {
-    const token = getAuthToken()
-    if (!token) return
+    if (!hasAuthSession()) return
 
     let cancelled = false
 
@@ -78,12 +77,22 @@ export default function Layout({ children, currentPage }: LayoutProps) {
     { href: '/inspections', label: 'Осмотры', icon: 'IN', key: 'inspections' },
     { href: '/defects', label: 'Дефекты', icon: 'DF', key: 'defects' },
     { href: '/users', label: 'Пользователи', icon: 'US', key: 'users', ownerOnly: true },
-    { href: '/saas-admin', label: 'SaaS-админ', icon: 'SA', key: 'saas-admin', adminOnly: true },
+    { href: '/saas-admin', label: 'Обзор', icon: 'OV', key: 'saas-admin', adminOnly: true },
+    { href: '/saas-admin/dashboard', label: 'Дашборд', icon: 'DB', key: 'resource-dashboard', adminOnly: true },
+    { href: '/saas-admin/companies', label: 'Компании', icon: 'CO', key: 'resource-companies', adminOnly: true },
+    { href: '/saas-admin/plans', label: 'Тарифы', icon: 'PL', key: 'resource-plans', adminOnly: true },
+    { href: '/saas-admin/payments', label: 'Платежи', icon: 'PY', key: 'resource-payments', adminOnly: true },
+    { href: '/saas-admin/alerts', label: 'Уведомления', icon: 'AL', key: 'resource-alerts', adminOnly: true },
     { href: '/profile', label: 'Профиль', icon: 'PR', key: 'profile' },
     { href: '/settings', label: 'Настройки', icon: 'ST', key: 'settings', managerOnly: true },
   ]
 
+  const resourceAdminContext = ['saas-admin', 'resource-dashboard', 'resource-companies', 'resource-plans', 'resource-payments', 'resource-alerts'].includes(currentPage || '') || isAdminRole(currentRole)
+
   const visibleMenuItems = menuItems.filter((item) => {
+    if (resourceAdminContext) {
+      return item.adminOnly || item.key === 'profile'
+    }
     if (item.adminOnly) return isAdminRole(currentRole)
     if (item.ownerOnly) return isCompanyOwnerRole(currentRole)
     if (item.managerOnly) return isManagerRole(currentRole)
@@ -91,33 +100,37 @@ export default function Layout({ children, currentPage }: LayoutProps) {
   })
 
   return (
-    <div className="app-shell flex min-h-screen">
-      <aside className="sticky top-0 flex h-screen w-64 shrink-0 flex-col border-r border-line bg-surface shadow-card">
-        <div className="border-b border-line p-5">
+    <div className="app-shell flex min-h-screen flex-col lg:flex-row">
+      <aside className="flex h-auto w-full shrink-0 flex-col border-b border-line bg-surface shadow-card lg:sticky lg:top-0 lg:h-screen lg:w-64 lg:border-b-0 lg:border-r">
+        <div className="border-b border-line p-4 lg:p-5">
           <div className="flex items-center gap-3">
             <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary text-sm font-semibold text-foreground-inverse">AT</div>
             <div>
               <h1 className="text-lg font-bold leading-tight text-foreground">Audit Tech</h1>
-              <p className="text-xs text-foreground-muted">Контроль осмотров и дефектов</p>
+              <p className="text-xs text-foreground-muted">
+                {resourceAdminContext ? 'Администрирование ресурса' : 'Контроль осмотров и дефектов'}
+              </p>
             </div>
           </div>
         </div>
 
-        <form onSubmit={handleQuickSearch} className="border-b border-line-muted p-4">
-          <div className="relative">
-            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-foreground-muted">Q</span>
-            <input
-              type="text"
-              placeholder="Поиск техники..."
-              value={quickSearch}
-              onChange={(event) => setQuickSearch(event.target.value)}
-              className="w-full rounded-xl border border-line bg-muted-surface py-2.5 pl-9 pr-3 text-sm text-foreground placeholder:text-foreground-muted focus:outline-none focus:ring-2 focus:ring-primary"
-            />
-          </div>
-        </form>
+        {!resourceAdminContext ? (
+          <form onSubmit={handleQuickSearch} className="border-b border-line-muted p-4">
+            <div className="relative">
+              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-foreground-muted">Q</span>
+              <input
+                type="text"
+                placeholder="Поиск техники..."
+                value={quickSearch}
+                onChange={(event) => setQuickSearch(event.target.value)}
+                className="w-full rounded-xl border border-line bg-muted-surface py-2.5 pl-9 pr-3 text-sm text-foreground placeholder:text-foreground-muted focus:outline-none focus:ring-2 focus:ring-primary"
+              />
+            </div>
+          </form>
+        ) : null}
 
-        <nav className="flex-1 p-3">
-          <ul className="space-y-1">
+        <nav className="flex-1 overflow-x-auto p-3">
+          <ul className="flex gap-2 lg:block lg:space-y-1">
             {visibleMenuItems.map((item) => {
               const isActive = currentPage === item.key
               const baseClass = 'flex items-center gap-3 rounded-xl px-4 py-2.5 transition-all'
@@ -126,7 +139,7 @@ export default function Layout({ children, currentPage }: LayoutProps) {
 
               return (
                 <li key={item.key}>
-                  <Link href={item.href} className={linkClassName}>
+                  <Link href={item.href} className={`${linkClassName} whitespace-nowrap`}>
                     <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-black/5 text-[11px] font-semibold">{item.icon}</span>
                     <span className="font-medium">{item.label}</span>
                   </Link>

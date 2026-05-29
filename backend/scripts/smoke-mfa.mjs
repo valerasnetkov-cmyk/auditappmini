@@ -2,6 +2,7 @@ import { spawn } from 'node:child_process'
 import fs from 'node:fs/promises'
 import process from 'node:process'
 import speakeasy from 'speakeasy'
+import { seedSmokeTenantOwner } from './smoke-helpers.mjs'
 
 const HOST = '127.0.0.1'
 const PORT = Number(process.env.PORT || 3013 + (process.pid % 500))
@@ -23,7 +24,7 @@ async function waitForServer(url, timeoutMs = 30000) {
       const res = await fetch(url, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: 'admin@example.com', password: 'admin123' }),
+        body: JSON.stringify({ email: 'owner@example.com', password: 'owner123' }),
       })
       if (res.status < 500) return
     } catch {
@@ -47,6 +48,8 @@ async function request(path, options = {}, expectedStatus = 200) {
 }
 
 async function run() {
+  const owner = await seedSmokeTenantOwner({ databasePath: DATABASE_PATH })
+
   const server = spawn(process.execPath, ['src/server.js'], {
     cwd: process.cwd(),
     env: { ...process.env, PORT: String(PORT), DATABASE_PATH },
@@ -66,7 +69,7 @@ async function run() {
     const login = await request('/api/auth/login', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email: 'admin@example.com', password: 'admin123' }),
+      body: JSON.stringify({ email: owner.email, password: owner.password }),
     })
     const token = login.token
     if (!token) throw new Error('Login response did not include a token')
@@ -88,8 +91,8 @@ async function run() {
       headers: jsonHeaders,
     })
 
-    const otpauthUrl = setup.data.otpauth_url
-    const secret = setup.data.secret
+    const otpauthUrl = setup.otpauth_url
+    const secret = setup.secret
     if (!otpauthUrl || !secret) {
       throw new Error('MFA setup did not return otpauth_url or secret')
     }
@@ -101,7 +104,7 @@ async function run() {
     const verify = await request(`/api/users/${createdUser.id}/mfa/verify`, {
       method: 'POST',
       headers: jsonHeaders,
-      body: JSON.stringify({ code }),
+      body: JSON.stringify({ token: code }),
     })
     if (!verify || verify.error) {
       throw new Error('MFA verification failed')
@@ -113,15 +116,23 @@ async function run() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ email: testEmail, password: 'mfa123' }),
     })
-    if (!login2.token) throw new Error('MFA-enabled login did not return a token')
+    if (!login2.mfaRequired || !login2.mfaToken) {
+      throw new Error('MFA-enabled login did not return a challenge token')
+    }
+
+    const loginCode = speakeasy.totp({ secret, encoding: 'base32' })
+    const login2Verified = await request('/api/auth/mfa/verify', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ mfaToken: login2.mfaToken, token: loginCode }),
+    })
+    if (!login2Verified.token) throw new Error('MFA challenge verification did not return a token')
 
     // Cleanup: delete test user
     await request(`/api/users/${createdUser.id}`, { method: 'DELETE', headers }, 204)
 
     console.log(
-      JSON.stringify({ ok: true, mfaEnabledUser: testEmail, tokenFromMfaLogin: login2.token != null }),
-      null,
-      2
+      JSON.stringify({ ok: true, mfaEnabledUser: testEmail, tokenFromMfaLogin: login2Verified.token != null }, null, 2)
     )
   } finally {
     server.kill()

@@ -173,23 +173,27 @@ requireProduction(Boolean(process.env.DATABASE_PATH), 'DATABASE_PATH must point 
 requireProduction(Boolean(process.env.UPLOAD_DIR), 'UPLOAD_DIR must point to persistent storage')
 requireProduction(Boolean(process.env.BACKUP_DIR), 'BACKUP_DIR must be configured')
 
-if (process.env.DIRECTUS_TOKEN) {
-  requireProduction(!process.env.DIRECTUS_TOKEN.includes('change-me'), 'DIRECTUS_TOKEN must not use a placeholder value')
-}
-
 if (process.env.WEB_APP_URL) {
   requireProduction(!looksPlaceholder(process.env.WEB_APP_URL), 'WEB_APP_URL must not use a placeholder value')
 }
 
-const publicRegistrationEnabled = readBooleanEnv('PUBLIC_REGISTRATION_ENABLED', !isProduction)
+const publicRegistrationEnabled = readBooleanEnv('PUBLIC_REGISTRATION_ENABLED', false)
 requireProduction(!publicRegistrationEnabled, 'PUBLIC_REGISTRATION_ENABLED must be false in production')
 requireProduction(hasEnvValue('TRUST_PROXY'), 'TRUST_PROXY must be set explicitly in production')
 
 const securityHstsEnabled = readBooleanEnv('SECURITY_HSTS_ENABLED', isProduction)
 const securityHstsMaxAge = readPositiveIntegerEnv('SECURITY_HSTS_MAX_AGE', 15552000)
+const securityCsp = process.env.SECURITY_CSP || "default-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'"
+const securityCrossOriginOpenerPolicy = process.env.SECURITY_CROSS_ORIGIN_OPENER_POLICY || 'same-origin'
+const securityCrossOriginResourcePolicy = process.env.SECURITY_CROSS_ORIGIN_RESOURCE_POLICY || 'same-site'
+const authCookieName = process.env.AUTH_COOKIE_NAME || 'audit_session'
+const authCookieMaxAgeSeconds = readPositiveIntegerEnv('AUTH_COOKIE_MAX_AGE_SECONDS', 7 * 24 * 60 * 60)
+const authCookieSecure = readBooleanEnv('AUTH_COOKIE_SECURE', isProduction)
+const authCookieSameSite = process.env.AUTH_COOKIE_SAME_SITE || 'Lax'
 const sensitiveRateLimitWindowMs = readPositiveIntegerEnv('SENSITIVE_RATE_LIMIT_WINDOW_MS', 15 * 60 * 1000)
 const sensitiveRateLimitMax = readPositiveIntegerEnv('SENSITIVE_RATE_LIMIT_MAX', isProduction ? 60 : 500)
 const authAccountRateLimitMax = readPositiveIntegerEnv('AUTH_ACCOUNT_RATE_LIMIT_MAX', isProduction ? 20 : 500)
+const maxImagePixels = readPositiveIntegerEnv('MAX_IMAGE_PIXELS', 40_000_000)
 const gracefulShutdownTimeoutMs = readPositiveIntegerEnv('GRACEFUL_SHUTDOWN_TIMEOUT_MS', 10000)
 const requestIdHeader = (process.env.REQUEST_ID_HEADER || 'x-request-id').trim().toLowerCase()
 const accessLogFormat = process.env.ACCESS_LOG_FORMAT || (isProduction ? 'json' : 'text')
@@ -197,9 +201,19 @@ const accessLogSlowMs = readPositiveIntegerEnv('ACCESS_LOG_SLOW_MS', 1000)
 const accessLogSkipPaths = readCsvEnv('ACCESS_LOG_SKIP_PATHS')
 
 requireProduction(Number.isInteger(securityHstsMaxAge), 'SECURITY_HSTS_MAX_AGE must be a positive integer')
+requireProduction(Boolean(securityCsp.trim()), 'SECURITY_CSP must not be empty')
+requireProduction(securityCsp.includes("default-src 'none'"), 'SECURITY_CSP should deny default sources for API responses')
+requireProduction(securityCsp.includes("frame-ancestors 'none'"), 'SECURITY_CSP should deny framing')
+requireProduction(['same-origin', 'same-origin-allow-popups', 'unsafe-none'].includes(securityCrossOriginOpenerPolicy), 'SECURITY_CROSS_ORIGIN_OPENER_POLICY has an unsupported value')
+requireProduction(['same-origin', 'same-site', 'cross-origin'].includes(securityCrossOriginResourcePolicy), 'SECURITY_CROSS_ORIGIN_RESOURCE_POLICY has an unsupported value')
+requireProduction(/^[A-Za-z0-9._~-]+$/.test(authCookieName), 'AUTH_COOKIE_NAME must be a safe cookie name')
+requireProduction(Number.isInteger(authCookieMaxAgeSeconds), 'AUTH_COOKIE_MAX_AGE_SECONDS must be a positive integer')
+requireProduction(['Strict', 'Lax', 'None'].includes(authCookieSameSite), 'AUTH_COOKIE_SAME_SITE must be Strict, Lax or None')
+requireProduction(authCookieSameSite !== 'None' || authCookieSecure, 'AUTH_COOKIE_SECURE must be true when AUTH_COOKIE_SAME_SITE=None')
 requireProduction(Number.isInteger(sensitiveRateLimitWindowMs), 'SENSITIVE_RATE_LIMIT_WINDOW_MS must be a positive integer')
 requireProduction(Number.isInteger(sensitiveRateLimitMax), 'SENSITIVE_RATE_LIMIT_MAX must be a positive integer')
 requireProduction(Number.isInteger(authAccountRateLimitMax), 'AUTH_ACCOUNT_RATE_LIMIT_MAX must be a positive integer')
+requireProduction(Number.isInteger(maxImagePixels), 'MAX_IMAGE_PIXELS must be a positive integer')
 requireProduction(Number.isInteger(gracefulShutdownTimeoutMs), 'GRACEFUL_SHUTDOWN_TIMEOUT_MS must be a positive integer')
 requireProduction(Number.isInteger(accessLogSlowMs), 'ACCESS_LOG_SLOW_MS must be a positive integer')
 requireProduction(sensitiveRateLimitMax <= 300, 'SENSITIVE_RATE_LIMIT_MAX should be 300 or lower in production')
@@ -231,15 +245,23 @@ const result = {
     trustProxy: process.env.TRUST_PROXY || null,
     securityHstsEnabled,
     securityHstsMaxAge,
+    securityCsp,
+    securityCrossOriginOpenerPolicy,
+    securityCrossOriginResourcePolicy,
+    authCookieName,
+    authCookieMaxAgeSeconds,
+    authCookieSecure,
+    authCookieSameSite,
     sensitiveRateLimitWindowMs,
     sensitiveRateLimitMax,
     authAccountRateLimitMax,
+    maxImagePixels,
     gracefulShutdownTimeoutMs,
     requestIdHeader,
     accessLogFormat,
     accessLogSlowMs,
     accessLogSkipPaths,
-    directusConfigured: Boolean(process.env.DIRECTUS_TOKEN && process.env.DIRECTUS_URL),
+    resourceAdminConfigured: true,
   },
   warnings,
   errors,

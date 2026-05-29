@@ -1,4 +1,5 @@
 const AUTH_TOKEN_KEY = 'auth_token'
+const AUTH_SESSION_KEY = 'auth_session'
 const LOGIN_PATH = '/login'
 
 type SessionEndReason = 'expired' | 'inactive'
@@ -20,7 +21,21 @@ export function getAuthToken(): string | null {
     return null
   }
 
-  return localStorage.getItem(AUTH_TOKEN_KEY)
+  const legacyToken = localStorage.getItem(AUTH_TOKEN_KEY)
+  if (legacyToken) {
+    localStorage.removeItem(AUTH_TOKEN_KEY)
+    localStorage.setItem(AUTH_SESSION_KEY, '1')
+  }
+
+  return legacyToken
+}
+
+export function hasAuthSession(): boolean {
+  if (typeof window === 'undefined') {
+    return false
+  }
+
+  return Boolean(localStorage.getItem(AUTH_SESSION_KEY) || localStorage.getItem(AUTH_TOKEN_KEY))
 }
 
 export function setAuthToken(token: string) {
@@ -28,7 +43,9 @@ export function setAuthToken(token: string) {
     return
   }
 
-  localStorage.setItem(AUTH_TOKEN_KEY, token)
+  void token
+  localStorage.removeItem(AUTH_TOKEN_KEY)
+  localStorage.setItem(AUTH_SESSION_KEY, '1')
 }
 
 export function clearAuthToken() {
@@ -37,6 +54,7 @@ export function clearAuthToken() {
   }
 
   localStorage.removeItem(AUTH_TOKEN_KEY)
+  localStorage.removeItem(AUTH_SESSION_KEY)
 }
 
 function getSafeReturnPath() {
@@ -83,12 +101,10 @@ export function isAuthRequiredError(error?: string | null): boolean {
 }
 
 export function requireAuthToken(reason: SessionEndReason = 'expired'): string | null {
-  const token = getAuthToken()
-
-  if (!token && typeof window !== 'undefined') {
+  if (!hasAuthSession() && typeof window !== 'undefined') {
     redirectToLogin(reason)
     return null
   }
 
-  return token
+  return getAuthToken() || 'cookie-session'
 }

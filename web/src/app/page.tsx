@@ -5,8 +5,10 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import Layout from '@/components/Layout'
 import { DailyInspectionsChart, InspectionTypeChart, RegionBarChart, VehicleStatusChart } from '@/components/DashboardCharts'
+import SubscriptionStatusBanner from '@/components/SubscriptionStatusBanner'
 import api from '@/lib/api/client'
 import { clearAuthToken, isManagerRole, requireAuthToken } from '@/lib/auth'
+import { getCompanyOperationRestriction } from '@/lib/companyAccess'
 import { formatDate } from '@/lib/dateUtils'
 import type {
   AccidentStats,
@@ -215,6 +217,11 @@ export default function DashboardPage() {
       return
     }
 
+    if (createRestriction) {
+      showToast(`${createRestriction.title}: ${createRestriction.message}`, 'danger')
+      return
+    }
+
     if (!confirm('Создать демо-данные?')) return
 
     setSeeding(true)
@@ -241,6 +248,7 @@ export default function DashboardPage() {
 
   const canSeedDemoData = isManagerRole(currentUser?.role)
   const analyticsEnabled = companyUsage?.features.analytics.enabled !== false
+  const createRestriction = getCompanyOperationRestriction(companyUsage, 'create')
 
   if (error) {
     return (
@@ -269,7 +277,7 @@ export default function DashboardPage() {
 
           <div className="flex flex-wrap items-center gap-3">
             {stats.totalVehicles === 0 && canSeedDemoData ? (
-              <button onClick={handleSeed} disabled={seeding} className="btn btn-success disabled:opacity-50">
+              <button onClick={handleSeed} disabled={seeding || Boolean(createRestriction)} className="btn btn-success disabled:opacity-50">
                 {seeding ? 'Создание...' : 'Создать демо-данные'}
               </button>
             ) : null}
@@ -278,6 +286,8 @@ export default function DashboardPage() {
             </button>
           </div>
         </header>
+
+        <SubscriptionStatusBanner usage={companyUsage} />
 
         <DashboardFilters
           dateRange={dateRange}
@@ -294,7 +304,15 @@ export default function DashboardPage() {
           <LoadingState />
         ) : (
           <>
-            {stats.totalVehicles === 0 ? <EmptyDashboard canSeed={canSeedDemoData} seeding={seeding} onSeed={handleSeed} /> : null}
+            {stats.totalVehicles === 0 ? (
+              <EmptyDashboard
+                canSeed={canSeedDemoData}
+                seeding={seeding}
+                disabled={Boolean(createRestriction)}
+                restrictionMessage={createRestriction ? `${createRestriction.title}: ${createRestriction.message}` : ''}
+                onSeed={handleSeed}
+              />
+            ) : null}
 
             <section className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
               <StatCard label="Всего техники" value={stats.totalVehicles} tone="info" code="VH" />
@@ -477,7 +495,19 @@ function LoadingState() {
   )
 }
 
-function EmptyDashboard({ canSeed, seeding, onSeed }: { canSeed: boolean; seeding: boolean; onSeed: () => void }) {
+function EmptyDashboard({
+  canSeed,
+  seeding,
+  disabled,
+  restrictionMessage,
+  onSeed,
+}: {
+  canSeed: boolean
+  seeding: boolean
+  disabled: boolean
+  restrictionMessage: string
+  onSeed: () => void
+}) {
   return (
     <section className="mb-6 rounded-card border border-dashed border-line-strong bg-surface p-6 text-center shadow-card">
       <h2 className="text-lg font-semibold text-foreground">Данных пока нет</h2>
@@ -486,8 +516,13 @@ function EmptyDashboard({ canSeed, seeding, onSeed }: { canSeed: boolean; seedin
           ? 'Можно заполнить систему демо-данными или начать с добавления реальной техники.'
           : 'Попросите менеджера добавить технику или подготовить демо-данные для первого запуска.'}
       </p>
+      {restrictionMessage ? (
+        <p className="mx-auto mt-4 max-w-2xl rounded-card bg-red-50 px-4 py-3 text-sm text-status-danger">
+          {restrictionMessage}
+        </p>
+      ) : null}
       {canSeed ? (
-        <button onClick={onSeed} disabled={seeding} className="btn btn-success mt-4 disabled:opacity-50">
+        <button onClick={onSeed} disabled={seeding || disabled} className="btn btn-success mt-4 disabled:opacity-50">
           {seeding ? 'Создание...' : 'Создать демо-данные'}
         </button>
       ) : null}

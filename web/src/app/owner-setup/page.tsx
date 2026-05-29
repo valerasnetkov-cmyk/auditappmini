@@ -2,7 +2,7 @@
 
 import { FormEvent, useEffect, useState } from 'react'
 import api from '@/lib/api/client'
-import { getAuthToken } from '@/lib/auth'
+import { hasAuthSession } from '@/lib/auth'
 
 export default function OwnerSetupPage() {
   const [token, setToken] = useState('')
@@ -12,7 +12,7 @@ export default function OwnerSetupPage() {
   const [error, setError] = useState('')
 
   useEffect(() => {
-    if (getAuthToken()) {
+    if (hasAuthSession()) {
       window.location.href = '/'
       return
     }

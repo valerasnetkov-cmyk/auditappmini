@@ -116,7 +116,7 @@ Invoke-RestMethod https://api.<project-domain>/api/health/ready
 Минимум:
 
 - вход admin / owner / manager / inspector;
-- создание компании через CMS/admin contour;
+- создание компании через resource-admin contour;
 - создание owner и прохождение owner setup;
 - отсутствие публичной саморегистрации в production;
 - создание техники и импорт техники;

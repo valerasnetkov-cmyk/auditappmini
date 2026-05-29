@@ -390,12 +390,45 @@ function ensureUsersRoleSupportsAdminAndOwner() {
   }
 }
 
+function seedDefaultPlans() {
+  const insertPlan = db.prepare(`
+    INSERT OR IGNORE INTO plans (
+      code,
+      name,
+      max_vehicles,
+      max_users,
+      max_storage_mb,
+      ocr_enabled,
+      accident_module_enabled,
+      analytics_enabled,
+      api_access_enabled,
+      monthly_price_rub,
+      status,
+      created_at,
+      updated_at
+    )
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active', datetime('now'), datetime('now'))
+  `)
+
+  insertPlan.run(['pilot', 'Pilot', 25, 10, 10240, 1, 1, 1, 0, 0])
+  insertPlan.run(['standard', 'Standard', 250, 50, 102400, 1, 1, 1, 0, 9900])
+  insertPlan.run(['enterprise', 'Enterprise', null, null, null, 1, 1, 1, 1, 0])
+  insertPlan.free?.()
+}
+
 function applySchemaMigrations() {
   ensureColumn('users', 'company_id', "TEXT DEFAULT 'default'")
   ensureColumn('users', 'status', "TEXT NOT NULL DEFAULT 'active'")
   ensureColumn('users', 'mfa_enabled', 'INTEGER NOT NULL DEFAULT 0')
   ensureColumn('users', 'mfa_secret', 'TEXT')
   ensureColumn('users', 'created_at', 'TEXT')
+  ensureColumn('users', 'last_login_at', 'TEXT')
+  ensureColumn('users', 'service_notifications_enabled', 'INTEGER NOT NULL DEFAULT 0')
+  ensureColumn('users', 'service_notification_types', 'TEXT')
+  ensureColumn('users', 'owner_setup_nonce', 'TEXT')
+  ensureColumn('users', 'owner_setup_issued_at', 'TEXT')
+  ensureColumn('users', 'owner_setup_expires_at', 'TEXT')
+  ensureColumn('users', 'owner_setup_accepted_at', 'TEXT')
 
   ensureColumn('vehicles', 'company_id', "TEXT DEFAULT 'default'")
   ensureColumn('vehicles', 'region', 'TEXT')
@@ -464,6 +497,144 @@ function applySchemaMigrations() {
   ensureColumn('company_limits', 'updated_at', 'TEXT')
 
   db.run(`
+    CREATE TABLE IF NOT EXISTS plans (
+      code TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      max_vehicles INTEGER,
+      max_users INTEGER,
+      max_storage_mb INTEGER,
+      ocr_enabled INTEGER,
+      accident_module_enabled INTEGER,
+      analytics_enabled INTEGER,
+      api_access_enabled INTEGER,
+      monthly_price_rub INTEGER,
+      status TEXT NOT NULL DEFAULT 'active',
+      created_at TEXT DEFAULT (datetime('now')),
+      updated_at TEXT DEFAULT (datetime('now'))
+    )
+  `)
+  ensureColumn('plans', 'max_vehicles', 'INTEGER')
+  ensureColumn('plans', 'max_users', 'INTEGER')
+  ensureColumn('plans', 'max_storage_mb', 'INTEGER')
+  ensureColumn('plans', 'ocr_enabled', 'INTEGER')
+  ensureColumn('plans', 'accident_module_enabled', 'INTEGER')
+  ensureColumn('plans', 'analytics_enabled', 'INTEGER')
+  ensureColumn('plans', 'api_access_enabled', 'INTEGER')
+  ensureColumn('plans', 'monthly_price_rub', 'INTEGER')
+  ensureColumn('plans', 'status', "TEXT NOT NULL DEFAULT 'active'")
+  ensureColumn('plans', 'created_at', 'TEXT')
+  ensureColumn('plans', 'updated_at', 'TEXT')
+
+  db.run(`
+    CREATE TABLE IF NOT EXISTS company_subscriptions (
+      id TEXT PRIMARY KEY,
+      company_id TEXT UNIQUE NOT NULL,
+      plan_code TEXT,
+      status TEXT NOT NULL DEFAULT 'active',
+      current_period_start TEXT,
+      current_period_end TEXT,
+      grace_until TEXT,
+      last_payment_id TEXT,
+      mrr_rub INTEGER NOT NULL DEFAULT 0,
+      auto_suspend_enabled INTEGER NOT NULL DEFAULT 0,
+      created_at TEXT DEFAULT (datetime('now')),
+      updated_at TEXT DEFAULT (datetime('now'))
+    )
+  `)
+  ensureColumn('company_subscriptions', 'plan_code', 'TEXT')
+  ensureColumn('company_subscriptions', 'status', "TEXT NOT NULL DEFAULT 'active'")
+  ensureColumn('company_subscriptions', 'current_period_start', 'TEXT')
+  ensureColumn('company_subscriptions', 'current_period_end', 'TEXT')
+  ensureColumn('company_subscriptions', 'grace_until', 'TEXT')
+  ensureColumn('company_subscriptions', 'last_payment_id', 'TEXT')
+  ensureColumn('company_subscriptions', 'mrr_rub', 'INTEGER NOT NULL DEFAULT 0')
+  ensureColumn('company_subscriptions', 'auto_suspend_enabled', 'INTEGER NOT NULL DEFAULT 0')
+  ensureColumn('company_subscriptions', 'created_at', 'TEXT')
+  ensureColumn('company_subscriptions', 'updated_at', 'TEXT')
+
+  db.run(`
+    CREATE TABLE IF NOT EXISTS company_payments (
+      id TEXT PRIMARY KEY,
+      company_id TEXT NOT NULL,
+      plan_code TEXT,
+      amount INTEGER NOT NULL DEFAULT 0,
+      currency TEXT NOT NULL DEFAULT 'RUB',
+      payment_date TEXT NOT NULL,
+      period_start TEXT NOT NULL,
+      period_end TEXT NOT NULL,
+      payment_method TEXT,
+      document_number TEXT,
+      comment TEXT,
+      status TEXT NOT NULL DEFAULT 'active',
+      created_by TEXT,
+      created_at TEXT DEFAULT (datetime('now')),
+      updated_at TEXT DEFAULT (datetime('now'))
+    )
+  `)
+  ensureColumn('company_payments', 'plan_code', 'TEXT')
+  ensureColumn('company_payments', 'amount', 'INTEGER NOT NULL DEFAULT 0')
+  ensureColumn('company_payments', 'currency', "TEXT NOT NULL DEFAULT 'RUB'")
+  ensureColumn('company_payments', 'payment_date', 'TEXT')
+  ensureColumn('company_payments', 'period_start', 'TEXT')
+  ensureColumn('company_payments', 'period_end', 'TEXT')
+  ensureColumn('company_payments', 'payment_method', 'TEXT')
+  ensureColumn('company_payments', 'document_number', 'TEXT')
+  ensureColumn('company_payments', 'comment', 'TEXT')
+  ensureColumn('company_payments', 'status', "TEXT NOT NULL DEFAULT 'active'")
+  ensureColumn('company_payments', 'created_by', 'TEXT')
+  ensureColumn('company_payments', 'created_at', 'TEXT')
+  ensureColumn('company_payments', 'updated_at', 'TEXT')
+
+  db.run(`
+    CREATE TABLE IF NOT EXISTS company_notifications (
+      id TEXT PRIMARY KEY,
+      company_id TEXT,
+      recipient_user_id TEXT,
+      recipient_role TEXT,
+      type TEXT NOT NULL,
+      channel TEXT NOT NULL DEFAULT 'in_app',
+      title TEXT NOT NULL,
+      message TEXT,
+      status TEXT NOT NULL DEFAULT 'new',
+      sent_at TEXT,
+      read_at TEXT,
+      created_at TEXT DEFAULT (datetime('now'))
+    )
+  `)
+  ensureColumn('company_notifications', 'recipient_user_id', 'TEXT')
+  ensureColumn('company_notifications', 'recipient_role', 'TEXT')
+  ensureColumn('company_notifications', 'type', 'TEXT')
+  ensureColumn('company_notifications', 'channel', "TEXT NOT NULL DEFAULT 'in_app'")
+  ensureColumn('company_notifications', 'title', 'TEXT')
+  ensureColumn('company_notifications', 'message', 'TEXT')
+  ensureColumn('company_notifications', 'status', "TEXT NOT NULL DEFAULT 'new'")
+  ensureColumn('company_notifications', 'sent_at', 'TEXT')
+  ensureColumn('company_notifications', 'read_at', 'TEXT')
+  ensureColumn('company_notifications', 'created_at', 'TEXT')
+
+  db.run(`
+    CREATE TABLE IF NOT EXISTS audit_logs (
+      id TEXT PRIMARY KEY,
+      company_id TEXT,
+      actor_user_id TEXT,
+      actor_role TEXT,
+      action TEXT NOT NULL,
+      entity_type TEXT,
+      entity_id TEXT,
+      payload_json TEXT,
+      created_at TEXT DEFAULT (datetime('now'))
+    )
+  `)
+  ensureColumn('audit_logs', 'company_id', 'TEXT')
+  ensureColumn('audit_logs', 'actor_user_id', 'TEXT')
+  ensureColumn('audit_logs', 'actor_role', 'TEXT')
+  ensureColumn('audit_logs', 'action', 'TEXT')
+  ensureColumn('audit_logs', 'entity_type', 'TEXT')
+  ensureColumn('audit_logs', 'entity_id', 'TEXT')
+  ensureColumn('audit_logs', 'payload_json', 'TEXT')
+  ensureColumn('audit_logs', 'created_at', 'TEXT')
+
+  db.run(`
     UPDATE defects
     SET checklist_item_id = (
       SELECT ci.id
@@ -498,6 +669,7 @@ function applySchemaMigrations() {
   db.run('UPDATE photos SET original_url = url WHERE original_url IS NULL AND url IS NOT NULL')
   db.run('UPDATE photos SET webp_url = url WHERE webp_url IS NULL AND url IS NOT NULL')
   db.run('UPDATE photos SET thumb_url = url WHERE thumb_url IS NULL AND url IS NOT NULL')
+  seedDefaultPlans()
 }
 
 export async function initDatabase() {
@@ -522,12 +694,18 @@ export async function initDatabase() {
       company_id TEXT DEFAULT 'default',
       mfa_enabled INTEGER NOT NULL DEFAULT 0,
       mfa_secret TEXT,
+      service_notifications_enabled INTEGER NOT NULL DEFAULT 0,
+      service_notification_types TEXT,
       created_at TEXT DEFAULT (datetime('now'))
     )
   `)
 
   ensureColumn('users', 'status', "TEXT NOT NULL DEFAULT 'active'")
+  ensureColumn('users', 'service_notifications_enabled', 'INTEGER NOT NULL DEFAULT 0')
+  ensureColumn('users', 'service_notification_types', 'TEXT')
   ensureUsersRoleSupportsAdminAndOwner()
+  ensureColumn('users', 'service_notifications_enabled', 'INTEGER NOT NULL DEFAULT 0')
+  ensureColumn('users', 'service_notification_types', 'TEXT')
 
   try {
     db.run(`ALTER TABLE users ADD COLUMN mfa_enabled INTEGER NOT NULL DEFAULT 0`)

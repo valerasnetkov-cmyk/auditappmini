@@ -1,7 +1,5 @@
-# See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
-
-# dependencies
-/node_modules
+# Dependencies
+node_modules/
 /.pnp
 .pnp.*
 .yarn/*
@@ -10,56 +8,48 @@
 !.yarn/releases
 !.yarn/versions
 
-# testing
-/coverage
-
-# next.js
-/.next/
-/out/
-
-# production
-/build
-
-# misc
-.DS_Store
-*.pem
-
-# debug
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
-.pnpm-debug.log*
-
-# env files (can opt-in for committing if needed)
-.env*
-
-# vercel
-.vercel
-
-# typescript
-*.tsbuildinfo
-next-env.d.ts
-
-node_modules/
+# Environment files
 .env
 .env.*
 !.env.example
 !.env.production.example
-*.log
+!**/.env.example
+!**/.env.production.example
+
+# Build outputs
+.next/
+out/
+dist/
+build/
+.expo/
+coverage/
+
+# Runtime data
 *.sqlite
+*.sqlite-*
 uploads/
 backend/uploads/
 backend/backups/
 backend/data/
 backend/logs/
 release-evidence/
-dist/
-build/
-.next/
-.expo/
-.DS_Store
-.next/
-.env
-.env.local
+
+# Logs and temporary artifacts
 *.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+.tmp/
+.tmp-*
+.tmp-runtime/
+.tmp-e2e/
+
+# System and editor artifacts
+.DS_Store
+*.pem
 *.tsbuildinfo
+next-env.d.ts
+
+# Hosting
+.vercel/

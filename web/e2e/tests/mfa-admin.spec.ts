@@ -2,7 +2,7 @@ import { expect, test } from '@playwright/test'
 import * as speakeasy from 'speakeasy'
 import { API_BASE, apiHeaders, createUser, deleteUser, getAdminToken } from './helpers'
 
-test('MFA Admin: setup and verify for a user (API-driven)', async ({ request }) => {
+test('MFA Owner: setup and verify for a user (API-driven)', async ({ request }) => {
   const adminToken = await getAdminToken(request)
   const user = await createUser(request, adminToken, 'MFA Playwright')
 

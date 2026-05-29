@@ -4,9 +4,12 @@ import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import { useSearchParams } from 'next/navigation'
 import Layout from '@/components/Layout'
+import SubscriptionStatusBanner from '@/components/SubscriptionStatusBanner'
 import api from '@/lib/api/client'
 import { requireAuthToken } from '@/lib/auth'
+import { getCompanyOperationRestriction } from '@/lib/companyAccess'
 import { formatDate } from '@/lib/dateUtils'
+import { useCompanyUsage } from '@/lib/useCompanyUsage'
 import type { InspectionRecord, InspectionType, VehicleListItem } from '@/lib/types'
 
 type SortableInspectionKey =
@@ -80,6 +83,19 @@ export default function InspectionsPage() {
   const [deletingId, setDeletingId] = useState<string | null>(null)
   const [sortConfig, setSortConfig] = useState<SortConfig>({ key: 'created_at', direction: 'desc' })
   const [toast, setToast] = useState<ToastMessage | null>(null)
+  const { usage: companyUsage, loading: companyUsageLoading } = useCompanyUsage()
+  const createRestriction = getCompanyOperationRestriction(companyUsage, 'create')
+  const writeRestriction = getCompanyOperationRestriction(companyUsage, 'write')
+  const createRestrictionMessage = companyUsageLoading
+    ? 'Проверяем статус тарифа компании. Создание осмотра станет доступно после проверки.'
+    : createRestriction
+      ? `${createRestriction.title}: ${createRestriction.message}`
+      : ''
+  const writeRestrictionMessage = companyUsageLoading
+    ? 'Проверяем статус тарифа компании. Изменения станут доступны после проверки.'
+    : writeRestriction
+      ? `${writeRestriction.title}: ${writeRestriction.message}`
+      : ''
 
   const showToast = (text: string, tone: ToastMessage['tone'] = 'success') => {
     setToast({ text, tone })
@@ -173,6 +189,16 @@ export default function InspectionsPage() {
   }
 
   const handleDelete = async (id: string) => {
+    if (companyUsageLoading) {
+      showToast('Проверяем статус тарифа компании. Повторите действие через несколько секунд.', 'danger')
+      return
+    }
+
+    if (writeRestriction) {
+      showToast(`${writeRestriction.title}: ${writeRestriction.message}`, 'danger')
+      return
+    }
+
     if (!confirm('Удалить осмотр? Это действие нельзя отменить.')) return
 
     setDeletingId(id)
@@ -210,10 +236,24 @@ export default function InspectionsPage() {
             <h1 className="page-title text-2xl">Осмотры</h1>
             <p className="mt-1 text-sm text-foreground-muted">Журнал осмотров, ДТП и зафиксированных дефектов.</p>
           </div>
-          <Link href="/inspections/new" className="btn btn-primary">
+          {createRestrictionMessage ? (
+            <button type="button" disabled className="btn btn-primary disabled:opacity-50">
+              + Новый осмотр
+            </button>
+          ) : (
+            <Link href="/inspections/new" className="btn btn-primary">
             + Новый осмотр
-          </Link>
+            </Link>
+          )}
         </header>
+
+        <SubscriptionStatusBanner usage={companyUsage} compact />
+
+        {createRestrictionMessage || writeRestrictionMessage ? (
+          <div className="alert-danger mb-4 rounded-card px-4 py-3 text-sm">
+            {createRestrictionMessage || writeRestrictionMessage}
+          </div>
+        ) : null}
 
         <section className="card mb-6 p-4">
           <div className="mb-4 flex flex-wrap gap-2">
@@ -292,6 +332,7 @@ export default function InspectionsPage() {
             inspections={pagedInspections}
             sortConfig={sortConfig}
             deletingId={deletingId}
+            actionsDisabled={Boolean(writeRestrictionMessage)}
             onSort={handleSort}
             onDelete={handleDelete}
           />
@@ -317,12 +358,14 @@ function InspectionsTable({
   inspections,
   sortConfig,
   deletingId,
+  actionsDisabled,
   onSort,
   onDelete,
 }: {
   inspections: InspectionRecord[]
   sortConfig: SortConfig
   deletingId: string | null
+  actionsDisabled: boolean
   onSort: (key: SortableInspectionKey) => void
   onDelete: (id: string) => void
 }) {
@@ -343,7 +386,7 @@ function InspectionsTable({
           <tbody className="divide-y divide-line">
             {inspections.length ? (
               inspections.map((inspection) => (
-                <InspectionRow key={inspection.id} inspection={inspection} deletingId={deletingId} onDelete={onDelete} />
+                <InspectionRow key={inspection.id} inspection={inspection} deletingId={deletingId} actionsDisabled={actionsDisabled} onDelete={onDelete} />
               ))
             ) : (
               <tr>
@@ -383,10 +426,12 @@ function SortableHeader({
 function InspectionRow({
   inspection,
   deletingId,
+  actionsDisabled,
   onDelete,
 }: {
   inspection: InspectionRecord
   deletingId: string | null
+  actionsDisabled: boolean
   onDelete: (id: string) => void
 }) {
   return (
@@ -435,7 +480,7 @@ function InspectionRow({
               Смотреть дефекты
             </Link>
           ) : null}
-          <button onClick={() => onDelete(inspection.id)} disabled={deletingId === inspection.id} className="text-left text-status-danger hover:underline disabled:opacity-50">
+          <button onClick={() => onDelete(inspection.id)} disabled={deletingId === inspection.id || actionsDisabled} className="text-left text-status-danger hover:underline disabled:cursor-not-allowed disabled:opacity-50">
             {deletingId === inspection.id ? 'Удаление...' : 'Удалить'}
           </button>
         </div>

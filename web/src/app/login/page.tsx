@@ -2,7 +2,7 @@
 
 import { FormEvent, useEffect, useState } from 'react'
 import api from '@/lib/api/client'
-import { getAuthToken } from '@/lib/auth'
+import { hasAuthSession } from '@/lib/auth'
 
 function getSafeNextPath(value: string | null) {
   if (!value || !value.startsWith('/') || value.startsWith('//') || value.startsWith('/login')) {
@@ -15,6 +15,8 @@ function getSafeNextPath(value: string | null) {
 export default function LoginPage() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
+  const [mfaToken, setMfaToken] = useState('')
+  const [mfaCode, setMfaCode] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [nextPath, setNextPath] = useState('/')
@@ -36,7 +38,7 @@ export default function LoginPage() {
       return
     }
 
-    if (getAuthToken()) {
+    if (hasAuthSession()) {
       window.location.href = safeNextPath
     }
   }, [])
@@ -54,12 +56,34 @@ export default function LoginPage() {
         return
       }
 
-      if (result.data?.mfaRequired) {
-        setError('Для этого пользователя требуется подтверждение MFA.')
+      if (result.data?.mfaRequired && result.data.mfaToken) {
+        setMfaToken(result.data.mfaToken)
+        setMfaCode('')
         return
       }
 
       setError(result.error || 'Не удалось войти')
+    } catch {
+      setError('Ошибка соединения с сервером')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const handleMfaSubmit = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
+    setLoading(true)
+    setError('')
+
+    try {
+      const result = await api.verifyLoginMfa(mfaToken, mfaCode)
+
+      if (result.data?.token) {
+        window.location.href = nextPath
+        return
+      }
+
+      setError(result.error || 'Не удалось подтвердить MFA')
     } catch {
       setError('Ошибка соединения с сервером')
     } finally {
@@ -73,34 +97,52 @@ export default function LoginPage() {
         <h1 className="text-center text-2xl font-bold">Аудит техники</h1>
         <p className="mt-2 text-center text-gray-600">Войдите в систему, чтобы продолжить</p>
 
-        <form onSubmit={handleSubmit} className="mt-6 space-y-4">
-          <div>
-            <label className="mb-1 block text-sm font-medium text-gray-700">Email</label>
-            <input
-              name="email"
-              data-testid="login-email"
-              type="email"
-              value={email}
-              onChange={(event) => setEmail(event.target.value)}
-              className="w-full rounded-lg border px-3 py-2"
-              autoComplete="email"
-              required
-            />
-          </div>
+        <form onSubmit={mfaToken ? handleMfaSubmit : handleSubmit} className="mt-6 space-y-4">
+          {mfaToken ? (
+            <div>
+              <label className="mb-1 block text-sm font-medium text-gray-700">Код MFA</label>
+              <input
+                name="mfa"
+                data-testid="login-mfa-code"
+                inputMode="numeric"
+                value={mfaCode}
+                onChange={(event) => setMfaCode(event.target.value)}
+                className="w-full rounded-lg border px-3 py-2"
+                autoComplete="one-time-code"
+                required
+              />
+            </div>
+          ) : (
+            <>
+              <div>
+                <label className="mb-1 block text-sm font-medium text-gray-700">Email</label>
+                <input
+                  name="email"
+                  data-testid="login-email"
+                  type="email"
+                  value={email}
+                  onChange={(event) => setEmail(event.target.value)}
+                  className="w-full rounded-lg border px-3 py-2"
+                  autoComplete="email"
+                  required
+                />
+              </div>
 
-          <div>
-            <label className="mb-1 block text-sm font-medium text-gray-700">Пароль</label>
-            <input
-              name="password"
-              data-testid="login-password"
-              type="password"
-              value={password}
-              onChange={(event) => setPassword(event.target.value)}
-              className="w-full rounded-lg border px-3 py-2"
-              autoComplete="current-password"
-              required
-            />
-          </div>
+              <div>
+                <label className="mb-1 block text-sm font-medium text-gray-700">Пароль</label>
+                <input
+                  name="password"
+                  data-testid="login-password"
+                  type="password"
+                  value={password}
+                  onChange={(event) => setPassword(event.target.value)}
+                  className="w-full rounded-lg border px-3 py-2"
+                  autoComplete="current-password"
+                  required
+                />
+              </div>
+            </>
+          )}
 
           {error ? (
             <div className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</div>
@@ -111,7 +153,7 @@ export default function LoginPage() {
             disabled={loading}
             className="w-full rounded-lg bg-blue-600 px-4 py-2 text-white hover:bg-blue-700 disabled:opacity-50"
           >
-            {loading ? 'Вход...' : 'Войти'}
+            {loading ? 'Вход...' : mfaToken ? 'Подтвердить' : 'Войти'}
           </button>
         </form>
       </div>

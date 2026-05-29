@@ -3,8 +3,11 @@
 import { useEffect, useMemo, useState } from 'react'
 import Layout from '@/components/Layout'
 import ManagerAccessDenied from '@/components/ManagerAccessDenied'
+import SubscriptionStatusBanner from '@/components/SubscriptionStatusBanner'
 import api from '@/lib/api/client'
+import { getCompanyOperationRestriction } from '@/lib/companyAccess'
 import { useCompanyOwnerAccess } from '@/lib/useCompanyOwnerAccess'
+import { useCompanyUsage } from '@/lib/useCompanyUsage'
 import type { UserRecord, UserRole } from '@/lib/types'
 
 type UserFormData = {
@@ -57,6 +60,7 @@ function canManagePanelUser(user: UserRecord) {
 
 export default function UsersPage() {
   const ownerAccess = useCompanyOwnerAccess()
+  const { usage: companyUsage, loading: companyUsageLoading } = useCompanyUsage(ownerAccess.allowed)
   const [users, setUsers] = useState<UserRecord[]>([])
   const [loading, setLoading] = useState(true)
   const [submitting, setSubmitting] = useState(false)
@@ -75,6 +79,12 @@ export default function UsersPage() {
     key: 'name',
     direction: 'asc',
   })
+  const writeRestriction = getCompanyOperationRestriction(companyUsage, 'write')
+  const writeRestrictionMessage = companyUsageLoading
+    ? 'Проверяем статус тарифа компании. Управление пользователями станет доступно после проверки.'
+    : writeRestriction
+      ? `${writeRestriction.title}: ${writeRestriction.message}`
+      : ''
 
   useEffect(() => {
     if (!ownerAccess.allowed) return
@@ -153,6 +163,7 @@ export default function UsersPage() {
 
   const openCreateModal = () => {
     resetForm()
+    setFormError(writeRestrictionMessage)
     setShowCreateModal(true)
   }
 
@@ -169,7 +180,7 @@ export default function UsersPage() {
       name: user.name,
       role: user.role,
     })
-    setFormError('')
+    setFormError(writeRestrictionMessage)
     setShowEditModal(true)
   }
 
@@ -185,6 +196,16 @@ export default function UsersPage() {
 
   const handleCreate = async (event: React.FormEvent) => {
     event.preventDefault()
+    if (companyUsageLoading) {
+      setFormError('Проверяем статус тарифа компании. Повторите действие через несколько секунд.')
+      return
+    }
+
+    if (writeRestriction) {
+      setFormError(`${writeRestriction.title}: ${writeRestriction.message}`)
+      return
+    }
+
     setSubmitting(true)
     setStatusMessage('')
     setFormError('')
@@ -215,6 +236,15 @@ export default function UsersPage() {
   const handleUpdate = async (event: React.FormEvent) => {
     event.preventDefault()
     if (!editingUser) return
+    if (companyUsageLoading) {
+      setFormError('Проверяем статус тарифа компании. Повторите действие через несколько секунд.')
+      return
+    }
+
+    if (writeRestriction) {
+      setFormError(`${writeRestriction.title}: ${writeRestriction.message}`)
+      return
+    }
 
     setSubmitting(true)
     setStatusMessage('')
@@ -244,6 +274,16 @@ export default function UsersPage() {
   }
 
   const handleDelete = async (id: string) => {
+    if (companyUsageLoading) {
+      showStatus('error', 'Проверяем статус тарифа компании. Повторите действие через несколько секунд.')
+      return
+    }
+
+    if (writeRestriction) {
+      showStatus('error', `${writeRestriction.title}: ${writeRestriction.message}`)
+      return
+    }
+
     if (!confirm('Удалить пользователя?')) return
 
     setStatusMessage('')
@@ -316,7 +356,7 @@ export default function UsersPage() {
         >
           Отмена
         </button>
-        <button type="submit" disabled={submitting} className="rounded-lg bg-blue-600 px-4 py-2 text-white disabled:opacity-50">
+        <button type="submit" disabled={submitting || Boolean(writeRestrictionMessage)} className="rounded-lg bg-blue-600 px-4 py-2 text-white disabled:opacity-50">
           {submitting ? 'Сохранение...' : mode === 'create' ? 'Создать' : 'Сохранить'}
         </button>
       </div>
@@ -346,10 +386,18 @@ export default function UsersPage() {
       <div className="p-6">
         <div className="mb-6 flex items-center justify-between">
           <h1 className="text-2xl font-bold text-slate-900">Пользователи</h1>
-          <button onClick={openCreateModal} className="rounded-xl bg-blue-600 px-5 py-2.5 font-medium text-white hover:bg-blue-700">
+          <button onClick={openCreateModal} disabled={Boolean(writeRestrictionMessage)} className="rounded-xl bg-blue-600 px-5 py-2.5 font-medium text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50">
             + Добавить
           </button>
         </div>
+
+        <SubscriptionStatusBanner usage={companyUsage} compact />
+
+        {writeRestrictionMessage ? (
+          <div className="mb-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+            {writeRestrictionMessage}
+          </div>
+        ) : null}
 
         {statusMessage ? (
           <div className={`mb-4 rounded-lg px-4 py-3 text-sm ${statusTone === 'success' ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-700'}`}>
@@ -456,10 +504,10 @@ export default function UsersPage() {
                         <td className="px-6 py-4 text-right">
                           {canManagePanelUser(user) ? (
                             <>
-                              <button onClick={() => openEditModal(user)} className="mr-3 text-blue-600 hover:underline">
+                              <button onClick={() => openEditModal(user)} disabled={Boolean(writeRestrictionMessage)} className="mr-3 text-blue-600 hover:underline disabled:cursor-not-allowed disabled:opacity-50">
                                 Изменить
                               </button>
-                              <button onClick={() => handleDelete(user.id)} className="text-red-600 hover:underline">
+                              <button onClick={() => handleDelete(user.id)} disabled={Boolean(writeRestrictionMessage)} className="text-red-600 hover:underline disabled:cursor-not-allowed disabled:opacity-50">
                                 Удалить
                               </button>
                             </>

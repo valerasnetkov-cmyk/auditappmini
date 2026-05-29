@@ -4,6 +4,7 @@ import net from 'node:net'
 import path from 'node:path'
 import process from 'node:process'
 import { fileURLToPath } from 'node:url'
+import { seedSmokeTenantOwner } from '../backend/scripts/smoke-helpers.mjs'
 
 const ROOT_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const BACKEND_DIR = path.join(ROOT_DIR, 'backend')
@@ -159,6 +160,13 @@ async function main() {
   await ensureCliExists('Next.js', NEXT_CLI)
   await ensureCliExists('Playwright', PLAYWRIGHT_CLI)
   await fs.mkdir(UPLOAD_DIR, { recursive: true })
+  await seedSmokeTenantOwner({
+    databasePath: DATABASE_PATH,
+    email: process.env.E2E_OWNER_EMAIL || 'owner@example.com',
+    password: process.env.E2E_OWNER_PASSWORD || 'owner123',
+    companyId: process.env.E2E_COMPANY_ID || 'default',
+    name: 'E2E Company Owner',
+  })
 
   const backendPort = await getFreePort()
   const webPort = await getFreePort()
@@ -188,15 +196,27 @@ async function main() {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        email: process.env.E2E_ADMIN_EMAIL || 'admin@example.com',
-        password: process.env.E2E_ADMIN_PASSWORD || 'admin123',
+        email: process.env.E2E_OWNER_EMAIL || 'owner@example.com',
+        password: process.env.E2E_OWNER_PASSWORD || 'owner123',
       }),
     })
 
-    const web = spawnNode('web', [NEXT_CLI, 'dev', '-H', '127.0.0.1', '-p', String(webPort)], {
+    console.log('[e2e] Building web with isolated backend API URL')
+    await runCommand('web-build', [NEXT_CLI, 'build'], {
       cwd: WEB_DIR,
       env: {
         ...process.env,
+        BASE_URL: webBaseUrl,
+        BACKEND_API_BASE: backendBaseUrl,
+        NEXT_PUBLIC_API_URL: `${backendBaseUrl}/api`,
+      },
+    })
+
+    const web = spawnNode('web', [NEXT_CLI, 'start', '-H', '127.0.0.1', '-p', String(webPort)], {
+      cwd: WEB_DIR,
+      env: {
+        ...process.env,
+        NODE_ENV: 'production',
         BASE_URL: webBaseUrl,
         BACKEND_API_BASE: backendBaseUrl,
         NEXT_PUBLIC_API_URL: `${backendBaseUrl}/api`,

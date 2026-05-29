@@ -3,8 +3,8 @@ import { type APIRequestContext, type APIResponse, type Page } from '@playwright
 export const WEB_BASE = process.env.BASE_URL || 'http://localhost:3002'
 export const API_BASE = process.env.BACKEND_API_BASE || 'http://127.0.0.1:3001'
 
-const ADMIN_EMAIL = process.env.E2E_ADMIN_EMAIL || 'admin@example.com'
-const ADMIN_PASSWORD = process.env.E2E_ADMIN_PASSWORD || 'admin123'
+const OWNER_EMAIL = process.env.E2E_OWNER_EMAIL || 'owner@example.com'
+const OWNER_PASSWORD = process.env.E2E_OWNER_PASSWORD || 'owner123'
 
 let vehicleNumberCounter = 0
 
@@ -63,10 +63,10 @@ async function expectOk(response: APIResponse, label: string) {
   }
 }
 
-export async function loginAsAdmin(page: Page) {
+export async function loginAsCompanyOwner(page: Page) {
   await page.goto(`${WEB_BASE}/login`)
-  await page.fill('input[name="email"]', ADMIN_EMAIL)
-  await page.fill('input[name="password"]', ADMIN_PASSWORD)
+  await page.fill('input[name="email"]', OWNER_EMAIL)
+  await page.fill('input[name="password"]', OWNER_PASSWORD)
 
   await Promise.all([
     page.waitForURL((url) => !url.pathname.startsWith('/login'), { timeout: 15000 }),
@@ -74,17 +74,25 @@ export async function loginAsAdmin(page: Page) {
   ])
 }
 
-export async function getAdminToken(request: APIRequestContext) {
+export async function loginAsAdmin(page: Page) {
+  return loginAsCompanyOwner(page)
+}
+
+export async function getCompanyOwnerToken(request: APIRequestContext) {
   const response = await request.post(`${API_BASE}/api/auth/login`, {
-    data: { email: ADMIN_EMAIL, password: ADMIN_PASSWORD },
+    data: { email: OWNER_EMAIL, password: OWNER_PASSWORD },
   })
 
-  await expectOk(response, 'Admin login')
+  await expectOk(response, 'Company owner login')
   const body = asRecord(await readJsonResponse(response))
   const token = readString(body, 'token')
-  if (!token) throw new Error('Admin login response does not contain token')
+  if (!token) throw new Error('Company owner login response does not contain token')
 
   return token
+}
+
+export async function getAdminToken(request: APIRequestContext) {
+  return getCompanyOwnerToken(request)
 }
 
 export function makeVehicleNumber() {

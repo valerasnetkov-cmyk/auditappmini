@@ -224,7 +224,7 @@ PATCH /api/me/preferences
 }
 ```
 
-Для администратора компании:
+Для владельца компании:
 
 ```http
 PATCH /api/company/settings

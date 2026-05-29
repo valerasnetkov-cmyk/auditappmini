@@ -432,6 +432,61 @@ textarea:disabled {
     background: var(--color-danger);
     color: var(--color-text-inverse);
   }
+
+  .resource-admin-page {
+    background:
+      linear-gradient(180deg, rgba(255, 255, 255, 0.72), rgba(255, 255, 255, 0)),
+      radial-gradient(circle at 12% 0%, rgba(59, 130, 246, 0.08), transparent 30%),
+      var(--color-bg-page);
+  }
+
+  .resource-admin-page .resource-admin-hero,
+  .resource-admin-page .bg-white {
+    background: rgba(255, 255, 255, 0.92);
+    border: 1px solid rgba(148, 163, 184, 0.22) !important;
+    box-shadow: 0 10px 28px rgba(15, 23, 42, 0.06) !important;
+  }
+
+  .resource-admin-page .resource-admin-hero {
+    border-radius: 18px;
+    padding: 1.5rem;
+  }
+
+  .resource-admin-page .rounded-lg {
+    border-radius: 16px !important;
+  }
+
+  .resource-admin-page .border,
+  .resource-admin-page .border-b,
+  .resource-admin-page .divide-y > :not([hidden]) ~ :not([hidden]) {
+    border-color: rgba(148, 163, 184, 0.22);
+  }
+
+  .resource-admin-page input,
+  .resource-admin-page select {
+    min-height: 2.75rem;
+    border-color: rgba(148, 163, 184, 0.32);
+    background: rgba(248, 250, 252, 0.84);
+  }
+
+  .resource-admin-page input:focus,
+  .resource-admin-page select:focus {
+    background: #fff;
+  }
+
+  .resource-admin-page table tbody tr:hover {
+    background: rgba(248, 250, 252, 0.72);
+  }
+
+  .resource-admin-page button.bg-blue-600 {
+    border-radius: 12px;
+    background: #2563eb;
+    box-shadow: 0 8px 18px rgba(37, 99, 235, 0.22);
+  }
+
+  .resource-admin-page button.bg-blue-600:hover {
+    background: #1d4ed8;
+  }
 }
 
 [data-theme="dark"] .bg-white,

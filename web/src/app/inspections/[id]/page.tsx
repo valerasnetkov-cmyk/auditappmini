@@ -7,6 +7,8 @@ import { useParams } from 'next/navigation'
 import Layout from '@/components/Layout'
 import api, { buildApiUrl } from '@/lib/api/client'
 import { requireAuthToken } from '@/lib/auth'
+import SubscriptionStatusBanner from '@/components/SubscriptionStatusBanner'
+import { getCompanyOperationRestriction } from '@/lib/companyAccess'
 import { useCompanyUsage } from '@/lib/useCompanyUsage'
 import type { ChecklistItemResponse, InspectionDetail, InspectionType, PhotoRecord, PhotoRequirementsResponse, VehicleListItem } from '@/lib/types'
 
@@ -125,6 +127,14 @@ function getPhotoCount(defects: InspectionDetail['defects']) {
 export default function InspectionDetailPage() {
   const params = useParams<{ id: string }>()
   const inspectionId = params.id
+  const { usage: companyUsage, loading: companyUsageLoading } = useCompanyUsage()
+  const createRestriction = getCompanyOperationRestriction(companyUsage, 'create')
+  const writeRestriction = getCompanyOperationRestriction(companyUsage, 'write')
+  const writeRestrictionMessage = companyUsageLoading
+    ? 'Проверяем статус тарифа компании. Изменения станут доступны после проверки.'
+    : writeRestriction
+      ? `${writeRestriction.title}: ${writeRestriction.message}`
+      : ''
 
   const [inspection, setInspection] = useState<InspectionDetail | null>(null)
   const [loading, setLoading] = useState(true)
@@ -221,6 +231,14 @@ export default function InspectionDetailPage() {
 
   const handleCreate = async (vehicleId: string, type: InspectionType, accidentData?: { occurredAt?: string; location?: string }) => {
     clearStatus()
+    if (companyUsageLoading) {
+      showStatus('error', 'Проверяем статус тарифа компании. Повторите действие через несколько секунд.')
+      return
+    }
+    if (createRestriction) {
+      showStatus('error', `${createRestriction.title}: ${createRestriction.message}`)
+      return
+    }
 
     try {
       const result = await api.createInspection({
@@ -262,6 +280,15 @@ export default function InspectionDetailPage() {
       return
     }
 
+    if (companyUsageLoading) {
+      showStatus('error', 'Проверяем статус тарифа компании. Повторите действие через несколько секунд.')
+      return
+    }
+    if (writeRestriction) {
+      showStatus('error', `${writeRestriction.title}: ${writeRestriction.message}`)
+      return
+    }
+
     clearStatus()
     setUploadingPhoto(defectTitle)
 
@@ -286,6 +313,14 @@ export default function InspectionDetailPage() {
 
   const handleInspectionPhotoUpload = async (photoType: string, file: File) => {
     if (!inspection) return
+    if (companyUsageLoading) {
+      showStatus('error', 'Проверяем статус тарифа компании. Повторите действие через несколько секунд.')
+      return
+    }
+    if (writeRestriction) {
+      showStatus('error', `${writeRestriction.title}: ${writeRestriction.message}`)
+      return
+    }
 
     clearStatus()
     setUploadingPhoto(photoType)
@@ -317,6 +352,14 @@ export default function InspectionDetailPage() {
 
   const handlePhotoDelete = async (defectTitle: string, photoIndex: number) => {
     const photo = defectPhotos[defectTitle]?.[photoIndex]
+    if (companyUsageLoading) {
+      showStatus('error', 'Проверяем статус тарифа компании. Повторите действие через несколько секунд.')
+      return
+    }
+    if (writeRestriction) {
+      showStatus('error', `${writeRestriction.title}: ${writeRestriction.message}`)
+      return
+    }
     if (!photo?.id) return
 
     if (!confirm('Удалить это фото?')) return
@@ -345,6 +388,14 @@ export default function InspectionDetailPage() {
 
   const handleInspectionPhotoDelete = async (photoType: string, photoIndex: number) => {
     const photo = inspectionPhotos[photoType]?.[photoIndex]
+    if (companyUsageLoading) {
+      showStatus('error', 'Проверяем статус тарифа компании. Повторите действие через несколько секунд.')
+      return
+    }
+    if (writeRestriction) {
+      showStatus('error', `${writeRestriction.title}: ${writeRestriction.message}`)
+      return
+    }
     if (!photo?.id) return
 
     if (!confirm('Удалить это фото?')) return
@@ -404,6 +455,14 @@ export default function InspectionDetailPage() {
     if (!inspection) return
 
     clearStatus()
+    if (companyUsageLoading) {
+      showStatus('error', 'Проверяем статус тарифа компании. Повторите действие через несколько секунд.')
+      return
+    }
+    if (writeRestriction) {
+      showStatus('error', `${writeRestriction.title}: ${writeRestriction.message}`)
+      return
+    }
 
     if (inspection.type === 'accident' && (!accidentOccurredAt.trim() || !accidentLocation.trim())) {
       showStatus('error', 'Для осмотра ДТП укажите время и место происшествия')
@@ -444,6 +503,14 @@ export default function InspectionDetailPage() {
     if (!inspection) return
 
     clearStatus()
+    if (companyUsageLoading) {
+      showStatus('error', 'Проверяем статус тарифа компании. Повторите действие через несколько секунд.')
+      return
+    }
+    if (writeRestriction) {
+      showStatus('error', `${writeRestriction.title}: ${writeRestriction.message}`)
+      return
+    }
     setSaving(true)
 
     try {
@@ -533,6 +600,7 @@ export default function InspectionDetailPage() {
   )
   const defectsCount = checklist.filter((item) => !item.result).length
   const warnings = getIncompleteWarnings()
+  const mutationsDisabled = Boolean(writeRestrictionMessage)
 
   if (loading) {
     return (
@@ -593,6 +661,14 @@ export default function InspectionDetailPage() {
           </div>
         ) : null}
 
+        <SubscriptionStatusBanner usage={companyUsage} compact />
+
+        {writeRestrictionMessage ? (
+          <div className="mb-4 rounded-card border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+            {writeRestrictionMessage}
+          </div>
+        ) : null}
+
         {warnings.length > 0 && !inspection?.completed ? (
           <div className="mb-4 rounded-lg border border-yellow-200 bg-yellow-50 px-4 py-3 text-sm text-yellow-800">
             <strong className="font-medium">Неполные данные:</strong>
@@ -632,6 +708,7 @@ export default function InspectionDetailPage() {
                     type="datetime-local"
                     value={accidentOccurredAt}
                     onChange={(event) => setAccidentOccurredAt(event.target.value)}
+                    disabled={mutationsDisabled}
                     className="w-full rounded-lg border px-3 py-2 text-sm"
                   />
                 </div>
@@ -641,6 +718,7 @@ export default function InspectionDetailPage() {
                     type="text"
                     value={accidentLocation}
                     onChange={(event) => setAccidentLocation(event.target.value)}
+                    disabled={mutationsDisabled}
                     placeholder="Например: Южно-Сахалинск, ул. Ленина, 25"
                     className="w-full rounded-lg border px-3 py-2 text-sm"
                   />
@@ -656,10 +734,11 @@ export default function InspectionDetailPage() {
                   type="number"
                   value={odometerValue}
                   onChange={(event) => setOdometerValue(event.target.value)}
+                  disabled={mutationsDisabled}
                   placeholder="Пробег"
                   className="w-full rounded-lg border px-3 py-2 text-sm"
                 />
-                <select value={odometerUnit} onChange={(event) => setOdometerUnit(event.target.value)} className="rounded-lg border px-3 py-2 text-sm">
+                <select value={odometerUnit} onChange={(event) => setOdometerUnit(event.target.value)} disabled={mutationsDisabled} className="rounded-lg border px-3 py-2 text-sm">
                   <option value="km">км</option>
                   <option value="mi">мили</option>
                 </select>
@@ -693,7 +772,7 @@ export default function InspectionDetailPage() {
                             <button
                               type="button"
                               onClick={() => handleInspectionPhotoDelete(photoType, photoIndex)}
-                              disabled={deletingPhoto === `${photoType}-${photoIndex}`}
+                              disabled={deletingPhoto === `${photoType}-${photoIndex}` || mutationsDisabled}
                               className="absolute -right-2 -top-2 flex h-6 w-6 items-center justify-center rounded-full bg-red-500 text-xs text-white opacity-0 transition-opacity group-hover:opacity-100"
                             >
                               {deletingPhoto === `${photoType}-${photoIndex}` ? '...' : 'x'}
@@ -710,6 +789,7 @@ export default function InspectionDetailPage() {
                           <input
                             type="file"
                             accept="image/jpeg,image/png,image/webp"
+                            disabled={mutationsDisabled}
                             className="hidden"
                             onChange={(event) => {
                               if (event.target.files?.[0]) {
@@ -750,15 +830,17 @@ export default function InspectionDetailPage() {
                           <div className="flex gap-2">
                             <button
                               type="button"
+                              disabled={mutationsDisabled}
                               onClick={() => handleResultChange(item.index, true)}
-                              className={`rounded px-3 py-1 text-sm ${item.result ? 'bg-green-500 text-white' : 'bg-slate-200 text-slate-600'}`}
+                              className={`rounded px-3 py-1 text-sm disabled:cursor-not-allowed disabled:opacity-50 ${item.result ? 'bg-green-500 text-white' : 'bg-slate-200 text-slate-600'}`}
                             >
                               OK
                             </button>
                             <button
                               type="button"
+                              disabled={mutationsDisabled}
                               onClick={() => handleResultChange(item.index, false)}
-                              className={`rounded px-3 py-1 text-sm ${!item.result ? 'bg-red-500 text-white' : 'bg-slate-200 text-slate-600'}`}
+                              className={`rounded px-3 py-1 text-sm disabled:cursor-not-allowed disabled:opacity-50 ${!item.result ? 'bg-red-500 text-white' : 'bg-slate-200 text-slate-600'}`}
                             >
                               Дефект
                             </button>
@@ -779,6 +861,7 @@ export default function InspectionDetailPage() {
                               placeholder="Описание дефекта..."
                               value={item.comment}
                               onChange={(event) => handleCommentChange(item.index, event.target.value)}
+                              disabled={mutationsDisabled}
                               className="w-full resize-none rounded-lg border px-3 py-2 text-sm"
                               rows={2}
                             />
@@ -794,7 +877,7 @@ export default function InspectionDetailPage() {
                                     <button
                                       type="button"
                                       onClick={() => handlePhotoDelete(item.title, photoIndex)}
-                                      disabled={deletingPhoto === `${item.title}-${photoIndex}`}
+                                      disabled={deletingPhoto === `${item.title}-${photoIndex}` || mutationsDisabled}
                                       className="absolute -right-2 -top-2 flex h-6 w-6 items-center justify-center rounded-full bg-red-500 text-xs text-white opacity-0 transition-opacity group-hover:opacity-100"
                                     >
                                       {deletingPhoto === `${item.title}-${photoIndex}` ? '...' : 'x'}
@@ -811,6 +894,7 @@ export default function InspectionDetailPage() {
                                   <input
                                     type="file"
                                     accept="image/jpeg,image/png,image/webp"
+                                    disabled={mutationsDisabled}
                                     className="hidden"
                                     onChange={(event) => {
                                       if (event.target.files?.[0]) {
@@ -878,13 +962,13 @@ export default function InspectionDetailPage() {
           <Link href="/inspections" className="rounded-lg border px-6 py-2 hover:bg-slate-50">
             Назад
           </Link>
-          <button onClick={handleSave} disabled={saving} className="rounded-lg bg-blue-600 px-6 py-2 text-white hover:bg-blue-700 disabled:opacity-50">
+          <button onClick={handleSave} disabled={saving || mutationsDisabled} className="rounded-lg bg-blue-600 px-6 py-2 text-white hover:bg-blue-700 disabled:opacity-50">
             {saving ? 'Сохранение...' : 'Сохранить осмотр'}
           </button>
           {!inspection?.completed ? (
             <button
               onClick={handleComplete}
-              disabled={saving || warnings.length > 0 || !photoRequirements}
+              disabled={saving || warnings.length > 0 || !photoRequirements || mutationsDisabled}
               className="rounded-lg bg-green-600 px-6 py-2 text-white hover:bg-green-700 disabled:cursor-not-allowed disabled:opacity-50"
             >
               Завершить осмотр
@@ -911,10 +995,17 @@ function NewInspectionForm({
   const [accidentOccurredAt, setAccidentOccurredAt] = useState('')
   const [accidentLocation, setAccidentLocation] = useState('')
   const { usage, loading: usageLoading } = useCompanyUsage()
+  const createRestriction = getCompanyOperationRestriction(usage, 'create')
+  const createRestrictionMessage = usageLoading
+    ? 'Проверяем статус тарифа компании. Создание осмотра станет доступно после проверки.'
+    : createRestriction
+      ? `${createRestriction.title}: ${createRestriction.message}`
+      : ''
   const accidentEnabled = usage?.features.accidentModule.enabled !== false
   const accidentAvailable = accidentEnabled && !usageLoading
   const effectiveSelectedType = !accidentAvailable && selectedType === 'accident' ? 'quick' : selectedType
   const canCreate =
+    !createRestrictionMessage &&
     Boolean(selectedVehicle) &&
     (effectiveSelectedType !== 'accident' || (accidentAvailable && accidentOccurredAt.trim() && accidentLocation.trim()))
 
@@ -924,6 +1015,7 @@ function NewInspectionForm({
 
   const handleSubmit = (event: React.FormEvent) => {
     event.preventDefault()
+    if (createRestrictionMessage) return
     if (!selectedVehicle) return
     if (effectiveSelectedType === 'accident' && (!accidentAvailable || !accidentOccurredAt.trim() || !accidentLocation.trim())) return
 
@@ -945,12 +1037,21 @@ function NewInspectionForm({
             </div>
           ) : null}
 
+          <SubscriptionStatusBanner usage={usage} compact />
+
+          {createRestrictionMessage ? (
+            <div className="mb-4 rounded-card border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+              {createRestrictionMessage}
+            </div>
+          ) : null}
+
           <form onSubmit={handleSubmit} className="space-y-4">
             <div>
               <label className="mb-1 block text-sm font-medium text-slate-700">Техника</label>
               <select
                 value={selectedVehicle}
                 onChange={(event) => setSelectedVehicle(event.target.value)}
+                disabled={Boolean(createRestrictionMessage)}
                 className="w-full rounded-lg border px-4 py-2"
                 required
               >
@@ -967,7 +1068,7 @@ function NewInspectionForm({
               <label className="mb-2 block text-sm font-medium text-slate-700">Тип осмотра</label>
               <div className="grid grid-cols-3 gap-2">
                 {(['quick', 'scheduled', 'accident'] as InspectionType[]).map((type) => {
-                  const typeDisabled = type === 'accident' && !accidentAvailable
+                  const typeDisabled = Boolean(createRestrictionMessage) || (type === 'accident' && !accidentAvailable)
 
                   return (
                     <button
@@ -1001,6 +1102,7 @@ function NewInspectionForm({
                     type="datetime-local"
                     value={accidentOccurredAt}
                     onChange={(event) => setAccidentOccurredAt(event.target.value)}
+                    disabled={Boolean(createRestrictionMessage)}
                     className="w-full rounded-lg border px-4 py-2"
                     required
                   />
@@ -1011,6 +1113,7 @@ function NewInspectionForm({
                     type="text"
                     value={accidentLocation}
                     onChange={(event) => setAccidentLocation(event.target.value)}
+                    disabled={Boolean(createRestrictionMessage)}
                     placeholder="Например: Южно-Сахалинск, ул. Ленина, 25"
                     className="w-full rounded-lg border px-4 py-2"
                     required

@@ -45,7 +45,7 @@ Legacy mobile-app removal record: `docs/mobile-app-retirement.md`.
 - Serve the web app on HTTPS.
 - Store SQLite and uploads on persistent volume for pilot mode.
 - Configure automated backups for database and uploads, plus scheduled backup verification.
-- Keep Directus optional; the backend must work when Directus is not configured.
+- Use the built-in resource-admin contour for companies, owners, tariffs and limits; Directus is not part of the pilot architecture.
 - Confirm that legacy `mobile-app/` is absent from the production repository; use only `mobile/` for mobile builds.
 - Build pilot mobile artifacts from `mobile/` with EAS: `npm run mobile:eas:preview:android` for an internal Android APK or `npm run mobile:eas:production` for store-ready platform builds.
 

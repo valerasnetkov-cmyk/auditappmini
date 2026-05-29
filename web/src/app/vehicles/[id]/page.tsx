@@ -6,9 +6,12 @@ import Link from 'next/link'
 import { useParams } from 'next/navigation'
 import Layout from '@/components/Layout'
 import OdometerHistory from '@/components/OdometerHistory'
+import SubscriptionStatusBanner from '@/components/SubscriptionStatusBanner'
 import api, { buildApiUrl } from '@/lib/api/client'
 import { getAuthToken, requireAuthToken } from '@/lib/auth'
+import { getCompanyOperationRestriction } from '@/lib/companyAccess'
 import { formatDate } from '@/lib/dateUtils'
+import { useCompanyUsage } from '@/lib/useCompanyUsage'
 import type {
   InspectionRecord,
   UpdateVehiclePayload,
@@ -80,6 +83,19 @@ export default function VehicleDetailPage() {
   const [statusReason, setStatusReason] = useState('')
   const [updating, setUpdating] = useState(false)
   const [toast, setToast] = useState('')
+  const { usage: companyUsage, loading: companyUsageLoading } = useCompanyUsage()
+  const createRestriction = getCompanyOperationRestriction(companyUsage, 'create')
+  const writeRestriction = getCompanyOperationRestriction(companyUsage, 'write')
+  const createRestrictionMessage = companyUsageLoading
+    ? 'Проверяем статус тарифа компании. Новый осмотр станет доступен после проверки.'
+    : createRestriction
+      ? `${createRestriction.title}: ${createRestriction.message}`
+      : ''
+  const writeRestrictionMessage = companyUsageLoading
+    ? 'Проверяем статус тарифа компании. Изменения станут доступны после проверки.'
+    : writeRestriction
+      ? `${writeRestriction.title}: ${writeRestriction.message}`
+      : ''
 
   const showLocalToast = (message: string) => {
     setToast(message)
@@ -127,6 +143,15 @@ export default function VehicleDetailPage() {
 
   const handleStatusChange = async () => {
     if (!newStatus || !vehicle) return
+    if (companyUsageLoading) {
+      setError('Проверяем статус тарифа компании. Повторите действие через несколько секунд.')
+      return
+    }
+
+    if (writeRestriction) {
+      setError(`${writeRestriction.title}: ${writeRestriction.message}`)
+      return
+    }
 
     setUpdating(true)
     try {
@@ -157,6 +182,16 @@ export default function VehicleDetailPage() {
   }
 
   const closeDefect = async (defectId: string) => {
+    if (companyUsageLoading) {
+      setError('Проверяем статус тарифа компании. Повторите действие через несколько секунд.')
+      return
+    }
+
+    if (writeRestriction) {
+      setError(`${writeRestriction.title}: ${writeRestriction.message}`)
+      return
+    }
+
     const result = await api.closeDefect(defectId)
     if (result.error) {
       setError(result.error)
@@ -168,6 +203,16 @@ export default function VehicleDetailPage() {
   }
 
   const reopenDefect = async (defectId: string) => {
+    if (companyUsageLoading) {
+      setError('Проверяем статус тарифа компании. Повторите действие через несколько секунд.')
+      return
+    }
+
+    if (writeRestriction) {
+      setError(`${writeRestriction.title}: ${writeRestriction.message}`)
+      return
+    }
+
     const result = await api.reopenDefect(defectId)
     if (result.error) {
       setError(result.error)
@@ -190,6 +235,7 @@ export default function VehicleDetailPage() {
       const response = await fetch(buildApiUrl(`/api/defects/${defectId}/history`), {
         method: 'GET',
         headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+        credentials: 'include',
       })
       const data = await response.json()
       setDefectHistories((current) => ({ ...current, [defectId]: data || [] }))
@@ -243,20 +289,35 @@ export default function VehicleDetailPage() {
           </div>
 
           <div className="flex flex-wrap gap-3">
-            <Link href={`/inspections/new?vehicle=${vehicle.id}`} className="btn btn-primary">
+            {createRestrictionMessage ? (
+              <button type="button" disabled className="btn btn-primary disabled:opacity-50">
+                Провести осмотр
+              </button>
+            ) : (
+              <Link href={`/inspections/new?vehicle=${vehicle.id}`} className="btn btn-primary">
               Провести осмотр
-            </Link>
+              </Link>
+            )}
             <button
               onClick={() => {
                 setNewStatus(vehicle.status)
                 setShowStatusModal(true)
               }}
-              className={getVehicleStatusBadgeClass(vehicle.status)}
+              disabled={Boolean(writeRestrictionMessage)}
+              className={`${getVehicleStatusBadgeClass(vehicle.status)} disabled:cursor-not-allowed disabled:opacity-50`}
             >
               {getVehicleStatusLabel(vehicle.status)}
             </button>
           </div>
         </header>
+
+        <SubscriptionStatusBanner usage={companyUsage} compact />
+
+        {createRestrictionMessage || writeRestrictionMessage ? (
+          <div className="alert-danger mb-4 rounded-card px-4 py-3 text-sm">
+            {createRestrictionMessage || writeRestrictionMessage}
+          </div>
+        ) : null}
 
         {error ? <div className="alert-danger mb-4 rounded-card px-4 py-3 text-sm">{error}</div> : null}
 
@@ -273,6 +334,7 @@ export default function VehicleDetailPage() {
           defects={defects}
           defectHistories={defectHistories}
           defectHistoriesVisible={defectHistoriesVisible}
+          actionsDisabled={Boolean(writeRestrictionMessage)}
           onCloseDefect={closeDefect}
           onReopenDefect={reopenDefect}
           onToggleHistory={toggleDefectHistory}
@@ -391,6 +453,7 @@ function DefectsSection({
   defects,
   defectHistories,
   defectHistoriesVisible,
+  actionsDisabled,
   onCloseDefect,
   onReopenDefect,
   onToggleHistory,
@@ -398,6 +461,7 @@ function DefectsSection({
   defects: VehicleDefectHistoryItem[]
   defectHistories: Record<string, DefectHistoryEntry[]>
   defectHistoriesVisible: Record<string, boolean>
+  actionsDisabled: boolean
   onCloseDefect: (defectId: string) => void
   onReopenDefect: (defectId: string) => void
   onToggleHistory: (defectId: string) => void
@@ -418,6 +482,7 @@ function DefectsSection({
               defect={defect}
               history={defectHistories[defect.id] || []}
               historyVisible={Boolean(defectHistoriesVisible[defect.id])}
+              actionsDisabled={actionsDisabled}
               onCloseDefect={onCloseDefect}
               onReopenDefect={onReopenDefect}
               onToggleHistory={onToggleHistory}
@@ -433,6 +498,7 @@ function DefectCard({
   defect,
   history,
   historyVisible,
+  actionsDisabled,
   onCloseDefect,
   onReopenDefect,
   onToggleHistory,
@@ -440,6 +506,7 @@ function DefectCard({
   defect: VehicleDefectHistoryItem
   history: DefectHistoryEntry[]
   historyVisible: boolean
+  actionsDisabled: boolean
   onCloseDefect: (defectId: string) => void
   onReopenDefect: (defectId: string) => void
   onToggleHistory: (defectId: string) => void
@@ -469,9 +536,9 @@ function DefectCard({
         <div className="flex flex-wrap items-center gap-2">
           <Link href={`/defects/${defect.id}`} className="text-primary hover:underline">Открыть дефект</Link>
           {!isClosed ? (
-            <button className="btn btn-danger btn-sm" onClick={() => onCloseDefect(defect.id)}>Закрыть дефект</button>
+            <button className="btn btn-danger btn-sm disabled:opacity-50" disabled={actionsDisabled} onClick={() => onCloseDefect(defect.id)}>Закрыть дефект</button>
           ) : (
-            <button data-testid={`defect-reopen-${defect.id}`} className="btn btn-success btn-sm" onClick={() => onReopenDefect(defect.id)}>
+            <button data-testid={`defect-reopen-${defect.id}`} className="btn btn-success btn-sm disabled:opacity-50" disabled={actionsDisabled} onClick={() => onReopenDefect(defect.id)}>
               Вернуть в работу
             </button>
           )}

@@ -4,8 +4,11 @@ import { FormEvent, useEffect, useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import Layout from '@/components/Layout'
+import SubscriptionStatusBanner from '@/components/SubscriptionStatusBanner'
 import api from '@/lib/api/client'
 import { requireAuthToken } from '@/lib/auth'
+import { getCompanyOperationRestriction } from '@/lib/companyAccess'
+import { useCompanyUsage } from '@/lib/useCompanyUsage'
 import { normalizeVehicleNumber, VEHICLE_NUMBER_HELP } from '@/lib/vehicleNumber'
 import type { RegionRecord, VehicleStatus } from '@/lib/types'
 
@@ -35,6 +38,8 @@ export default function NewVehiclePage() {
   const [error, setError] = useState('')
   const [regions, setRegions] = useState<RegionRecord[]>([])
   const [formData, setFormData] = useState<VehicleFormState>(initialForm)
+  const { usage: companyUsage, loading: companyUsageLoading } = useCompanyUsage()
+  const createRestriction = getCompanyOperationRestriction(companyUsage, 'create')
 
   useEffect(() => {
     if (!requireAuthToken()) return
@@ -62,6 +67,16 @@ export default function NewVehiclePage() {
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
+    if (companyUsageLoading) {
+      setError('Проверяем статус тарифа компании. Повторите сохранение через несколько секунд.')
+      return
+    }
+
+    if (createRestriction) {
+      setError(`${createRestriction.title}: ${createRestriction.message}`)
+      return
+    }
+
     setSaving(true)
     setError('')
 
@@ -87,7 +102,7 @@ export default function NewVehiclePage() {
   }
 
   const normalizedNumber = normalizeVehicleNumber(formData.number)
-  const canSubmit = Boolean(normalizedNumber && formData.name.trim()) && !saving
+  const canSubmit = Boolean(normalizedNumber && formData.name.trim()) && !saving && !companyUsageLoading && !createRestriction
 
   if (loading) {
     return (
@@ -117,9 +132,16 @@ export default function NewVehiclePage() {
           </Link>
         </header>
 
+        <SubscriptionStatusBanner usage={companyUsage} compact />
+
         <div className="grid gap-6 lg:grid-cols-[minmax(0,42rem),minmax(18rem,1fr)]">
           <section className="card p-6">
             {error ? <div className="alert-danger mb-4 rounded-card px-4 py-3 text-sm">{error}</div> : null}
+            {createRestriction ? (
+              <div className="alert-danger mb-4 rounded-card px-4 py-3 text-sm">
+                {createRestriction.title}: {createRestriction.message}
+              </div>
+            ) : null}
 
             <form onSubmit={handleSubmit} className="space-y-5">
               <label className="block">

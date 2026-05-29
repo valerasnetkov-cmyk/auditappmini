@@ -13,12 +13,26 @@ function featureGate(ensureFeatureEnabled, featureField, message) {
   }
 }
 
+function subscriptionGate(ensureOperationalWriteAllowed, mode = 'create') {
+  return (req, res, next) => {
+    if (!ensureOperationalWriteAllowed) {
+      next()
+      return
+    }
+
+    if (ensureOperationalWriteAllowed(req, res, { mode })) {
+      next()
+    }
+  }
+}
+
 // Odometer recognition routes.
 // MVP returns manual-confirmation placeholders until a real OCR provider is wired.
-export function registerOdometerRoutes({ app, db, authenticate, API_MESSAGES, upload, ensureFeatureEnabled = null }) {
+export function registerOdometerRoutes({ app, db, authenticate, API_MESSAGES, upload, ensureFeatureEnabled = null, ensureOperationalWriteAllowed = null }) {
   app.post(
     '/api/odometer/recognize',
     authenticate,
+    subscriptionGate(ensureOperationalWriteAllowed, 'create'),
     featureGate(ensureFeatureEnabled, 'ocr_enabled', API_MESSAGES?.ocrFeatureDisabled),
     upload.single('photo'),
     (req, res) => {
@@ -40,6 +54,8 @@ export function registerOdometerRoutes({ app, db, authenticate, API_MESSAGES, up
   )
 
   app.post('/api/inspections/:id/odometer', authenticate, (req, res) => {
+    if (ensureOperationalWriteAllowed && !ensureOperationalWriteAllowed(req, res, { mode: 'write' })) return
+
     const inspectionId = req.params.id
     const { odometer_value, odometer_unit = 'km' } = req.body
     const companyId = req.user.company_id || 'default'
@@ -70,10 +86,11 @@ export function registerOdometerRoutes({ app, db, authenticate, API_MESSAGES, up
 
 // Vehicle number recognition routes.
 // MVP returns manual-confirmation placeholders until a real ANPR provider is wired.
-export function registerVehicleNumberRecognitionRoutes({ app, db, authenticate, API_MESSAGES, upload, ensureFeatureEnabled = null }) {
+export function registerVehicleNumberRecognitionRoutes({ app, db, authenticate, API_MESSAGES, upload, ensureFeatureEnabled = null, ensureOperationalWriteAllowed = null }) {
   app.post(
     '/api/vehicle-number/recognize',
     authenticate,
+    subscriptionGate(ensureOperationalWriteAllowed, 'create'),
     featureGate(ensureFeatureEnabled, 'ocr_enabled', API_MESSAGES?.ocrFeatureDisabled),
     upload.single('photo'),
     (req, res) => {

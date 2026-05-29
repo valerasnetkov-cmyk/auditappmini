@@ -195,7 +195,7 @@ Backend должен возвращать `region_mismatch`, если запро
 1. Добавить `companies.distance_unit`.
 2. Добавить / проверить поля `inspections.odometer_value`, `inspections.odometer_unit`, `inspections.odometer_value_km`.
 3. Добавить настройку в `/settings/company`.
-4. Добавить права изменения только для `owner` и `admin`.
+4. Добавить права изменения только для `owner`; resource admin не должен менять tenant-настройки через company endpoints.
 5. Обновить mobile-экран одометра: показывать единицу компании.
 6. Обновить OCR одометра: возвращать число, а единицу брать из company settings.
 7. Обновить web-карточки техники и осмотра: всегда показывать единицу.

@@ -3,6 +3,7 @@
 import React, { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import type { VehicleRecord } from '@/lib/types'
+import { getCompanyOperationRestriction } from '@/lib/companyAccess'
 import { useCompanyUsage } from '@/lib/useCompanyUsage'
 
 type InspectionType = 'quick' | 'scheduled' | 'accident'
@@ -25,6 +26,7 @@ export default function NewInspectionModal({ open, vehicle, onClose }: Props) {
   const accidentEnabled = usage?.features.accidentModule.enabled !== false
   const accidentAvailable = accidentEnabled && !usageLoading
   const effectiveType = !accidentAvailable && type === 'accident' ? 'quick' : type
+  const createRestriction = getCompanyOperationRestriction(usage, 'create')
 
   if (!open) return null
   // Basic modal overlay
@@ -53,14 +55,21 @@ export default function NewInspectionModal({ open, vehicle, onClose }: Props) {
               Модуль ДТП отключён для текущего тарифа компании. Обратитесь к владельцу компании.
             </p>
           ) : null}
+          {createRestriction ? (
+            <p className="mt-2 rounded-lg bg-red-50 px-3 py-2 text-xs text-red-800">
+              {createRestriction.title}: {createRestriction.message}
+            </p>
+          ) : null}
         </div>
         <div className="flex justify-end gap-3">
           <button onClick={onClose} className="rounded-lg border border-slate-200 px-4 py-2">Отмена</button>
           <button
             onClick={() => {
+              if (usageLoading || createRestriction) return
               router.push(`/inspections/new?vehicle=${vehicle?.id}&type=${effectiveType}`)
               onClose?.()
             }}
+            disabled={usageLoading || Boolean(createRestriction)}
             className="rounded-lg bg-blue-600 px-4 py-2 text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
           >
             Начать осмотр

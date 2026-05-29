@@ -2,6 +2,7 @@ import { spawn } from 'node:child_process'
 import fs from 'node:fs/promises'
 import path from 'node:path'
 import process from 'node:process'
+import { seedSmokeTenantOwner } from './smoke-helpers.mjs'
 
 const HOST = '127.0.0.1'
 const PORT = Number(process.env.PORT || 4015 + (process.pid % 500))
@@ -26,8 +27,8 @@ async function waitForServer(timeoutMs = 30000) {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          email: 'admin@example.com',
-          password: 'admin123',
+          email: 'owner@example.com',
+          password: 'owner123',
         }),
       })
 
@@ -102,6 +103,25 @@ async function uploadInspectionPhoto(inspectionId, photoType, headers) {
   }, 201)
 }
 
+async function uploadInvalidInspectionPhoto(inspectionId, headers) {
+  const formData = new FormData()
+  formData.append('photo', new Blob([Buffer.from('<svg xmlns="http://www.w3.org/2000/svg"></svg>')], { type: 'image/png' }), 'polyglot.png')
+  formData.append('photo_type', 'front')
+
+  const response = await fetch(`${BASE_URL}/api/inspections/${inspectionId}/photos`, {
+    method: 'POST',
+    headers,
+    body: formData,
+  })
+
+  if (response.status !== 400) {
+    const body = await response.text()
+    throw new Error(`Invalid photo content expected 400 but got ${response.status}: ${body}`)
+  }
+
+  return response.status
+}
+
 async function uploadDefectPhoto(defectId, headers) {
   const formData = new FormData()
   formData.append('photo', new Blob([VALID_PNG_BYTES], { type: 'image/png' }), 'defect.png')
@@ -114,6 +134,8 @@ async function uploadDefectPhoto(defectId, headers) {
 }
 
 async function run() {
+  const owner = await seedSmokeTenantOwner({ databasePath: DATABASE_PATH })
+
   const server = spawn(process.execPath, ['src/server.js'], {
     cwd: process.cwd(),
     env: { ...process.env, PORT: String(PORT), DATABASE_PATH, UPLOAD_DIR },
@@ -133,8 +155,8 @@ async function run() {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        email: 'admin@example.com',
-        password: 'admin123',
+        email: owner.email,
+        password: owner.password,
       }),
     })
 
@@ -273,6 +295,7 @@ async function run() {
       throw new Error(`Inspection photo WebP metadata is incomplete: ${JSON.stringify(uploadedInspectionPhoto)}`)
     }
     await assertPhotoFilesExist(uploadedInspectionPhoto, 'uploaded inspection photo')
+    const invalidPhotoStatus = await uploadInvalidInspectionPhoto(quickInspection.id, authHeaders)
 
     const incompleteCompletion = await fetch(`${BASE_URL}/api/inspections/${quickInspection.id}/complete`, {
       method: 'POST',
@@ -375,6 +398,7 @@ async function run() {
           defectDetailCloseReflected: defectDetailsAfterClose.status === 'closed',
           accidentValidationStatus: invalidAccidentInspectionResponse.status,
           requiredPhotoMissingCount: incompleteBody.missingPhotos.length,
+          invalidPhotoRejected: invalidPhotoStatus === 400,
           quickInspectionCompleted: Boolean(completedQuickInspection.completed),
           defectInspectionType: defectDetails?.inspection_type ?? null,
           defectAccidentLocation: defectDetails?.accident_location ?? null,

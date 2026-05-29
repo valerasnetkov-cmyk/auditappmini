@@ -99,7 +99,7 @@
 ## Единицы измерения пробега
 
 - [ ] В настройках компании есть выбор `km` / `mi`.
-- [ ] Изменять единицу могут только `owner` и `admin`.
+- [ ] Изменять единицу внутри компании может только `owner`; resource admin не меняет tenant-настройки через company endpoints.
 - [ ] Mobile показывает единицу на экране одометра.
 - [ ] Backend валидирует `odometerUnit`.
 - [ ] `inspections` хранит `odometer_value`, `odometer_unit`, `odometer_value_km`.

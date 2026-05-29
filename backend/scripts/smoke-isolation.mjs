@@ -96,6 +96,11 @@ async function seedIsolationPrincipals() {
   db.prepare(`
     INSERT INTO users (id, email, password, name, role, status, company_id)
     VALUES (?, ?, ?, ?, ?, 'active', ?)
+  `).run('default-company-owner', 'owner@default.example', passwordHash, 'Default Company Owner', 'owner', 'default')
+
+  db.prepare(`
+    INSERT INTO users (id, email, password, name, role, status, company_id)
+    VALUES (?, ?, ?, ?, ?, 'active', ?)
   `).run('default-inspector', 'inspector@default.example', passwordHash, 'Default Inspector', 'inspector', 'default')
 }
 
@@ -131,6 +136,19 @@ async function run() {
       'Content-Type': 'application/json',
     }
 
+    const defaultOwnerToken = makeToken({
+      id: 'default-company-owner',
+      email: 'owner@default.example',
+      name: 'Default Company Owner',
+      role: 'owner',
+      company_id: 'default',
+    })
+    const tenantHeaders = {
+      Authorization: `Bearer ${defaultOwnerToken}`,
+      'Content-Type': 'application/json',
+    }
+    const tenantReadHeaders = { Authorization: `Bearer ${defaultOwnerToken}` }
+
     const otherCompanyToken = makeToken({
       id: 'other-company-owner',
       email: 'owner@other.example',
@@ -159,13 +177,13 @@ async function run() {
 
     const region = await request('/api/regions', {
       method: 'POST',
-      headers: adminHeaders,
+      headers: tenantHeaders,
       body: JSON.stringify({ name: regionName }),
     }, 201)
 
     const vehicle = await request('/api/vehicles', {
       method: 'POST',
-      headers: adminHeaders,
+      headers: tenantHeaders,
       body: JSON.stringify({
         number: vehicleNumber,
         name: `Isolation Vehicle ${suffix}`,
@@ -176,7 +194,7 @@ async function run() {
 
     const user = await request('/api/users', {
       method: 'POST',
-      headers: adminHeaders,
+      headers: tenantHeaders,
       body: JSON.stringify({
         email: `isolation-user-${suffix}@example.com`,
         password: 'smoke123',
@@ -187,7 +205,7 @@ async function run() {
 
     const inspection = await request('/api/inspections', {
       method: 'POST',
-      headers: adminHeaders,
+      headers: tenantHeaders,
       body: JSON.stringify({
         vehicle_id: vehicle.id,
         type: 'quick',
@@ -195,7 +213,12 @@ async function run() {
       }),
     }, 201)
 
-    const uploadedPhoto = await uploadInspectionPhoto(inspection.id, 'front', { Authorization: `Bearer ${login.token}` })
+    const uploadedPhoto = await uploadInspectionPhoto(inspection.id, 'front', tenantReadHeaders)
+
+    await request('/api/vehicles', { headers: { Authorization: `Bearer ${login.token}` } }, 403)
+    await request('/api/inspections', { headers: { Authorization: `Bearer ${login.token}` } }, 403)
+    await request('/api/defects', { headers: { Authorization: `Bearer ${login.token}` } }, 403)
+    await request('/api/users', { headers: { Authorization: `Bearer ${login.token}` } }, 403)
 
     await request(`/api/vehicles/${vehicle.id}`, { headers: otherReadHeaders }, 404)
     await request(`/api/vehicles/${vehicle.id}/history`, { headers: otherReadHeaders }, 404)

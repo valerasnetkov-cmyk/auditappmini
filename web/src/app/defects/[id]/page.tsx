@@ -5,10 +5,13 @@ import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import { useParams } from 'next/navigation'
 import Layout from '@/components/Layout'
+import SubscriptionStatusBanner from '@/components/SubscriptionStatusBanner'
 import Timeline from '@/components/Timeline'
 import { useToast } from '@/app/contexts/ToastContext'
 import api, { buildApiUrl } from '@/lib/api/client'
 import { requireAuthToken } from '@/lib/auth'
+import { getCompanyOperationRestriction } from '@/lib/companyAccess'
+import { useCompanyUsage } from '@/lib/useCompanyUsage'
 import type { DefectRecord, InspectionDetail, VehicleDefectHistoryItem } from '@/lib/types'
 
 type DefectHistoryEntry = {
@@ -66,6 +69,13 @@ export default function DefectDetailPage() {
   const params = useParams<{ id: string }>()
   const defectId = params.id
   const { showToast } = useToast()
+  const { usage: companyUsage, loading: companyUsageLoading } = useCompanyUsage()
+  const writeRestriction = getCompanyOperationRestriction(companyUsage, 'write')
+  const writeRestrictionMessage = companyUsageLoading
+    ? 'Проверяем статус тарифа компании. Изменения станут доступны после проверки.'
+    : writeRestriction
+      ? `${writeRestriction.title}: ${writeRestriction.message}`
+      : ''
 
   const [defect, setDefect] = useState<DefectRecord | null>(null)
   const [vehicleDefects, setVehicleDefects] = useState<VehicleDefectHistoryItem[]>([])
@@ -113,6 +123,14 @@ export default function DefectDetailPage() {
 
   const closeDefect = async () => {
     if (!defect?.id) return
+    if (companyUsageLoading) {
+      showToast('Проверяем статус тарифа компании. Повторите действие через несколько секунд.')
+      return
+    }
+    if (writeRestriction) {
+      showToast(`${writeRestriction.title}: ${writeRestriction.message}`)
+      return
+    }
 
     try {
       setActionLoading(true)
@@ -131,6 +149,14 @@ export default function DefectDetailPage() {
 
   const reopenDefect = async () => {
     if (!defect?.id) return
+    if (companyUsageLoading) {
+      showToast('Проверяем статус тарифа компании. Повторите действие через несколько секунд.')
+      return
+    }
+    if (writeRestriction) {
+      showToast(`${writeRestriction.title}: ${writeRestriction.message}`)
+      return
+    }
 
     try {
       setActionLoading(true)
@@ -205,7 +231,7 @@ export default function DefectDetailPage() {
           {defect.status === 'closed' ? (
             <button
               onClick={reopenDefect}
-              disabled={actionLoading}
+              disabled={actionLoading || Boolean(writeRestrictionMessage)}
               className="btn btn-success disabled:opacity-50"
             >
               Вернуть в работу
@@ -213,13 +239,21 @@ export default function DefectDetailPage() {
           ) : (
             <button
               onClick={closeDefect}
-              disabled={actionLoading}
+              disabled={actionLoading || Boolean(writeRestrictionMessage)}
               className="btn btn-danger disabled:opacity-50"
             >
               Закрыть дефект
             </button>
           )}
         </div>
+
+        <SubscriptionStatusBanner usage={companyUsage} compact />
+
+        {writeRestrictionMessage ? (
+          <div className="mb-4 rounded-card border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+            {writeRestrictionMessage}
+          </div>
+        ) : null}
 
         <div className="grid gap-6 lg:grid-cols-[1.25fr,0.75fr]">
           <div className="space-y-6">
