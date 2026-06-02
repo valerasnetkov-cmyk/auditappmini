@@ -22,6 +22,9 @@ import registerCompanyRoutes from './routes/companies.js'
 import registerSaasAdminRoutes from './routes/adminSaas.js'
 import { registerOdometerRoutes, registerVehicleNumberRecognitionRoutes } from './routes/odometer.js'
 import { photoRequirements, photoTypeLabels, defectCategories } from './routes/photo-requirements.js'
+import { getSecret } from './services/secretStore.js'
+import { createRateLimiter } from './services/rateLimiter.js'
+import { isRedisConfigured, getRedisStatus, pingRedis, shutdownRedis } from './services/redisClient.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const uploadsDir = process.env.UPLOAD_DIR
@@ -34,9 +37,8 @@ if (!fs.existsSync(uploadsDir)) {
 
 const app = express()
 const PORT = process.env.PORT || 3001
-const DEFAULT_JWT_SECRET = 'audit-secret-key-2024'
-const JWT_SECRET = process.env.JWT_SECRET || DEFAULT_JWT_SECRET
 const isProduction = process.env.NODE_ENV === 'production'
+const JWT_SECRET = getSecret('JWT_SECRET', { allowRandomFallback: !isProduction })
 const PUBLIC_REGISTRATION_ENABLED = process.env.PUBLIC_REGISTRATION_ENABLED
   ? process.env.PUBLIC_REGISTRATION_ENABLED === 'true'
   : false
@@ -139,7 +141,7 @@ function assertOneOf(value, allowedValues, name) {
 function assertProductionConfig() {
   if (!isProduction) return
 
-  const unsafeJwtSecrets = new Set([DEFAULT_JWT_SECRET, 'dev-secret-change-in-production'])
+  const unsafeJwtSecrets = new Set(['audit-secret-key-2024', 'dev-secret-change-in-production'])
 
   if (!process.env.JWT_SECRET || unsafeJwtSecrets.has(JWT_SECRET) || JWT_SECRET.length < 32) {
     throw new Error('JWT_SECRET must be set to a strong production value')
@@ -211,10 +213,6 @@ function assertProductionConfig() {
 }
 
 assertProductionConfig()
-
-if (!isProduction && JWT_SECRET === DEFAULT_JWT_SECRET) {
-  console.warn('[config] Using fallback JWT_SECRET for local development')
-}
 
 const storage = multer.diskStorage({
   destination: (req, file, cb) => cb(null, uploadsDir),
@@ -370,49 +368,6 @@ function normalizeRateLimitPath(pathname) {
   return String(pathname || '')
     .replace(/^\/api\/users\/[^/]+\/mfa\/verify$/, '/api/users/:id/mfa/verify')
     .replace(/^\/api\/auth\/mfa\/verify$/, '/api/auth/mfa/verify')
-}
-
-function createRateLimiter({ name, windowMs, max, keyGenerator }) {
-  const hits = new Map()
-  let lastSweepAt = 0
-
-  return (req, res, next) => {
-    if (!Number.isInteger(windowMs) || windowMs <= 0 || !Number.isInteger(max) || max <= 0) {
-      return next()
-    }
-
-    const now = Date.now()
-
-    if (now - lastSweepAt > windowMs) {
-      lastSweepAt = now
-      for (const [key, bucket] of hits.entries()) {
-        if (bucket.resetAt <= now) {
-          hits.delete(key)
-        }
-      }
-    }
-
-    const key = keyGenerator(req)
-    const existing = hits.get(key)
-    const bucket = existing && existing.resetAt > now
-      ? existing
-      : { count: 0, resetAt: now + windowMs }
-
-    bucket.count += 1
-    hits.set(key, bucket)
-
-    const retryAfterSeconds = Math.max(1, Math.ceil((bucket.resetAt - now) / 1000))
-    res.setHeader('RateLimit-Limit', String(max))
-    res.setHeader('RateLimit-Remaining', String(Math.max(0, max - bucket.count)))
-    res.setHeader('RateLimit-Reset', String(retryAfterSeconds))
-
-    if (bucket.count > max) {
-      res.setHeader('Retry-After', String(retryAfterSeconds))
-      return sendError(res, 429, 'Too many requests. Try again later.')
-    }
-
-    return next()
-  }
 }
 
 function sensitiveIpRateLimitKey(req) {
@@ -585,6 +540,7 @@ async function buildReadinessPayload() {
     shutdown: !isShuttingDown,
     database: false,
     uploads: false,
+    redis: !isRedisConfigured(),
   }
   const errors = []
 
@@ -608,6 +564,19 @@ async function buildReadinessPayload() {
     errors.push(`Uploads check failed: ${error.message}`)
   }
 
+  if (isRedisConfigured()) {
+    try {
+      const ping = await pingRedis()
+      checks.redis = ping.ok
+      if (!ping.ok) {
+        errors.push(`Redis ping failed: ${ping.reason || 'unknown'}`)
+      }
+    } catch (error) {
+      checks.redis = false
+      errors.push(`Redis check failed: ${error.message}`)
+    }
+  }
+
   const ok = Object.values(checks).every(Boolean)
 
   return {
@@ -616,6 +585,7 @@ async function buildReadinessPayload() {
     ready: ok,
     checks,
     errors,
+    redis: isRedisConfigured() ? getRedisStatus() : { configured: false },
   }
 }
 
@@ -3942,6 +3912,18 @@ function gracefulShutdown(signal) {
     if (err) {
       console.error('[shutdown] HTTP server closed with error:', err)
       process.exit(1)
+      return
+    }
+
+    if (isRedisConfigured()) {
+      shutdownRedis()
+        .catch((shutdownErr) => {
+          console.error('[shutdown] Redis shutdown error:', shutdownErr)
+        })
+        .finally(() => {
+          console.log('[shutdown] HTTP server closed gracefully')
+          process.exit(0)
+        })
       return
     }
 

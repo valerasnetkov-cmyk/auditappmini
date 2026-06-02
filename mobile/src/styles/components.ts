@@ -1,0 +1,218 @@
+import { StyleSheet } from 'react-native'
+import { fontSize, fontWeight, iconSize, layout, radii, spacing } from './tokens'
+
+export const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: spacing.lg,
+  },
+  fullScreen: {
+    flex: 1,
+    width: '100%',
+    padding: spacing.lg,
+  },
+  card: {
+    width: '100%',
+    maxWidth: layout.cardMaxWidth,
+    borderRadius: radii.lg,
+    padding: spacing.xl,
+    marginBottom: spacing.base,
+  },
+  title: {
+    fontSize: fontSize.xxl,
+    fontWeight: fontWeight.bold,
+    textAlign: 'center',
+    marginBottom: spacing.sm,
+  },
+  subtitle: {
+    fontSize: fontSize.base,
+    textAlign: 'center',
+    marginBottom: spacing.xl,
+  },
+  sublabel: {
+    fontSize: fontSize.md,
+    fontWeight: fontWeight.semibold,
+    marginBottom: spacing.sm,
+  },
+  locationText: {
+    fontSize: fontSize.xs,
+    marginTop: spacing.sm,
+    textAlign: 'center',
+  },
+  label: {
+    fontSize: fontSize.base,
+    fontWeight: fontWeight.semibold,
+    marginBottom: spacing.base,
+  },
+  error: {
+    fontSize: fontSize.md,
+    textAlign: 'center',
+    marginBottom: spacing.base,
+  },
+  input: {
+    width: '100%',
+    padding: 14,
+    borderRadius: radii.md,
+    fontSize: fontSize.lg,
+    textAlign: 'center',
+    marginBottom: spacing.base,
+    borderWidth: 1,
+  },
+  commentInput: {
+    width: '100%',
+    padding: spacing.md,
+    borderRadius: radii.md,
+    fontSize: fontSize.md,
+    marginTop: spacing.md,
+    marginBottom: spacing.md,
+    borderWidth: 1,
+  },
+  button: {
+    width: '100%',
+    padding: spacing.base,
+    borderRadius: radii.md,
+    alignItems: 'center',
+    marginBottom: spacing.md,
+  },
+  buttonRow: {
+    flexDirection: 'column',
+    gap: spacing.md,
+  },
+  buttonText: {
+    fontSize: fontSize.base,
+    fontWeight: fontWeight.semibold,
+  },
+  companyName: {
+    fontSize: fontSize.lg,
+    fontWeight: fontWeight.semibold,
+  },
+  typeButton: {
+    width: '100%',
+    padding: spacing.base,
+    borderRadius: radii.md,
+    alignItems: 'center',
+    marginBottom: spacing.md,
+  },
+  typeButtonText: {
+    fontSize: fontSize.base,
+    fontWeight: fontWeight.semibold,
+  },
+  secondaryButton: {
+    width: '100%',
+    padding: 14,
+    borderRadius: radii.md,
+    alignItems: 'center',
+    marginBottom: spacing.md,
+    borderWidth: 1,
+  },
+  secondaryButtonText: {
+    fontSize: fontSize.md,
+    fontWeight: fontWeight.medium,
+  },
+  photoGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'space-between',
+    marginBottom: spacing.lg,
+  },
+  photoItem: {
+    width: layout.photoItem as unknown as number,
+    aspectRatio: layout.photoItemAspect,
+    borderRadius: radii.md,
+    borderWidth: 2,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: spacing.md,
+    overflow: 'hidden',
+  },
+  photoCheck: {
+    fontSize: fontSize.lg,
+    fontWeight: fontWeight.bold,
+  },
+  photoPreview: {
+    width: '100%',
+    height: '100%',
+    resizeMode: 'cover',
+  },
+  photoPreviewOverlay: {
+    position: 'absolute',
+    top: spacing.sm,
+    right: spacing.sm,
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  photoPreviewLabel: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 6,
+    backgroundColor: 'rgba(0,0,0,0.55)',
+  },
+  photoPreviewLabelText: {
+    fontSize: fontSize.xs,
+    textAlign: 'center',
+    fontWeight: fontWeight.semibold,
+  },
+  defectPhotoPreview: {
+    width: '100%',
+    height: layout.defectPhotoHeight,
+    borderRadius: radii.md,
+    borderWidth: 2,
+    overflow: 'hidden',
+    marginBottom: spacing.md,
+  },
+  photoIcon: {
+    alignItems: 'center',
+    padding: spacing.sm,
+  },
+  cameraEmoji: {
+    fontSize: iconSize.md,
+    marginBottom: spacing.xs,
+  },
+  photoLabel: {
+    fontSize: fontSize.xs,
+    textAlign: 'center',
+    padding: spacing.sm,
+  },
+  scrollArea: {
+    flex: 1,
+    width: '100%',
+    marginBottom: layout.scrollMarginBottom,
+  },
+  scrollContent: {
+    paddingBottom: layout.scrollContentPaddingBottom,
+  },
+  checklistCard: {
+    width: '100%',
+    borderWidth: 1,
+    borderRadius: radii.md,
+    padding: spacing.md,
+    marginBottom: spacing.md,
+  },
+  checklistHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  checklistLabel: {
+    fontSize: fontSize.md,
+    flex: 1,
+    marginRight: spacing.md,
+  },
+  checklistButtons: {
+    flexDirection: 'row',
+    gap: spacing.sm,
+  },
+  yesNoButton: {
+    paddingHorizontal: spacing.base,
+    paddingVertical: spacing.sm,
+    borderRadius: radii.sm,
+  },
+})

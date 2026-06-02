@@ -19,6 +19,7 @@ Legacy mobile-app removal record: `docs/mobile-app-retirement.md`.
 - Set `DATABASE_PATH` to a persistent disk path.
 - Set `UPLOAD_DIR` to a persistent disk path.
 - Set `BACKUP_DIR` to a persistent disk path outside the app release folder.
+- **For multi-replica or blue/green deployments:** set `REDIS_URL` to a reachable Redis instance and verify `/api/health/ready` reports `redis: true`. Without `REDIS_URL`, rate limit becomes per-replica and can be bypassed by switching workers (Epic 3.2).
 - Set `CORS_ORIGINS` to the real web origin list.
 - Set `NEXT_PUBLIC_API_URL` in the web environment to the production API URL.
 - Set `EXPO_PUBLIC_API_URL` in the mobile build environment to the production API URL.

@@ -1,6 +1,7 @@
 import { spawn } from 'node:child_process'
 import fs from 'node:fs/promises'
 import http from 'node:http'
+import crypto from 'node:crypto'
 import process from 'node:process'
 
 const HOST = '127.0.0.1'
@@ -131,6 +132,7 @@ async function run() {
       AUTH_ACCOUNT_RATE_LIMIT_MAX: '2',
       ADMIN_EMAIL: 'admin@example.com',
       ADMIN_PASSWORD: 'VeryStrongAdminPassword123!',
+      JWT_SECRET: crypto.randomBytes(32).toString('hex'),
     },
     stdio: ['ignore', 'pipe', 'pipe'],
   })
