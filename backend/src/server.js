@@ -22,9 +22,37 @@ import registerCompanyRoutes from './routes/companies.js'
 import registerSaasAdminRoutes from './routes/adminSaas.js'
 import { registerOdometerRoutes, registerVehicleNumberRecognitionRoutes } from './routes/odometer.js'
 import { photoRequirements, photoTypeLabels, defectCategories } from './routes/photo-requirements.js'
-import { getSecret } from './services/secretStore.js'
 import { createRateLimiter } from './services/rateLimiter.js'
 import { isRedisConfigured, getRedisStatus, pingRedis, shutdownRedis } from './services/redisClient.js'
+import {
+  isProduction,
+  JWT_SECRET,
+  PUBLIC_REGISTRATION_ENABLED,
+  TRUST_PROXY,
+  SECURITY_HSTS_ENABLED,
+  SECURITY_HSTS_MAX_AGE,
+  SECURITY_CSP,
+  SECURITY_CROSS_ORIGIN_OPENER_POLICY,
+  SECURITY_CROSS_ORIGIN_RESOURCE_POLICY,
+  SENSITIVE_RATE_LIMIT_WINDOW_MS,
+  SENSITIVE_RATE_LIMIT_MAX,
+  AUTH_ACCOUNT_RATE_LIMIT_MAX,
+  MFA_LOGIN_TOKEN_TTL,
+  AUTH_COOKIE_NAME,
+  AUTH_COOKIE_MAX_AGE_SECONDS,
+  AUTH_COOKIE_SECURE,
+  AUTH_COOKIE_SAME_SITE,
+  MAX_FILE_SIZE,
+  MAX_IMAGE_PIXELS,
+  JSON_BODY_LIMIT,
+  GRACEFUL_SHUTDOWN_TIMEOUT_MS,
+  REQUEST_ID_HEADER,
+  ACCESS_LOG_FORMAT,
+  ACCESS_LOG_SLOW_MS,
+  ACCESS_LOG_SKIP_PATHS,
+  corsOrigins,
+  allowAllCorsOrigins,
+} from './config.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const uploadsDir = process.env.UPLOAD_DIR
@@ -37,182 +65,7 @@ if (!fs.existsSync(uploadsDir)) {
 
 const app = express()
 const PORT = process.env.PORT || 3001
-const isProduction = process.env.NODE_ENV === 'production'
-const JWT_SECRET = getSecret('JWT_SECRET', { allowRandomFallback: !isProduction })
-const PUBLIC_REGISTRATION_ENABLED = process.env.PUBLIC_REGISTRATION_ENABLED
-  ? process.env.PUBLIC_REGISTRATION_ENABLED === 'true'
-  : false
-const TRUST_PROXY = parseTrustProxy(process.env.TRUST_PROXY)
-const SECURITY_HSTS_ENABLED = process.env.SECURITY_HSTS_ENABLED
-  ? process.env.SECURITY_HSTS_ENABLED === 'true'
-  : isProduction
-const SECURITY_HSTS_MAX_AGE = parsePositiveIntegerEnv('SECURITY_HSTS_MAX_AGE', 15552000)
-const SECURITY_CSP = process.env.SECURITY_CSP || "default-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'"
-const SECURITY_CROSS_ORIGIN_OPENER_POLICY = process.env.SECURITY_CROSS_ORIGIN_OPENER_POLICY || 'same-origin'
-const SECURITY_CROSS_ORIGIN_RESOURCE_POLICY = process.env.SECURITY_CROSS_ORIGIN_RESOURCE_POLICY || 'same-site'
-const SENSITIVE_RATE_LIMIT_WINDOW_MS = parsePositiveIntegerEnv('SENSITIVE_RATE_LIMIT_WINDOW_MS', 15 * 60 * 1000)
-const SENSITIVE_RATE_LIMIT_MAX = parsePositiveIntegerEnv('SENSITIVE_RATE_LIMIT_MAX', isProduction ? 60 : 500)
-const AUTH_ACCOUNT_RATE_LIMIT_MAX = parsePositiveIntegerEnv('AUTH_ACCOUNT_RATE_LIMIT_MAX', isProduction ? 20 : 500)
-const MFA_LOGIN_TOKEN_TTL = process.env.MFA_LOGIN_TOKEN_TTL || '5m'
-const AUTH_COOKIE_NAME = process.env.AUTH_COOKIE_NAME || 'audit_session'
-const AUTH_COOKIE_MAX_AGE_SECONDS = parsePositiveIntegerEnv('AUTH_COOKIE_MAX_AGE_SECONDS', 7 * 24 * 60 * 60)
-const AUTH_COOKIE_SECURE = process.env.AUTH_COOKIE_SECURE
-  ? process.env.AUTH_COOKIE_SECURE === 'true'
-  : isProduction
-const AUTH_COOKIE_SAME_SITE = process.env.AUTH_COOKIE_SAME_SITE || 'Lax'
-const MAX_FILE_SIZE = Number(process.env.MAX_FILE_SIZE || 15 * 1024 * 1024)
-const MAX_IMAGE_PIXELS = parsePositiveIntegerEnv('MAX_IMAGE_PIXELS', 40_000_000)
-const JSON_BODY_LIMIT = process.env.JSON_BODY_LIMIT || '2mb'
-const GRACEFUL_SHUTDOWN_TIMEOUT_MS = parsePositiveIntegerEnv('GRACEFUL_SHUTDOWN_TIMEOUT_MS', 10000)
-const REQUEST_ID_HEADER = normalizeHeaderName(process.env.REQUEST_ID_HEADER || 'x-request-id')
-const ACCESS_LOG_FORMAT = process.env.ACCESS_LOG_FORMAT || (isProduction ? 'json' : 'text')
-const ACCESS_LOG_SLOW_MS = parsePositiveIntegerEnv('ACCESS_LOG_SLOW_MS', 1000)
-const ACCESS_LOG_SKIP_PATHS = parseAccessLogSkipPaths(process.env.ACCESS_LOG_SKIP_PATHS || '')
-const corsOrigins = (process.env.CORS_ORIGINS || 'http://localhost:3000,http://localhost:3002,http://localhost:8083,http://localhost:8081,http://localhost:8082')
-  .split(',')
-  .map(origin => origin.trim())
-  .filter(Boolean)
-const allowAllCorsOrigins = corsOrigins.includes('*')
 let isShuttingDown = false
-
-function hasEnvValue(name) {
-  return process.env[name] != null && process.env[name] !== ''
-}
-
-function parsePositiveIntegerEnv(name, fallback) {
-  if (!hasEnvValue(name)) return fallback
-
-  const parsed = Number(process.env[name])
-  return Number.isInteger(parsed) && parsed > 0 ? parsed : Number.NaN
-}
-
-function parseTrustProxy(value) {
-  if (!value) return false
-
-  const normalized = String(value).trim().toLowerCase()
-  if (normalized === 'true') return true
-  if (normalized === 'false') return false
-  if (/^\d+$/.test(normalized)) return Number(normalized)
-
-  return value
-}
-
-function normalizeHeaderName(value) {
-  const headerName = String(value || '').trim().toLowerCase()
-  if (/^[a-z0-9!#$%&'*+.^_`|~-]+$/.test(headerName)) {
-    return headerName
-  }
-
-  return 'x-request-id'
-}
-
-function parseAccessLogSkipPaths(value) {
-  const paths = String(value || '')
-    .split(',')
-    .map(pathname => pathname.trim())
-    .filter(Boolean)
-    .map(pathname => pathname.replace(/\/+$/, '') || '/')
-
-  return Array.from(new Set(paths))
-}
-
-function isValidAccessLogSkipPath(pathname) {
-  return (
-    typeof pathname === 'string' &&
-    pathname.startsWith('/') &&
-    pathname.length <= 256 &&
-    !/\s/.test(pathname) &&
-    !pathname.includes('..')
-  )
-}
-
-function assertPositiveInteger(value, name) {
-  if (!Number.isInteger(value) || value <= 0) {
-    throw new Error(`${name} must be a positive integer`)
-  }
-}
-
-function assertOneOf(value, allowedValues, name) {
-  if (!allowedValues.includes(value)) {
-    throw new Error(`${name} must be one of: ${allowedValues.join(', ')}`)
-  }
-}
-
-function assertProductionConfig() {
-  if (!isProduction) return
-
-  const unsafeJwtSecrets = new Set(['audit-secret-key-2024', 'dev-secret-change-in-production'])
-
-  if (!process.env.JWT_SECRET || unsafeJwtSecrets.has(JWT_SECRET) || JWT_SECRET.length < 32) {
-    throw new Error('JWT_SECRET must be set to a strong production value')
-  }
-
-  if (allowAllCorsOrigins) {
-    throw new Error('CORS_ORIGINS cannot include "*" in production')
-  }
-
-  if (!process.env.DATABASE_PATH) {
-    throw new Error('DATABASE_PATH must point to persistent storage in production')
-  }
-
-  if (!process.env.UPLOAD_DIR) {
-    throw new Error('UPLOAD_DIR must point to persistent storage in production')
-  }
-
-  if (!process.env.BACKUP_DIR) {
-    throw new Error('BACKUP_DIR must be configured in production')
-  }
-
-  if (process.env.ADMIN_EMAIL) {
-    const adminPassword = process.env.ADMIN_PASSWORD || ''
-    if (!adminPassword || adminPassword === 'admin123' || adminPassword.length < 12) {
-      throw new Error('ADMIN_PASSWORD must be changed before production admin seeding')
-    }
-  }
-
-  if (PUBLIC_REGISTRATION_ENABLED) {
-    throw new Error('PUBLIC_REGISTRATION_ENABLED must be false in production; company users are created by company owners')
-  }
-
-  if (!hasEnvValue('TRUST_PROXY')) {
-    throw new Error('TRUST_PROXY must be set explicitly in production')
-  }
-
-  assertPositiveInteger(SECURITY_HSTS_MAX_AGE, 'SECURITY_HSTS_MAX_AGE')
-  assertPositiveInteger(SENSITIVE_RATE_LIMIT_WINDOW_MS, 'SENSITIVE_RATE_LIMIT_WINDOW_MS')
-  assertPositiveInteger(SENSITIVE_RATE_LIMIT_MAX, 'SENSITIVE_RATE_LIMIT_MAX')
-  assertPositiveInteger(AUTH_ACCOUNT_RATE_LIMIT_MAX, 'AUTH_ACCOUNT_RATE_LIMIT_MAX')
-  assertPositiveInteger(AUTH_COOKIE_MAX_AGE_SECONDS, 'AUTH_COOKIE_MAX_AGE_SECONDS')
-  assertPositiveInteger(MAX_IMAGE_PIXELS, 'MAX_IMAGE_PIXELS')
-  assertPositiveInteger(GRACEFUL_SHUTDOWN_TIMEOUT_MS, 'GRACEFUL_SHUTDOWN_TIMEOUT_MS')
-  assertPositiveInteger(ACCESS_LOG_SLOW_MS, 'ACCESS_LOG_SLOW_MS')
-
-  if (!SECURITY_CSP.trim()) {
-    throw new Error('SECURITY_CSP must not be empty')
-  }
-
-  if (!SECURITY_CSP.includes("default-src 'none'") || !SECURITY_CSP.includes("frame-ancestors 'none'")) {
-    throw new Error("SECURITY_CSP must include default-src 'none' and frame-ancestors 'none'")
-  }
-
-  assertOneOf(SECURITY_CROSS_ORIGIN_OPENER_POLICY, ['same-origin', 'same-origin-allow-popups', 'unsafe-none'], 'SECURITY_CROSS_ORIGIN_OPENER_POLICY')
-  assertOneOf(SECURITY_CROSS_ORIGIN_RESOURCE_POLICY, ['same-origin', 'same-site', 'cross-origin'], 'SECURITY_CROSS_ORIGIN_RESOURCE_POLICY')
-  assertOneOf(AUTH_COOKIE_SAME_SITE, ['Strict', 'Lax', 'None'], 'AUTH_COOKIE_SAME_SITE')
-
-  if (AUTH_COOKIE_SAME_SITE === 'None' && !AUTH_COOKIE_SECURE) {
-    throw new Error('AUTH_COOKIE_SECURE must be true when AUTH_COOKIE_SAME_SITE=None')
-  }
-
-  if (!['json', 'text', 'off'].includes(ACCESS_LOG_FORMAT)) {
-    throw new Error('ACCESS_LOG_FORMAT must be one of: json, text, off')
-  }
-
-  if (!ACCESS_LOG_SKIP_PATHS.every(isValidAccessLogSkipPath)) {
-    throw new Error('ACCESS_LOG_SKIP_PATHS must contain comma-separated absolute URL paths')
-  }
-}
-
-assertProductionConfig()
 
 const storage = multer.diskStorage({
   destination: (req, file, cb) => cb(null, uploadsDir),
