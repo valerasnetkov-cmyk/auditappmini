@@ -1,6 +1,7 @@
 import { spawn } from 'node:child_process'
 import fs from 'node:fs/promises'
 import path from 'node:path'
+import crypto from 'node:crypto'
 import process from 'node:process'
 import { seedSmokeTenantOwner } from './smoke-helpers.mjs'
 
@@ -8,6 +9,7 @@ const HOST = '127.0.0.1'
 const PORT = Number(process.env.PORT || 4015 + (process.pid % 500))
 const DATABASE_PATH = `./.tmp-smoke/smoke-inspections-${process.pid}.sqlite`
 const UPLOAD_DIR = `./.tmp-smoke/uploads-inspections-${process.pid}`
+const JWT_SECRET = crypto.randomBytes(32).toString('hex')
 const BASE_URL = `http://${HOST}:${PORT}`
 const VALID_PNG_BYTES = Uint8Array.from(Buffer.from(
   'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/p9sAAAAASUVORK5CYII=',
@@ -138,7 +140,7 @@ async function run() {
 
   const server = spawn(process.execPath, ['src/server.js'], {
     cwd: process.cwd(),
-    env: { ...process.env, PORT: String(PORT), DATABASE_PATH, UPLOAD_DIR },
+    env: { ...process.env, PORT: String(PORT), DATABASE_PATH, UPLOAD_DIR, JWT_SECRET },
     stdio: ['ignore', 'pipe', 'pipe'],
   })
 

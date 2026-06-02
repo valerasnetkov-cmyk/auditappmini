@@ -1,7 +1,6 @@
 ﻿import 'dotenv/config'
 import express from 'express'
 import speakeasy from 'speakeasy'
-import cors from 'cors'
 import jwt from 'jsonwebtoken'
 import bcrypt from 'bcryptjs'
 import crypto from 'crypto'
@@ -24,6 +23,10 @@ import { registerOdometerRoutes, registerVehicleNumberRecognitionRoutes } from '
 import { photoRequirements, photoTypeLabels, defectCategories } from './routes/photo-requirements.js'
 import { createRateLimiter } from './services/rateLimiter.js'
 import { isRedisConfigured, getRedisStatus, pingRedis, shutdownRedis } from './services/redisClient.js'
+import { createRequestIdMiddleware } from './middleware/requestId.js'
+import { createAccessLogMiddleware } from './middleware/accessLog.js'
+import { createSecurityHeadersMiddleware, createCorsMiddleware } from './middleware/security.js'
+import { createAuthenticateMiddleware, setAuthCookie, clearAuthCookie } from './middleware/auth.js'
 import {
   isProduction,
   JWT_SECRET,
@@ -38,10 +41,6 @@ import {
   SENSITIVE_RATE_LIMIT_MAX,
   AUTH_ACCOUNT_RATE_LIMIT_MAX,
   MFA_LOGIN_TOKEN_TTL,
-  AUTH_COOKIE_NAME,
-  AUTH_COOKIE_MAX_AGE_SECONDS,
-  AUTH_COOKIE_SECURE,
-  AUTH_COOKIE_SAME_SITE,
   MAX_FILE_SIZE,
   MAX_IMAGE_PIXELS,
   JSON_BODY_LIMIT,
@@ -112,103 +111,23 @@ function uploadPhoto(req, res, next) {
 app.disable('x-powered-by')
 app.set('trust proxy', TRUST_PROXY)
 
-function sanitizeRequestId(value) {
-  if (typeof value !== 'string') return null
-  const requestId = value.trim()
-
-  if (!requestId || requestId.length > 128) return null
-  if (!/^[A-Za-z0-9._~:/?#\[\]@!$&'()*+,;=-]+$/.test(requestId)) return null
-
-  return requestId
-}
-
-function createRequestId() {
-  return crypto.randomUUID ? crypto.randomUUID() : uuidv4()
-}
-
-function formatAccessLogEntry(entry) {
-  if (ACCESS_LOG_FORMAT === 'json') {
-    return JSON.stringify(entry)
-  }
-
-  return `[${entry.timestamp}] ${entry.method} ${entry.path} ${entry.statusCode} ${entry.durationMs}ms request_id=${entry.requestId} ip=${entry.ip}`
-}
-
-function shouldSkipAccessLog(req) {
-  if (ACCESS_LOG_SKIP_PATHS.length === 0) return false
-
-  const requestPath = req.path || '/'
-  return ACCESS_LOG_SKIP_PATHS.some((pathname) => {
-    if (pathname === '/') return requestPath === '/'
-    return requestPath === pathname || requestPath.startsWith(`${pathname}/`)
-  })
-}
-
-function logAccess(req, res, startedAt) {
-  if (ACCESS_LOG_FORMAT === 'off') return
-  if (shouldSkipAccessLog(req)) return
-
-  const durationMs = Math.max(0, Math.round(Number(process.hrtime.bigint() - startedAt) / 1_000_000))
-  const entry = {
-    type: 'access',
-    timestamp: new Date().toISOString(),
-    requestId: req.id,
-    method: req.method,
-    path: req.originalUrl,
-    statusCode: res.statusCode,
-    durationMs,
-    slow: durationMs >= ACCESS_LOG_SLOW_MS,
-    ip: req.ip,
-    userId: req.user?.id || null,
-    companyId: req.user?.company_id || null,
-    userAgent: req.get('user-agent') || null,
-  }
-
-  console.log(formatAccessLogEntry(entry))
-}
-
-app.use((req, res, next) => {
-  req.id = sanitizeRequestId(req.get(REQUEST_ID_HEADER)) || createRequestId()
-  res.setHeader(REQUEST_ID_HEADER, req.id)
-  next()
-})
-
-app.use((req, res, next) => {
-  const startedAt = process.hrtime.bigint()
-  res.on('finish', () => logAccess(req, res, startedAt))
-  next()
-})
-
-app.use((req, res, next) => {
-  res.setHeader('X-Content-Type-Options', 'nosniff')
-  res.setHeader('X-Frame-Options', 'DENY')
-  res.setHeader('Referrer-Policy', 'no-referrer')
-  res.setHeader('X-DNS-Prefetch-Control', 'off')
-  res.setHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=()')
-  res.setHeader('Content-Security-Policy', SECURITY_CSP)
-  res.setHeader('Cross-Origin-Opener-Policy', SECURITY_CROSS_ORIGIN_OPENER_POLICY)
-  res.setHeader('Cross-Origin-Resource-Policy', SECURITY_CROSS_ORIGIN_RESOURCE_POLICY)
-
-  if (SECURITY_HSTS_ENABLED) {
-    res.setHeader('Strict-Transport-Security', `max-age=${SECURITY_HSTS_MAX_AGE}; includeSubDomains`)
-  }
-
-  next()
-})
-
-app.use(cors({
-  origin: (origin, callback) => {
-    if (!origin || allowAllCorsOrigins || corsOrigins.includes(origin)) {
-      callback(null, true)
-      return
-    }
-
-    callback(new Error(`CORS blocked for origin: ${origin}`))
-  },
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization', REQUEST_ID_HEADER],
-  exposedHeaders: [REQUEST_ID_HEADER, 'RateLimit-Limit', 'RateLimit-Remaining', 'RateLimit-Reset', 'Retry-After'],
-  credentials: true,
+app.use(createRequestIdMiddleware({ headerName: REQUEST_ID_HEADER }))
+app.use(createAccessLogMiddleware({
+  format: ACCESS_LOG_FORMAT,
+  slowMs: ACCESS_LOG_SLOW_MS,
+  skipPaths: ACCESS_LOG_SKIP_PATHS,
+}))
+app.use(createSecurityHeadersMiddleware({
+  csp: SECURITY_CSP,
+  crossOriginOpenerPolicy: SECURITY_CROSS_ORIGIN_OPENER_POLICY,
+  crossOriginResourcePolicy: SECURITY_CROSS_ORIGIN_RESOURCE_POLICY,
+  hstsEnabled: SECURITY_HSTS_ENABLED,
+  hstsMaxAge: SECURITY_HSTS_MAX_AGE,
+}))
+app.use(createCorsMiddleware({
+  allowAllOrigins: allowAllCorsOrigins,
+  origins: corsOrigins,
+  requestIdHeader: REQUEST_ID_HEADER,
 }))
 
 app.use(express.json({ limit: JSON_BODY_LIMIT }))
@@ -246,88 +165,6 @@ function sensitiveAccountRateLimitKey(req) {
 function noStore(req, res, next) {
   res.setHeader('Cache-Control', 'no-store')
   next()
-}
-
-function parseCookies(header) {
-  const cookies = new Map()
-  if (!header) return cookies
-
-  for (const part of String(header).split(';')) {
-    const separatorIndex = part.indexOf('=')
-    if (separatorIndex === -1) continue
-
-    const name = part.slice(0, separatorIndex).trim()
-    const value = part.slice(separatorIndex + 1).trim()
-    if (!name) continue
-
-    try {
-      cookies.set(name, decodeURIComponent(value))
-    } catch {
-      cookies.set(name, value)
-    }
-  }
-
-  return cookies
-}
-
-function serializeCookie(name, value, options = {}) {
-  const parts = [`${name}=${encodeURIComponent(value)}`]
-
-  if (options.maxAge != null) parts.push(`Max-Age=${options.maxAge}`)
-  if (options.path) parts.push(`Path=${options.path}`)
-  if (options.httpOnly) parts.push('HttpOnly')
-  if (options.secure) parts.push('Secure')
-  if (options.sameSite) parts.push(`SameSite=${options.sameSite}`)
-
-  return parts.join('; ')
-}
-
-function setAuthCookie(res, token) {
-  res.setHeader('Set-Cookie', serializeCookie(AUTH_COOKIE_NAME, token, {
-    httpOnly: true,
-    secure: AUTH_COOKIE_SECURE,
-    sameSite: AUTH_COOKIE_SAME_SITE,
-    maxAge: AUTH_COOKIE_MAX_AGE_SECONDS,
-    path: '/',
-  }))
-}
-
-function clearAuthCookie(res) {
-  res.setHeader('Set-Cookie', serializeCookie(AUTH_COOKIE_NAME, '', {
-    httpOnly: true,
-    secure: AUTH_COOKIE_SECURE,
-    sameSite: AUTH_COOKIE_SAME_SITE,
-    maxAge: 0,
-    path: '/',
-  }))
-}
-
-function getBearerToken(req) {
-  const authHeader = req.headers.authorization
-  if (!authHeader || !authHeader.startsWith('Bearer ')) return null
-  return authHeader.split(' ')[1]
-}
-
-function getCookieToken(req) {
-  return parseCookies(req.headers.cookie).get(AUTH_COOKIE_NAME) || null
-}
-
-function isUnsafeMethod(method) {
-  return !['GET', 'HEAD', 'OPTIONS'].includes(String(method || '').toUpperCase())
-}
-
-function isAllowedRequestOrigin(req) {
-  const origin = req.get('origin')
-  if (!origin) return false
-  return allowAllCorsOrigins || corsOrigins.includes(origin)
-}
-
-function rejectInvalidCookieOrigin(req, res) {
-  if (req.authSource !== 'cookie' || !isUnsafeMethod(req.method)) return false
-  if (isAllowedRequestOrigin(req)) return false
-
-  sendError(res, 403, API_MESSAGES.accessDenied)
-  return true
 }
 
 const sensitiveIpRateLimit = createRateLimiter({
@@ -461,67 +298,12 @@ app.use((req, res, next) => {
   return sendError(res, 503, 'Server is shutting down')
 })
 
-// Define authenticate before using it
-const authenticate = (req, res, next) => {
-  const bearerToken = getBearerToken(req)
-  const cookieToken = bearerToken ? null : getCookieToken(req)
-  const token = bearerToken || cookieToken
-  req.authSource = bearerToken ? 'bearer' : cookieToken ? 'cookie' : null
-
-  if (!token) {
-    return sendError(res, 401, API_MESSAGES.authRequired)
-  }
-
-  try {
-    const decoded = jwt.verify(token, JWT_SECRET)
-
-    if (decoded?.purpose || !decoded?.id) {
-      return sendError(res, 401, API_MESSAGES.invalidToken)
-    }
-
-    const user = db.prepare(`
-      SELECT id, email, name, role, status, company_id
-      FROM users
-      WHERE id = ?
-    `).get(decoded.id)
-
-    if (!user) {
-      return sendError(res, 401, API_MESSAGES.invalidToken)
-    }
-
-    if (user.status === 'inactive') {
-      return sendError(res, 403, API_MESSAGES.userInactive)
-    }
-
-    if (decoded.email && decoded.email !== user.email) {
-      return sendError(res, 401, API_MESSAGES.invalidToken)
-    }
-
-    req.user = {
-      id: user.id,
-      email: user.email,
-      name: user.name,
-      role: user.role,
-      company_id: user.company_id || 'default',
-    }
-
-    if (req.user.role === 'admin' && isTenantUserEndpoint(req.path)) {
-      return sendError(res, 403, API_MESSAGES.accessDenied)
-    }
-
-    if (rejectInvalidCookieOrigin(req, res)) {
-      return
-    }
-
-    if (bearerToken && !cookieToken) {
-      setAuthCookie(res, token)
-    }
-
-    next()
-  } catch (err) {
-    return sendError(res, 401, API_MESSAGES.invalidToken)
-  }
-}
+const authenticate = createAuthenticateMiddleware({
+  getDb: () => db,
+  getApiMessages: () => API_MESSAGES,
+  sendError,
+  isTenantUserEndpoint,
+})
 
 const getMimeType = (filename) => {
   const ext = filename.toLowerCase().split('.').pop()

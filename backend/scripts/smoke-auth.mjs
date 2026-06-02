@@ -1,5 +1,6 @@
 import { spawn } from 'node:child_process'
 import fs from 'node:fs/promises'
+import crypto from 'node:crypto'
 import process from 'node:process'
 import { seedSmokeTenantOwner } from './smoke-helpers.mjs'
 
@@ -8,7 +9,7 @@ const PORT = Number(process.env.PORT || 3013 + (process.pid % 500))
 const DATABASE_PATH = `./.tmp-smoke/smoke-auth-${process.pid}.sqlite`
 const BASE_URL = `http://${HOST}:${PORT}`
 const LOGIN_URL = `${BASE_URL}/api/auth/login`
-const JWT_SECRET = 'smoke-auth-secret'
+const JWT_SECRET = crypto.randomBytes(32).toString('hex')
 
 function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms))

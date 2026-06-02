@@ -1,6 +1,7 @@
 import { spawn } from 'node:child_process'
 import fs from 'node:fs/promises'
 import http from 'node:http'
+import crypto from 'node:crypto'
 import process from 'node:process'
 
 const HOST = '127.0.0.1'
@@ -86,6 +87,7 @@ async function run() {
       ACCESS_LOG_FORMAT: 'json',
       ACCESS_LOG_SLOW_MS: '1',
       ACCESS_LOG_SKIP_PATHS: '/health',
+      JWT_SECRET: crypto.randomBytes(32).toString('hex'),
     },
     stdio: ['ignore', 'pipe', 'pipe'],
   })

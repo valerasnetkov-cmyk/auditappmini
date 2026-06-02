@@ -1,4 +1,4 @@
-# Epic 3.3: Декомпозиция `backend/src/server.js` (3 315 → 3 199 nonblank строк)
+# Epic 3.3: Декомпозиция `backend/src/server.js` (3 315 → 3 026 nonblank строк)
 
 ## Статус
 
@@ -7,8 +7,12 @@
   `backend/src/utils/env.js` + `backend/src/utils/asserts.js`. `server.js`
   уменьшен с 3 315 до 3 199 nonblank строк (−116, нетто). Verification: `node --check`
   clean, `npm run smoke:health` все checks OK, `npm run test:unit` 41 passed.
-- **3.3.2 ⏳ Middleware extraction** (request-id, access-log, security headers,
-  cors, auth middleware) — следующий шаг.
+- **3.3.2 ✅ Middleware extraction (2026-06-02):** request-id, access-log,
+  security headers, CORS и auth/cookie middleware вынесены в
+  `backend/src/middleware/`. `server.js` уменьшен с 3 199 до 3 026 nonblank
+  строк (−173, нетто). Verification: `node --check` clean для server +
+  middleware, smoke auth/security/observability/isolation/shutdown/owner-setup
+  проходят.
 - **3.3.3 ⏳ Photo upload / multer extraction** в `services/photoUpload.js`.
 - **3.3.4 ⏳ Routes extraction** (auth, vehicles, inspections, defects, photos,
   analytics, dashboard) — самый крупный чанк.
@@ -23,14 +27,15 @@ defects, photos, analytics, dashboard, seed, demo-data.
 
 ## Текущее состояние (подтверждено в коде)
 
-- `backend/src/server.js` — **3 199 nonblank строк** (был 3 315, после Epic 3.3.1).
-- Содержит: middleware chain, security headers, rate limit, auth, MFA,
+- `backend/src/server.js` — **3 026 nonblank строк** (был 3 315, после Epic 3.3.1–3.3.2).
+- Содержит: middleware chain wiring, rate limit, MFA,
   vehicles, inspections, defects, photos, analytics, dashboard, seed.
 - Уже вынесены: `routes/adminSaas.js`, `routes/audit.js`, `routes/companies.js`,
   `routes/completeInspection.js`, `routes/odometer.js`, `routes/photo-requirements.js`.
 - Уже вынесены: `utils/transliteration.js`, `utils/env.js`, `utils/asserts.js`,
   `services/secretStore.js`, `services/redisClient.js`, `services/rateLimiter.js`,
-  `config.js`.
+  `config.js`, `middleware/requestId.js`, `middleware/accessLog.js`,
+  `middleware/security.js`, `middleware/auth.js`.
 
 ## Epic 3.3.1: Config extraction (✅ 2026-06-02)
 
@@ -94,6 +99,45 @@ defects, photos, analytics, dashboard, seed, demo-data.
   happens at module-load до `before` hook, поэтому skip-логика не срабатывает
   при отсутствии запущенного backend. Не связано с Epic 3.3.1.
 
+## Epic 3.3.2: Middleware extraction (✅ 2026-06-02)
+
+### Что вынесено
+
+- **`backend/src/middleware/requestId.js`** (новый, 19 nonblank строк) —
+  `createRequestIdMiddleware({ headerName })`, request-id sanitization и
+  `crypto.randomUUID()`/`uuidv4()` fallback.
+- **`backend/src/middleware/accessLog.js`** (новый, 42 nonblank строки) —
+  `createAccessLogMiddleware({ format, slowMs, skipPaths })`, JSON/text access
+  log formatting, skip-path matching и slow flag.
+- **`backend/src/middleware/security.js`** (новый, 38 nonblank строк) —
+  `createSecurityHeadersMiddleware(...)` для security headers/HSTS и
+  `createCorsMiddleware(...)` для CORS policy.
+- **`backend/src/middleware/auth.js`** (новый, 138 nonblank строк) —
+  `createAuthenticateMiddleware(...)`, cookie helpers (`setAuthCookie`,
+  `clearAuthCookie`) и `createRequireRoleMiddleware(...)`.
+
+### Изменения в `server.js`
+
+- Inline request-id/access-log/security/CORS/auth/cookie helpers удалены из
+  `server.js`; файл теперь только подключает middleware factories.
+- `authenticate` создаётся через callbacks `getDb: () => db` и
+  `getApiMessages: () => API_MESSAGES`, чтобы сохранить существующий порядок
+  объявления `db`/`API_MESSAGES` и регистрации protected routes.
+- Порядок middleware сохранён: request-id → access-log → security headers →
+  CORS → JSON body parser.
+- `server.js`: 3 199 → **3 026 nonblank строк** (−173, нетто).
+- Backend-spawning smoke-скрипты переведены на 32-byte hex `JWT_SECRET`,
+  чтобы соответствовать `secretStore` min-length guard и не зависеть от
+  локального `.env`.
+
+### Verification
+
+- `node --check backend/src/server.js` — clean.
+- `node --check backend/src/middleware/{requestId,accessLog,security,auth}.js` — clean.
+- `node --check backend/scripts/smoke-*.mjs` — clean.
+- `npm run smoke` — full backend smoke suite OK.
+- `npm run test:unit` — 41 passed, 0 failed.
+
 ## Целевая структура
 
 ```txt
@@ -134,9 +178,9 @@ backend/src/
 
 1. ✅ **3.3.1 (2026-06-02):** Config extraction — `config.js` + `utils/env.js` +
    `utils/asserts.js`. `server.js` −116 nonblank строк.
-2. **3.3.2 ⏳:** Middleware extraction — `middleware/requestId.js`,
+2. ✅ **3.3.2 (2026-06-02):** Middleware extraction — `middleware/requestId.js`,
    `middleware/accessLog.js`, `middleware/security.js` (security headers,
-   CORS), `middleware/auth.js` (`authenticate`, `requireRole`).
+   CORS), `middleware/auth.js` (`authenticate`, cookie helpers, `requireRole`).
 3. **3.3.3 ⏳:** Photo upload / multer extraction — `services/photoUpload.js`
    (multer disk storage, `ALLOWED_UPLOAD_MIME_TYPES`, sharp pipeline,
    EXIF stripping, geo-tagging, thumbnail).
@@ -163,6 +207,11 @@ backend/src/
 
 - **2026-06-02:** Epic 3.3.1 ✅ — config extraction. `server.js` 3 315 → 3 199
   nonblank строк. 3 новых файла (`config.js` 112, `utils/env.js` 42, `utils/asserts.js` 10 nonblank строк).
+- **2026-06-02:** Epic 3.3.2 ✅ — middleware extraction. `server.js` 3 199 → 3 026
+  nonblank строк. 4 новых файла (`middleware/requestId.js` 19, `accessLog.js` 42,
+  `security.js` 38, `auth.js` 138 nonblank строк). Сохранён порядок middleware:
+  request-id → access-log → security headers → CORS → JSON body. Backend-spawning
+  smoke-скрипты обновлены под текущий `secretStore` guard.
 
 ## Effort / Risk
 

@@ -1,5 +1,6 @@
 import { spawn } from 'node:child_process'
 import fs from 'node:fs/promises'
+import crypto from 'node:crypto'
 import process from 'node:process'
 import jwt from 'jsonwebtoken'
 import bcrypt from 'bcryptjs'
@@ -7,7 +8,7 @@ import bcrypt from 'bcryptjs'
 const HOST = '127.0.0.1'
 const PORT = Number(process.env.PORT || 3917 + (process.pid % 500))
 const DATABASE_PATH = `./.tmp-smoke/smoke-isolation-${process.pid}.sqlite`
-const JWT_SECRET = 'smoke-isolation-secret'
+const JWT_SECRET = crypto.randomBytes(32).toString('hex')
 const BASE_URL = `http://${HOST}:${PORT}`
 const VALID_PNG_BYTES = Uint8Array.from(Buffer.from(
   'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/p9sAAAAASUVORK5CYII=',
