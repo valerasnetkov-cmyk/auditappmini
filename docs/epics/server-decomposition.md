@@ -1,4 +1,4 @@
-# Epic 3.3: Декомпозиция `backend/src/server.js` (3 315 → 2 878 nonblank строк)
+# Epic 3.3: Декомпозиция `backend/src/server.js` (3 315 → 2 590 nonblank строк)
 
 ## Статус
 
@@ -19,6 +19,9 @@
   `server.js` уменьшен с 3 026 до 2 878 nonblank строк (−148, нетто).
 - **3.3.4 ⏳ Routes extraction** (auth, vehicles, inspections, defects, photos,
   analytics, dashboard) — самый крупный чанк.
+  - **3.3.4.1 ✅ Auth routes extraction (2026-06-03):** auth, MFA, owner setup,
+    public registration, logout and session routes moved to `backend/src/routes/auth.js`.
+    `server.js`: 2 878 → 2 590 nonblank lines (−288 net); `routes/auth.js`: 331 nonblank lines.
 - ⏳ 3.3.5 Seed / demo-data вынос в `seed/`.
 - ⏳ 3.3.6 HTTP server bootstrap (server.js → ~50 строк) с graceful shutdown.
 
@@ -30,10 +33,10 @@ defects, photos, analytics, dashboard, seed, demo-data.
 
 ## Текущее состояние (подтверждено в коде)
 
-- `backend/src/server.js` — **2 878 nonblank строк** (был 3 315, после Epic 3.3.1–3.3.3).
+- `backend/src/server.js` — **2 590 nonblank строк** (был 3 315, после Epic 3.3.1–3.3.4.1).
 - Содержит: middleware chain wiring, rate limit, MFA,
   vehicles, inspections, defects, photos, analytics, dashboard, seed.
-- Уже вынесены: `routes/adminSaas.js`, `routes/audit.js`, `routes/companies.js`,
+- Уже вынесены: `routes/auth.js`, `routes/adminSaas.js`, `routes/audit.js`, `routes/companies.js`,
   `routes/completeInspection.js`, `routes/odometer.js`, `routes/photo-requirements.js`.
 - Уже вынесены: `utils/transliteration.js`, `utils/env.js`, `utils/asserts.js`,
   `services/secretStore.js`, `services/redisClient.js`, `services/rateLimiter.js`,
@@ -174,6 +177,35 @@ defects, photos, analytics, dashboard, seed, demo-data.
 - `npm run smoke` — full backend smoke suite OK.
 - `npm run test:unit` — 41 passed, 0 failed.
 
+## Epic 3.3.4.1: Auth routes extraction (✅ 2026-06-03)
+
+### What moved
+
+**`backend/src/routes/auth.js`** (new, 331 nonblank lines):
+- `/api/auth/login`
+- `/api/auth/mfa/verify`
+- `/api/auth/owner-setup`
+- `/api/users/:id/mfa/setup`
+- `/api/users/:id/mfa/verify`
+- `/api/auth/register`
+- `/api/auth/logout`
+- `/api/auth/me`
+- auth session token helpers, MFA login token helpers and owner setup invitation factory.
+
+### Changes in `server.js`
+
+- Removed direct imports of `speakeasy`, `jsonwebtoken`, `crypto`,
+  `setAuthCookie`, `clearAuthCookie`, `JWT_SECRET`, `PUBLIC_REGISTRATION_ENABLED`
+  and `MFA_LOGIN_TOKEN_TTL` from `server.js`.
+- `registerAuthRoutes(...)` wires existing auth dependencies from `server.js`.
+- `createOwnerSetupInvitationFactory({ db })` keeps the existing SaaS admin owner setup integration.
+- `server.js`: 2 878 → **2 590 nonblank lines** (−288 net).
+
+### Verification
+
+- `node --check backend/src/server.js` — clean.
+- `node --check backend/src/routes/auth.js` — clean.
+
 ## Целевая структура
 
 ```txt
@@ -220,7 +252,7 @@ backend/src/
 3. ✅ **3.3.3 (2026-06-02):** Photo upload / multer extraction — `services/photoUpload.js`
    (multer disk storage, `ALLOWED_UPLOAD_MIME_TYPES`, sharp pipeline,
    EXIF stripping, geo-tagging, thumbnail).
-4. **3.3.4 ⏳:** Routes extraction — `routes/auth.js` (login, MFA, owner-setup),
+4. **3.3.4 ⏳:** Routes extraction — `routes/auth.js` (login, MFA, owner-setup) ✅,
    `routes/vehicles.js`, `routes/inspections.js`, `routes/defects.js`,
    `routes/photos.js`, `routes/analytics.js`, `routes/dashboard.js`.
 5. **3.3.5 ⏳:** Seed extraction — `seed/regions.js`, `seed/admin.js`,
@@ -252,6 +284,9 @@ backend/src/
   2 878 nonblank строк. Новый `services/photoUpload.js` (167 nonblank строк)
   содержит multer setup, upload middleware, protected upload path helpers,
   cleanup helpers и sharp WebP/thumb pipeline.
+- **2026-06-03:** Epic 3.3.4.1 ✅ — auth routes extraction. `server.js` 2 878 →
+  2 590 nonblank строк. Новый `routes/auth.js` (331 nonblank строка)
+  содержит login/session, MFA, owner setup, public registration, logout and `/me` routes.
 
 ## Effort / Risk
 
