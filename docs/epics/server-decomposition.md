@@ -1,4 +1,4 @@
-# Epic 3.3: Декомпозиция `backend/src/server.js` (3 315 → 3 026 nonblank строк)
+# Epic 3.3: Декомпозиция `backend/src/server.js` (3 315 → 2 878 nonblank строк)
 
 ## Статус
 
@@ -13,7 +13,10 @@
   строк (−173, нетто). Verification: `node --check` clean для server +
   middleware, smoke auth/security/observability/isolation/shutdown/owner-setup
   проходят.
-- **3.3.3 ⏳ Photo upload / multer extraction** в `services/photoUpload.js`.
+- **3.3.3 ✅ Photo upload / multer extraction (2026-06-02):** uploads dir,
+  multer instance, upload middleware, protected upload path helpers, cleanup
+  helpers и sharp WebP/thumb pipeline вынесены в `services/photoUpload.js`.
+  `server.js` уменьшен с 3 026 до 2 878 nonblank строк (−148, нетто).
 - **3.3.4 ⏳ Routes extraction** (auth, vehicles, inspections, defects, photos,
   analytics, dashboard) — самый крупный чанк.
 - ⏳ 3.3.5 Seed / demo-data вынос в `seed/`.
@@ -27,13 +30,14 @@ defects, photos, analytics, dashboard, seed, demo-data.
 
 ## Текущее состояние (подтверждено в коде)
 
-- `backend/src/server.js` — **3 026 nonblank строк** (был 3 315, после Epic 3.3.1–3.3.2).
+- `backend/src/server.js` — **2 878 nonblank строк** (был 3 315, после Epic 3.3.1–3.3.3).
 - Содержит: middleware chain wiring, rate limit, MFA,
   vehicles, inspections, defects, photos, analytics, dashboard, seed.
 - Уже вынесены: `routes/adminSaas.js`, `routes/audit.js`, `routes/companies.js`,
   `routes/completeInspection.js`, `routes/odometer.js`, `routes/photo-requirements.js`.
 - Уже вынесены: `utils/transliteration.js`, `utils/env.js`, `utils/asserts.js`,
   `services/secretStore.js`, `services/redisClient.js`, `services/rateLimiter.js`,
+  `services/photoUpload.js`,
   `config.js`, `middleware/requestId.js`, `middleware/accessLog.js`,
   `middleware/security.js`, `middleware/auth.js`.
 
@@ -138,6 +142,38 @@ defects, photos, analytics, dashboard, seed, demo-data.
 - `npm run smoke` — full backend smoke suite OK.
 - `npm run test:unit` — 41 passed, 0 failed.
 
+## Epic 3.3.3: Photo upload / multer extraction (✅ 2026-06-02)
+
+### Что вынесено
+
+**`backend/src/services/photoUpload.js`** (новый, 167 nonblank строк):
+- `uploadsDir` resolution + directory creation.
+- `upload` — shared multer instance with image MIME filter and file-size limit.
+- `uploadPhoto(req, res, next)` — wrapped `upload.single('photo')` with existing
+  413/400 responses.
+- `isUploadMiddlewareError(err)` — adapter for the global error handler.
+- `getMimeType`, `buildUploadUrl`, `resolveUploadPath`.
+- `removeFileIfExists`, `removePhotoFiles`, `removePhotoFilesForRows`.
+- `processUploadedPhoto(...)` — sharp metadata validation, original storage,
+  main WebP, thumb WebP, size/hash metadata.
+
+### Изменения в `server.js`
+
+- Удалены direct imports `multer`, `sharp`, `fileURLToPath`, `MAX_FILE_SIZE`,
+  `MAX_IMAGE_PIXELS` из `server.js`.
+- Protected `/uploads/*`, inspection photo upload, defect photo upload,
+  odometer/vehicle-number OCR routes и cleanup paths используют exports из
+  `services/photoUpload.js`.
+- Global error handler проверяет multer errors через `isUploadMiddlewareError`.
+- `server.js`: 3 026 → **2 878 nonblank строк** (−148, нетто).
+
+### Verification
+
+- `node --check backend/src/server.js` — clean.
+- `node --check backend/src/services/photoUpload.js` — clean.
+- `npm run smoke` — full backend smoke suite OK.
+- `npm run test:unit` — 41 passed, 0 failed.
+
 ## Целевая структура
 
 ```txt
@@ -181,7 +217,7 @@ backend/src/
 2. ✅ **3.3.2 (2026-06-02):** Middleware extraction — `middleware/requestId.js`,
    `middleware/accessLog.js`, `middleware/security.js` (security headers,
    CORS), `middleware/auth.js` (`authenticate`, cookie helpers, `requireRole`).
-3. **3.3.3 ⏳:** Photo upload / multer extraction — `services/photoUpload.js`
+3. ✅ **3.3.3 (2026-06-02):** Photo upload / multer extraction — `services/photoUpload.js`
    (multer disk storage, `ALLOWED_UPLOAD_MIME_TYPES`, sharp pipeline,
    EXIF stripping, geo-tagging, thumbnail).
 4. **3.3.4 ⏳:** Routes extraction — `routes/auth.js` (login, MFA, owner-setup),
@@ -212,6 +248,10 @@ backend/src/
   `security.js` 38, `auth.js` 138 nonblank строк). Сохранён порядок middleware:
   request-id → access-log → security headers → CORS → JSON body. Backend-spawning
   smoke-скрипты обновлены под текущий `secretStore` guard.
+- **2026-06-02:** Epic 3.3.3 ✅ — photo upload extraction. `server.js` 3 026 →
+  2 878 nonblank строк. Новый `services/photoUpload.js` (167 nonblank строк)
+  содержит multer setup, upload middleware, protected upload path helpers,
+  cleanup helpers и sharp WebP/thumb pipeline.
 
 ## Effort / Risk
 
