@@ -1,4 +1,4 @@
-# Epic 3.3: Декомпозиция `backend/src/server.js` (3 315 → 1 287 nonblank строк)
+# Epic 3.3: Декомпозиция `backend/src/server.js` (3 315 → 1 158 nonblank строк)
 
 ## Статус
 
@@ -47,7 +47,10 @@
     routes moved to `backend/src/routes/dashboard.js` and
     `backend/src/routes/analytics.js`. `server.js`: 1 494 → 1 287 nonblank
     lines (−207 net); new modules: 63 / 166 nonblank lines.
-- ⏳ 3.3.5 Seed / demo-data вынос в `seed/`.
+- **3.3.5 ✅ Seed / demo-data extraction (2026-06-03):** `/api/seed`
+  demo-data generation moved to `backend/src/seed/demoData.js`. `server.js`:
+  1 287 → 1 158 nonblank lines (−129 net); `seed/demoData.js`: 146 nonblank
+  lines.
 - ⏳ 3.3.6 HTTP server bootstrap (server.js → ~50 строк) с graceful shutdown.
 
 ## Цель
@@ -58,9 +61,9 @@ defects, photos, analytics, dashboard, seed, demo-data.
 
 ## Текущее состояние (подтверждено в коде)
 
-- `backend/src/server.js` — **1 287 nonblank строк** (был 3 315, после Epic 3.3.1–3.3.4.6).
+- `backend/src/server.js` — **1 158 nonblank строк** (был 3 315, после Epic 3.3.1–3.3.5).
 - Содержит: middleware chain wiring, rate limit, MFA,
-  seed and remaining bootstrap wiring.
+  users/settings/reference routes and remaining bootstrap wiring.
 - Уже вынесены: `routes/auth.js`, `routes/regions.js`, `routes/vehicles.js`,
   `routes/inspections.js`, `routes/defects.js`, `routes/photos.js`,
   `routes/dashboard.js`, `routes/analytics.js`,
@@ -70,7 +73,7 @@ defects, photos, analytics, dashboard, seed, demo-data.
   `services/secretStore.js`, `services/redisClient.js`, `services/rateLimiter.js`,
   `services/photoUpload.js`,
   `config.js`, `middleware/requestId.js`, `middleware/accessLog.js`,
-  `middleware/security.js`, `middleware/auth.js`.
+  `middleware/security.js`, `middleware/auth.js`, `seed/demoData.js`.
 
 ## Epic 3.3.1: Config extraction (✅ 2026-06-02)
 
@@ -369,6 +372,31 @@ defects, photos, analytics, dashboard, seed, demo-data.
 - `node --check backend/src/routes/dashboard.js` — clean.
 - `node --check backend/src/routes/analytics.js` — clean.
 
+## Epic 3.3.5: Seed / demo-data extraction (✅ 2026-06-03)
+
+### What moved
+
+**`backend/src/seed/demoData.js`** (new, 146 nonblank lines):
+- `/api/seed`
+- demo company bootstrap for empty databases.
+- demo users, vehicles, inspections, checklist items and defects generation.
+- demo vehicle number and random date/item helpers.
+
+### Changes in `server.js`
+
+- Removed inline seed route handler and demo-data helper functions from
+  `server.js`.
+- Removed `LICENSE_PLATE_ALLOWED_CYRILLIC` import from `server.js`; demo vehicle
+  number generation now lives in `seed/demoData.js`.
+- `server.js` now wires `registerDemoDataSeedRoutes(...)` with existing
+  auth/user helpers to preserve behavior.
+- `server.js`: 1 287 → **1 158 nonblank lines** (−129 net).
+
+### Verification
+
+- `node --check backend/src/server.js` — clean.
+- `node --check backend/src/seed/demoData.js` — clean.
+
 ## Целевая структура
 
 ```txt
@@ -418,8 +446,7 @@ backend/src/
 4. ✅ **3.3.4 (2026-06-03):** Routes extraction — `routes/auth.js` (login, MFA, owner-setup) ✅,
    `routes/regions.js` ✅, `routes/vehicles.js` ✅, `routes/inspections.js` ✅, `routes/defects.js` ✅,
    `routes/photos.js` ✅, `routes/analytics.js` ✅, `routes/dashboard.js` ✅.
-5. **3.3.5 ⏳:** Seed extraction — `seed/regions.js`, `seed/admin.js`,
-   `seed/demoData.js`.
+5. ✅ **3.3.5 (2026-06-03):** Seed extraction — `seed/demoData.js`.
 6. **3.3.6 ⏳:** HTTP server bootstrap — `app.js` factory, `server.js` ~50 строк
    (читает config, вызывает `app.listen(...)`, регистрирует graceful shutdown
    `SIGTERM`/`SIGINT`).
@@ -467,6 +494,10 @@ backend/src/
   `server.js` 1 494 → 1 287 nonblank строк. Новые модули:
   `routes/dashboard.js` 63, `routes/analytics.js` 166 nonblank строк
   содержат notifications, dashboard stats, analytics overview and analytics export.
+- **2026-06-03:** Epic 3.3.5 ✅ — seed / demo-data extraction.
+  `server.js` 1 287 → 1 158 nonblank строк. Новый модуль `seed/demoData.js`
+  (146 nonblank строк) содержит `/api/seed` и генерацию demo company/users/
+  vehicles/inspections/checklists/defects.
 
 ## Effort / Risk
 
