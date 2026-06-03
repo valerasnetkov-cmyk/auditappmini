@@ -12,6 +12,9 @@
   `backend/src/server.js` to `backend/src/routes/regions.js` and
   `backend/src/routes/vehicles.js`; shared region helpers moved to
   `backend/src/services/regions.js`.
+- **Epic 3.3.4 backend routes extraction**: core inspection list/create/detail,
+  update/delete and vehicle inspection history routes moved from
+  `backend/src/server.js` to `backend/src/routes/inspections.js`.
 - **Resource admin вместо Directus CMS**: принято архитектурное решение отказаться от Directus как активной части проекта. Управление компаниями, владельцами, тарифами и лимитами переносится во встроенный backend/web контур "Администрирование ресурса".
 - **Границы роли `admin`**: администратор ресурса отвечает за весь сервисный уровень проекта, но не является владельцем или менеджером компаний и не получает доступ к технике, осмотрам, дефектам, фото и пользовательскому назначению внутри tenant-контуров.
 - **Smoke-gate**: backend smoke больше не содержит Directus service/mock проверки и включает MFA login flow, resource-admin CRUD, tenant isolation и лимиты компаний.
