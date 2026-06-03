@@ -71,6 +71,10 @@
 - **3.3.10 ✅ Protected uploads route extraction (2026-06-04):** authenticated
   `/uploads/*` route moved to `backend/src/routes/uploads.js`. `app.js`:
   739 → 718 nonblank lines (−21 net); `routes/uploads.js`: 37 nonblank lines.
+- **3.3.11 ✅ Company policy service extraction (2026-06-04):** company limits,
+  resource usage, feature flags and subscription write-guard helpers moved to
+  `backend/src/services/companyPolicy.js`. `app.js`: 718 → 613 nonblank lines
+  (−105 net); `services/companyPolicy.js`: 130 nonblank lines.
 
 ## Цель
 
@@ -81,7 +85,7 @@ defects, photos, analytics, dashboard, seed, demo-data.
 ## Текущее состояние (подтверждено в коде)
 
 - `backend/src/server.js` — **81 nonblank строк** (был 3 315, после Epic 3.3.1–3.3.6).
-- `backend/src/app.js` — **718 nonblank строк**: Express app factory,
+- `backend/src/app.js` — **613 nonblank строк**: Express app factory,
   middleware chain wiring, rate limit, protected uploads, settings/reference
   routes and all extracted route module registrations.
 - Уже вынесены: `routes/auth.js`, `routes/regions.js`, `routes/vehicles.js`,
@@ -94,7 +98,7 @@ defects, photos, analytics, dashboard, seed, demo-data.
   `routes/completeInspection.js`, `routes/odometer.js`, `routes/photo-requirements.js`.
 - Уже вынесены: `utils/transliteration.js`, `utils/env.js`, `utils/asserts.js`,
   `services/secretStore.js`, `services/redisClient.js`, `services/rateLimiter.js`,
-  `services/photoUpload.js`,
+  `services/photoUpload.js`, `services/companyPolicy.js`,
   `config.js`, `middleware/requestId.js`, `middleware/accessLog.js`,
   `middleware/security.js`, `middleware/auth.js`, `seed/demoData.js`,
   `app.js`.
@@ -546,6 +550,29 @@ defects, photos, analytics, dashboard, seed, demo-data.
 - `node --check backend/src/app.js` — clean.
 - `node --check backend/src/routes/uploads.js` — clean.
 
+## Epic 3.3.11: Company policy service extraction (✅ 2026-06-04)
+
+### What moved
+
+**`backend/src/services/companyPolicy.js`** (new, 130 nonblank lines):
+- company limit normalization and feature flag normalization.
+- company resource usage and limit-state helpers.
+- company limit violation response helper.
+- company feature gate helper.
+- company status/subscription operational write guard.
+
+### Changes in `app.js`
+
+- Removed inline company policy helper block from `app.js`.
+- `app.js` now creates `companyPolicy` through `createCompanyPolicy({ db,
+  sendError, API_MESSAGES })` and passes the same callbacks to route modules.
+- `app.js`: 718 → **613 nonblank lines** (−105 net).
+
+### Verification
+
+- `node --check backend/src/app.js` — clean.
+- `node --check backend/src/services/companyPolicy.js` — clean.
+
 ## Целевая структура
 
 ```txt
@@ -579,6 +606,7 @@ backend/src/
 │   ├── odometerOcr.js
 │   ├── vehicleNumberOcr.js
 │   ├── photoPipeline.js
+│   ├── companyPolicy.js
 │   └── subscription.js
 └── seed/
     ├── regions.js
@@ -610,7 +638,9 @@ backend/src/
    `routes/settings.js` + `routes/photo-requirements.js` registration.
 10. ✅ **3.3.10 (2026-06-04):** Protected uploads route extraction —
    `routes/uploads.js`.
-11. **3.3.11 ⏳:** Прогнать все smoke-тесты и `verify:launch` после каждой
+11. ✅ **3.3.11 (2026-06-04):** Company policy service extraction —
+   `services/companyPolicy.js`.
+12. **3.3.12 ⏳:** Прогнать все smoke-тесты и `verify:launch` после каждой
    mini-epic.
 
 ## Критерии приёмки
@@ -677,6 +707,10 @@ backend/src/
   `app.js` 739 → 718 nonblank строк. Новый `routes/uploads.js`
   (37 nonblank строк) содержит authenticated `/uploads/*` route and tenant photo
   ownership checks.
+- **2026-06-04:** Epic 3.3.11 ✅ — company policy service extraction.
+  `app.js` 718 → 613 nonblank строк. Новый `services/companyPolicy.js`
+  (130 nonblank строк) содержит company limits, feature flags and subscription
+  write-guard helpers.
 
 ## Effort / Risk
 

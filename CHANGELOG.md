@@ -40,6 +40,9 @@
   reference endpoints are now registered from `backend/src/routes/photo-requirements.js`.
 - **Epic 3.3 backend app decomposition**: protected `/uploads/*` route moved
   from `backend/src/app.js` to `backend/src/routes/uploads.js`.
+- **Epic 3.3 backend app decomposition**: company limits, feature flags and
+  subscription write-guard helpers moved from `backend/src/app.js` to
+  `backend/src/services/companyPolicy.js`.
 - **Resource admin вместо Directus CMS**: принято архитектурное решение отказаться от Directus как активной части проекта. Управление компаниями, владельцами, тарифами и лимитами переносится во встроенный backend/web контур "Администрирование ресурса".
 - **Границы роли `admin`**: администратор ресурса отвечает за весь сервисный уровень проекта, но не является владельцем или менеджером компаний и не получает доступ к технике, осмотрам, дефектам, фото и пользовательскому назначению внутри tenant-контуров.
 - **Smoke-gate**: backend smoke больше не содержит Directus service/mock проверки и включает MFA login flow, resource-admin CRUD, tenant isolation и лимиты компаний.
