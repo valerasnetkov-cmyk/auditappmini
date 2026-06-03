@@ -1,4 +1,4 @@
-# Epic 3.3: Декомпозиция `backend/src/server.js` (3 315 → 1 625 nonblank строк)
+# Epic 3.3: Декомпозиция `backend/src/server.js` (3 315 → 1 494 nonblank строк)
 
 ## Статус
 
@@ -38,6 +38,10 @@
     `backend/src/routes/defects.js`. `server.js`: 1 767 → 1 625 nonblank
     lines (−142 net); `routes/defects.js`: 164 nonblank lines. Defect photo
     upload and photo delete stay in `server.js` for the next photos chunk.
+  - **3.3.4.5 ✅ Photos routes extraction (2026-06-03):** inspection photo
+    upload, defect photo upload and photo delete routes moved to
+    `backend/src/routes/photos.js`. `server.js`: 1 625 → 1 494 nonblank lines
+    (−131 net); `routes/photos.js`: 163 nonblank lines.
 - ⏳ 3.3.5 Seed / demo-data вынос в `seed/`.
 - ⏳ 3.3.6 HTTP server bootstrap (server.js → ~50 строк) с graceful shutdown.
 
@@ -49,11 +53,12 @@ defects, photos, analytics, dashboard, seed, demo-data.
 
 ## Текущее состояние (подтверждено в коде)
 
-- `backend/src/server.js` — **1 625 nonblank строк** (был 3 315, после Epic 3.3.1–3.3.4.4).
+- `backend/src/server.js` — **1 494 nonblank строк** (был 3 315, после Epic 3.3.1–3.3.4.5).
 - Содержит: middleware chain wiring, rate limit, MFA,
   vehicles, inspections, defects, photos, analytics, dashboard, seed.
 - Уже вынесены: `routes/auth.js`, `routes/regions.js`, `routes/vehicles.js`,
-  `routes/inspections.js`, `routes/defects.js`, `routes/adminSaas.js`, `routes/audit.js`, `routes/companies.js`,
+  `routes/inspections.js`, `routes/defects.js`, `routes/photos.js`,
+  `routes/adminSaas.js`, `routes/audit.js`, `routes/companies.js`,
   `routes/completeInspection.js`, `routes/odometer.js`, `routes/photo-requirements.js`.
 - Уже вынесены: `utils/transliteration.js`, `utils/env.js`, `utils/asserts.js`,
   `services/secretStore.js`, `services/redisClient.js`, `services/rateLimiter.js`,
@@ -307,6 +312,29 @@ defects, photos, analytics, dashboard, seed, demo-data.
 - `node --check backend/src/server.js` — clean.
 - `node --check backend/src/routes/defects.js` — clean.
 
+## Epic 3.3.4.5: Photos routes extraction (✅ 2026-06-03)
+
+### What moved
+
+**`backend/src/routes/photos.js`** (new, 163 nonblank lines):
+- `/api/inspections/:id/photos`
+- `/api/defects/:id/photos`
+- `/api/photos/:id`
+- allowed inspection photo type validation and upload cleanup.
+
+### Changes in `server.js`
+
+- Removed photo upload/delete route handlers from `server.js`.
+- `server.js` now wires `registerPhotoRoutes(...)`.
+- `photoRequirements` stay imported in `server.js` for complete-inspection and
+  photo-requirements reference routes.
+- `server.js`: 1 625 → **1 494 nonblank lines** (−131 net).
+
+### Verification
+
+- `node --check backend/src/server.js` — clean.
+- `node --check backend/src/routes/photos.js` — clean.
+
 ## Целевая структура
 
 ```txt
@@ -355,7 +383,7 @@ backend/src/
    EXIF stripping, geo-tagging, thumbnail).
 4. **3.3.4 ⏳:** Routes extraction — `routes/auth.js` (login, MFA, owner-setup) ✅,
    `routes/regions.js` ✅, `routes/vehicles.js` ✅, `routes/inspections.js` ✅, `routes/defects.js` ✅,
-   `routes/photos.js`, `routes/analytics.js`, `routes/dashboard.js`.
+   `routes/photos.js` ✅, `routes/analytics.js`, `routes/dashboard.js`.
 5. **3.3.5 ⏳:** Seed extraction — `seed/regions.js`, `seed/admin.js`,
    `seed/demoData.js`.
 6. **3.3.6 ⏳:** HTTP server bootstrap — `app.js` factory, `server.js` ~50 строк
@@ -398,6 +426,9 @@ backend/src/
 - **2026-06-03:** Epic 3.3.4.4 ✅ — defects routes extraction.
   `server.js` 1 767 → 1 625 nonblank строк. Новый `routes/defects.js`
   (164 nonblank строк) содержит core defect routes.
+- **2026-06-03:** Epic 3.3.4.5 ✅ — photos routes extraction.
+  `server.js` 1 625 → 1 494 nonblank строк. Новый `routes/photos.js`
+  (163 nonblank строк) содержит inspection/defect photo upload and photo delete routes.
 
 ## Effort / Risk
 
