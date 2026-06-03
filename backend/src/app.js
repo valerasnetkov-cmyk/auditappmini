@@ -16,9 +16,10 @@ import registerPhotoRoutes from './routes/photos.js'
 import registerDashboardRoutes from './routes/dashboard.js'
 import registerAnalyticsRoutes from './routes/analytics.js'
 import registerUserRoutes from './routes/users.js'
+import registerSettingsRoutes from './routes/settings.js'
 import registerDemoDataSeedRoutes from './seed/demoData.js'
 import { registerOdometerRoutes, registerVehicleNumberRecognitionRoutes } from './routes/odometer.js'
-import { photoRequirements, photoTypeLabels, defectCategories } from './routes/photo-requirements.js'
+import { photoRequirements, registerPhotoRequirementRoutes } from './routes/photo-requirements.js'
 import { createRateLimiter } from './services/rateLimiter.js'
 import { isRedisConfigured, getRedisStatus, pingRedis } from './services/redisClient.js'
 import {
@@ -540,10 +541,6 @@ function updateUserRecord(id, { email, name, role, status, passwordHash, company
   }
 }
 
-function upsertSettingValue(key, value) {
-  return db.prepare('INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)').run(key, String(value))
-}
-
 const API_MESSAGES = {
   authRequired: 'Authorization required',
   invalidToken: 'Invalid token',
@@ -805,48 +802,17 @@ registerPhotoRoutes({
 
 // ============ SETTINGS ============
 
-app.get('/api/settings', authenticate, (req, res) => {
-  res.json(readSettings())
+registerSettingsRoutes({
+  app,
+  db,
+  authenticate,
+  readSettings,
+  ensureManager,
+  ensureCompanyOperationalWriteAllowed,
+  API_MESSAGES,
 })
 
-app.put('/api/settings', authenticate, (req, res) => {
-  if (!ensureManager(req, res, API_MESSAGES.settingsManagerOnly)) return
-  if (!ensureCompanyOperationalWriteAllowed(req, res, { mode: 'write' })) return
-
-  const { scheduled_inspection_days, notification_days_before, timezone_offset } = req.body
-
-  if (scheduled_inspection_days !== undefined) {
-    upsertSettingValue('scheduled_inspection_days', scheduled_inspection_days)
-  }
-  if (notification_days_before !== undefined) {
-    upsertSettingValue('notification_days_before', notification_days_before)
-  }
-  if (timezone_offset !== undefined) {
-    upsertSettingValue('timezone_offset', timezone_offset)
-  }
-  return res.json(readSettings())
-
-})
-
-// Get photo requirements for an inspection type
-app.get('/api/photo-requirements/:type', authenticate, (req, res) => {
-  const { type } = req.params
-  if (!photoRequirements[type]) {
-    return res.status(400).json({ error: 'Неизвестный тип осмотра' })
-  }
-  res.json({
-    type,
-    requirements: photoRequirements[type],
-    labels: photoTypeLabels.ru  // Default to Russian labels
-  })
-})
-
-// Get defect categories
-app.get('/api/defect-categories', authenticate, (req, res) => {
-  res.json({
-    categories: defectCategories.ru  // Default to Russian
-  })
-})
+registerPhotoRequirementRoutes({ app, authenticate })
 
 // ============ NOTIFICATIONS ============
 

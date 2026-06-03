@@ -103,6 +103,26 @@ export const defectCategories = {
   }
 }
 
+export function registerPhotoRequirementRoutes({ app, authenticate }) {
+  app.get('/api/photo-requirements/:type', authenticate, (req, res) => {
+    const { type } = req.params
+    if (!photoRequirements[type]) {
+      return res.status(400).json({ error: 'Неизвестный тип осмотра' })
+    }
+    res.json({
+      type,
+      requirements: photoRequirements[type],
+      labels: photoTypeLabels.ru,
+    })
+  })
+
+  app.get('/api/defect-categories', authenticate, (req, res) => {
+    res.json({
+      categories: defectCategories.ru,
+    })
+  })
+}
+
 export default {
   photoRequirements,
   photoTypeLabels,
