@@ -55,6 +55,10 @@
   wiring moved to `backend/src/app.js`; `server.js` now owns `initDatabase()`,
   `app.listen(...)`, socket tracking and graceful shutdown. `server.js`:
   1 158 → 81 nonblank lines; `app.js`: 1 090 nonblank lines.
+- **3.3.7 ✅ Users routes extraction (2026-06-04):** tenant user list/detail,
+  create/update/delete routes moved to `backend/src/routes/users.js`. `app.js`:
+  1 090 → 1 013 nonblank lines (−77 net); `routes/users.js`: 118 nonblank
+  lines.
 
 ## Цель
 
@@ -65,12 +69,12 @@ defects, photos, analytics, dashboard, seed, demo-data.
 ## Текущее состояние (подтверждено в коде)
 
 - `backend/src/server.js` — **81 nonblank строк** (был 3 315, после Epic 3.3.1–3.3.6).
-- `backend/src/app.js` — **1 090 nonblank строк**: Express app factory,
-  middleware chain wiring, rate limit, protected uploads, users/settings/
-  reference routes and all extracted route module registrations.
+- `backend/src/app.js` — **1 013 nonblank строк**: Express app factory,
+  middleware chain wiring, rate limit, protected uploads, settings/reference
+  routes and all extracted route module registrations.
 - Уже вынесены: `routes/auth.js`, `routes/regions.js`, `routes/vehicles.js`,
   `routes/inspections.js`, `routes/defects.js`, `routes/photos.js`,
-  `routes/dashboard.js`, `routes/analytics.js`,
+  `routes/dashboard.js`, `routes/analytics.js`, `routes/users.js`,
   `routes/adminSaas.js`, `routes/audit.js`, `routes/companies.js`,
   `routes/completeInspection.js`, `routes/odometer.js`, `routes/photo-requirements.js`.
 - Уже вынесены: `utils/transliteration.js`, `utils/env.js`, `utils/asserts.js`,
@@ -427,6 +431,30 @@ defects, photos, analytics, dashboard, seed, demo-data.
 - `node --check backend/src/server.js` — clean.
 - `node --check backend/src/app.js` — clean.
 
+## Epic 3.3.7: Users routes extraction (✅ 2026-06-04)
+
+### What moved
+
+**`backend/src/routes/users.js`** (new, 118 nonblank lines):
+- `/api/users`
+- `/api/users/:id`
+- tenant user create/update/delete routes.
+
+### Changes in `app.js`
+
+- Removed inline tenant user route handlers from `app.js`.
+- `app.js` now wires `registerUserRoutes(...)` with existing user helpers,
+  company-owner guards, operational write guard and company user limit checks.
+- Removed the direct `bcrypt` import from `app.js`; password hashing for tenant
+  user management now lives in `routes/users.js`.
+- `app.js`: 1 090 → **1 013 nonblank lines** (−77 net).
+
+### Verification
+
+- `node --check backend/src/app.js` — clean.
+- `node --check backend/src/routes/users.js` — clean.
+- `npm --prefix backend run smoke:auth` — clean.
+
 ## Целевая структура
 
 ```txt
@@ -450,6 +478,7 @@ backend/src/
 │   ├── photos.js
 │   ├── analytics.js
 │   ├── dashboard.js
+│   ├── users.js
 │   ├── companies.js          # уже есть
 │   └── adminSaas.js          # уже есть
 ├── services/
@@ -480,7 +509,8 @@ backend/src/
 6. ✅ **3.3.6 (2026-06-04):** HTTP server bootstrap — `app.js` factory, `server.js` 81 строк
    (читает config, вызывает `app.listen(...)`, регистрирует graceful shutdown
    `SIGTERM`/`SIGINT`).
-7. **3.3.7 ⏳:** Прогнать все smoke-тесты и `verify:launch` после каждой
+7. ✅ **3.3.7 (2026-06-04):** Users routes extraction — `routes/users.js`.
+8. **3.3.8 ⏳:** Прогнать все smoke-тесты и `verify:launch` после каждой
    mini-epic.
 
 ## Критерии приёмки
@@ -532,6 +562,9 @@ backend/src/
   `server.js` 1 158 → 81 nonblank строк. Новый `app.js` (1 090 nonblank строк)
   содержит `createApp(...)`, Express middleware/routes wiring and readiness
   endpoints; `server.js` оставлен для init/listen/socket tracking/graceful shutdown.
+- **2026-06-04:** Epic 3.3.7 ✅ — users routes extraction.
+  `app.js` 1 090 → 1 013 nonblank строк. Новый `routes/users.js`
+  (118 nonblank строк) содержит tenant user list/detail/create/update/delete routes.
 
 ## Effort / Risk
 
