@@ -1,4 +1,4 @@
-# Epic 3.3: Декомпозиция `backend/src/server.js` (3 315 → 1 494 nonblank строк)
+# Epic 3.3: Декомпозиция `backend/src/server.js` (3 315 → 1 287 nonblank строк)
 
 ## Статус
 
@@ -17,7 +17,7 @@
   multer instance, upload middleware, protected upload path helpers, cleanup
   helpers и sharp WebP/thumb pipeline вынесены в `services/photoUpload.js`.
   `server.js` уменьшен с 3 026 до 2 878 nonblank строк (−148, нетто).
-- **3.3.4 ⏳ Routes extraction** (auth, vehicles, inspections, defects, photos,
+- **3.3.4 ✅ Routes extraction** (auth, vehicles, inspections, defects, photos,
   analytics, dashboard) — самый крупный чанк.
   - **3.3.4.1 ✅ Auth routes extraction (2026-06-03):** auth, MFA, owner setup,
     public registration, logout and session routes moved to `backend/src/routes/auth.js`.
@@ -42,6 +42,11 @@
     upload, defect photo upload and photo delete routes moved to
     `backend/src/routes/photos.js`. `server.js`: 1 625 → 1 494 nonblank lines
     (−131 net); `routes/photos.js`: 163 nonblank lines.
+  - **3.3.4.6 ✅ Dashboard / analytics routes extraction (2026-06-03):**
+    notifications, dashboard stats, analytics overview and analytics export
+    routes moved to `backend/src/routes/dashboard.js` and
+    `backend/src/routes/analytics.js`. `server.js`: 1 494 → 1 287 nonblank
+    lines (−207 net); new modules: 63 / 166 nonblank lines.
 - ⏳ 3.3.5 Seed / demo-data вынос в `seed/`.
 - ⏳ 3.3.6 HTTP server bootstrap (server.js → ~50 строк) с graceful shutdown.
 
@@ -53,11 +58,12 @@ defects, photos, analytics, dashboard, seed, demo-data.
 
 ## Текущее состояние (подтверждено в коде)
 
-- `backend/src/server.js` — **1 494 nonblank строк** (был 3 315, после Epic 3.3.1–3.3.4.5).
+- `backend/src/server.js` — **1 287 nonblank строк** (был 3 315, после Epic 3.3.1–3.3.4.6).
 - Содержит: middleware chain wiring, rate limit, MFA,
-  vehicles, inspections, defects, photos, analytics, dashboard, seed.
+  seed and remaining bootstrap wiring.
 - Уже вынесены: `routes/auth.js`, `routes/regions.js`, `routes/vehicles.js`,
   `routes/inspections.js`, `routes/defects.js`, `routes/photos.js`,
+  `routes/dashboard.js`, `routes/analytics.js`,
   `routes/adminSaas.js`, `routes/audit.js`, `routes/companies.js`,
   `routes/completeInspection.js`, `routes/odometer.js`, `routes/photo-requirements.js`.
 - Уже вынесены: `utils/transliteration.js`, `utils/env.js`, `utils/asserts.js`,
@@ -335,6 +341,34 @@ defects, photos, analytics, dashboard, seed, demo-data.
 - `node --check backend/src/server.js` — clean.
 - `node --check backend/src/routes/photos.js` — clean.
 
+## Epic 3.3.4.6: Dashboard / analytics routes extraction (✅ 2026-06-03)
+
+### What moved
+
+**`backend/src/routes/dashboard.js`** (new, 63 nonblank lines):
+- `/api/notifications`
+- `/api/dashboard/stats`
+
+**`backend/src/routes/analytics.js`** (new, 166 nonblank lines):
+- `/api/analytics/overview`
+- `/api/analytics/export/excel`
+
+### Changes in `server.js`
+
+- Removed notification, dashboard stats and analytics route handlers from
+  `server.js`.
+- `server.js` now wires `registerDashboardRoutes(...)` and
+  `registerAnalyticsRoutes(...)`.
+- `readSettings`, `API_MESSAGES` and `ensureCompanyFeatureEnabled` stay wired
+  from `server.js` to preserve existing runtime behavior.
+- `server.js`: 1 494 → **1 287 nonblank lines** (−207 net).
+
+### Verification
+
+- `node --check backend/src/server.js` — clean.
+- `node --check backend/src/routes/dashboard.js` — clean.
+- `node --check backend/src/routes/analytics.js` — clean.
+
 ## Целевая структура
 
 ```txt
@@ -381,9 +415,9 @@ backend/src/
 3. ✅ **3.3.3 (2026-06-02):** Photo upload / multer extraction — `services/photoUpload.js`
    (multer disk storage, `ALLOWED_UPLOAD_MIME_TYPES`, sharp pipeline,
    EXIF stripping, geo-tagging, thumbnail).
-4. **3.3.4 ⏳:** Routes extraction — `routes/auth.js` (login, MFA, owner-setup) ✅,
+4. ✅ **3.3.4 (2026-06-03):** Routes extraction — `routes/auth.js` (login, MFA, owner-setup) ✅,
    `routes/regions.js` ✅, `routes/vehicles.js` ✅, `routes/inspections.js` ✅, `routes/defects.js` ✅,
-   `routes/photos.js` ✅, `routes/analytics.js`, `routes/dashboard.js`.
+   `routes/photos.js` ✅, `routes/analytics.js` ✅, `routes/dashboard.js` ✅.
 5. **3.3.5 ⏳:** Seed extraction — `seed/regions.js`, `seed/admin.js`,
    `seed/demoData.js`.
 6. **3.3.6 ⏳:** HTTP server bootstrap — `app.js` factory, `server.js` ~50 строк
@@ -429,6 +463,10 @@ backend/src/
 - **2026-06-03:** Epic 3.3.4.5 ✅ — photos routes extraction.
   `server.js` 1 625 → 1 494 nonblank строк. Новый `routes/photos.js`
   (163 nonblank строк) содержит inspection/defect photo upload and photo delete routes.
+- **2026-06-03:** Epic 3.3.4.6 ✅ — dashboard / analytics routes extraction.
+  `server.js` 1 494 → 1 287 nonblank строк. Новые модули:
+  `routes/dashboard.js` 63, `routes/analytics.js` 166 nonblank строк
+  содержат notifications, dashboard stats, analytics overview and analytics export.
 
 ## Effort / Risk
 
