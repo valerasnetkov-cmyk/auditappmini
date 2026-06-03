@@ -32,6 +32,9 @@
   HTTP listen, socket tracking and graceful shutdown.
 - **Epic 3.3 backend app decomposition**: tenant user list/detail/create/update/
   delete routes moved from `backend/src/app.js` to `backend/src/routes/users.js`.
+- **Epic 3.3 backend app decomposition**: tenant company usage and service
+  notification recipient routes moved from `backend/src/app.js` to
+  `backend/src/routes/companyUsage.js`.
 - **Resource admin вместо Directus CMS**: принято архитектурное решение отказаться от Directus как активной части проекта. Управление компаниями, владельцами, тарифами и лимитами переносится во встроенный backend/web контур "Администрирование ресурса".
 - **Границы роли `admin`**: администратор ресурса отвечает за весь сервисный уровень проекта, но не является владельцем или менеджером компаний и не получает доступ к технике, осмотрам, дефектам, фото и пользовательскому назначению внутри tenant-контуров.
 - **Smoke-gate**: backend smoke больше не содержит Directus service/mock проверки и включает MFA login flow, resource-admin CRUD, tenant isolation и лимиты компаний.

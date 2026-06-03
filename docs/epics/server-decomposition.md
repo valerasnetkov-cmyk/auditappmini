@@ -59,6 +59,10 @@
   create/update/delete routes moved to `backend/src/routes/users.js`. `app.js`:
   1 090 → 1 013 nonblank lines (−77 net); `routes/users.js`: 118 nonblank
   lines.
+- **3.3.8 ✅ Company usage routes extraction (2026-06-04):** tenant company
+  usage summary and service notification recipient routes moved to
+  `backend/src/routes/companyUsage.js`. `app.js`: 1 013 → 767 nonblank lines
+  (−246 net); `routes/companyUsage.js`: 279 nonblank lines.
 
 ## Цель
 
@@ -69,12 +73,13 @@ defects, photos, analytics, dashboard, seed, demo-data.
 ## Текущее состояние (подтверждено в коде)
 
 - `backend/src/server.js` — **81 nonblank строк** (был 3 315, после Epic 3.3.1–3.3.6).
-- `backend/src/app.js` — **1 013 nonblank строк**: Express app factory,
+- `backend/src/app.js` — **767 nonblank строк**: Express app factory,
   middleware chain wiring, rate limit, protected uploads, settings/reference
   routes and all extracted route module registrations.
 - Уже вынесены: `routes/auth.js`, `routes/regions.js`, `routes/vehicles.js`,
   `routes/inspections.js`, `routes/defects.js`, `routes/photos.js`,
   `routes/dashboard.js`, `routes/analytics.js`, `routes/users.js`,
+  `routes/companyUsage.js`,
   `routes/adminSaas.js`, `routes/audit.js`, `routes/companies.js`,
   `routes/completeInspection.js`, `routes/odometer.js`, `routes/photo-requirements.js`.
 - Уже вынесены: `utils/transliteration.js`, `utils/env.js`, `utils/asserts.js`,
@@ -455,6 +460,31 @@ defects, photos, analytics, dashboard, seed, demo-data.
 - `node --check backend/src/routes/users.js` — clean.
 - `npm --prefix backend run smoke:auth` — clean.
 
+## Epic 3.3.8: Company usage routes extraction (✅ 2026-06-04)
+
+### What moved
+
+**`backend/src/routes/companyUsage.js`** (new, 279 nonblank lines):
+- `/api/company/usage`
+- `/api/company/service-notification-recipients`
+- tenant company usage/resource summary helpers.
+- tenant service warnings, company notifications and recipient audit logging.
+
+### Changes in `app.js`
+
+- Removed inline tenant company usage and service-notification-recipient route
+  handlers from `app.js`.
+- Moved route-local subscription summary, service warning, notification,
+  recipient parsing and tenant audit-log helpers to `routes/companyUsage.js`.
+- Removed the direct `uuid` import from `app.js`; route-local audit IDs now live
+  in `routes/companyUsage.js`.
+- `app.js`: 1 013 → **767 nonblank lines** (−246 net).
+
+### Verification
+
+- `node --check backend/src/app.js` — clean.
+- `node --check backend/src/routes/companyUsage.js` — clean.
+
 ## Целевая структура
 
 ```txt
@@ -479,6 +509,7 @@ backend/src/
 │   ├── analytics.js
 │   ├── dashboard.js
 │   ├── users.js
+│   ├── companyUsage.js
 │   ├── companies.js          # уже есть
 │   └── adminSaas.js          # уже есть
 ├── services/
@@ -510,7 +541,9 @@ backend/src/
    (читает config, вызывает `app.listen(...)`, регистрирует graceful shutdown
    `SIGTERM`/`SIGINT`).
 7. ✅ **3.3.7 (2026-06-04):** Users routes extraction — `routes/users.js`.
-8. **3.3.8 ⏳:** Прогнать все smoke-тесты и `verify:launch` после каждой
+8. ✅ **3.3.8 (2026-06-04):** Company usage routes extraction —
+   `routes/companyUsage.js`.
+9. **3.3.9 ⏳:** Прогнать все smoke-тесты и `verify:launch` после каждой
    mini-epic.
 
 ## Критерии приёмки
@@ -565,6 +598,10 @@ backend/src/
 - **2026-06-04:** Epic 3.3.7 ✅ — users routes extraction.
   `app.js` 1 090 → 1 013 nonblank строк. Новый `routes/users.js`
   (118 nonblank строк) содержит tenant user list/detail/create/update/delete routes.
+- **2026-06-04:** Epic 3.3.8 ✅ — company usage routes extraction.
+  `app.js` 1 013 → 767 nonblank строк. Новый `routes/companyUsage.js`
+  (279 nonblank строк) содержит tenant company usage summary and service
+  notification recipient routes.
 
 ## Effort / Risk
 
@@ -575,5 +612,7 @@ backend/src/
 ## Связанные документы
 
 - `docs/audit-2026-06-02.md` § 3.3.
+- `docs/audit-2026-06-03.md` § Epic 3.3.
+- `docs/audit-2026-06-04.md` § Epic 3.3.
 - `CHANGELOG.md` § "Unreleased" → "Качество кода и поддержка" → "Монолитный
   `server.js`" (открытый backlog).
