@@ -17,6 +17,7 @@ import registerDashboardRoutes from './routes/dashboard.js'
 import registerAnalyticsRoutes from './routes/analytics.js'
 import registerUserRoutes from './routes/users.js'
 import registerSettingsRoutes from './routes/settings.js'
+import registerProtectedUploadRoutes from './routes/uploads.js'
 import registerDemoDataSeedRoutes from './seed/demoData.js'
 import { registerOdometerRoutes, registerVehicleNumberRecognitionRoutes } from './routes/odometer.js'
 import { photoRequirements, registerPhotoRequirementRoutes } from './routes/photo-requirements.js'
@@ -26,9 +27,6 @@ import {
   uploadsDir,
   upload,
   isUploadMiddlewareError,
-  getMimeType,
-  buildUploadUrl,
-  resolveUploadPath,
   removePhotoFilesForRows,
   uploadPhoto,
   removeFileIfExists,
@@ -268,34 +266,11 @@ const PHOTO_SELECT_COLUMNS = `
   geo, is_required, created_at
 `
 
-// Protected uploads - require authentication and tenant ownership.
-app.get('/uploads/*', authenticate, (req, res) => {
-  const resolved = resolveUploadPath(req.params[0])
-  if (!resolved) {
-    return sendError(res, 400, 'Invalid upload path')
-  }
-
-  const url = buildUploadUrl(resolved.relativePath)
-  const companyId = req.user.company_id || 'default'
-  const photo = db.prepare(`
-    SELECT id
-    FROM photos
-    WHERE company_id = ?
-      AND (url = ? OR original_url = ? OR webp_url = ? OR thumb_url = ?)
-  `).get(companyId, url, url, url, url)
-
-  if (!photo) {
-    return sendError(res, 404, 'Photo not found')
-  }
-
-  const filePath = resolved.filePath
-  if (!fs.existsSync(filePath)) {
-    return sendError(res, 404, 'Photo file not found')
-  }
-
-  res.setHeader('Content-Type', getMimeType(filePath))
-  res.setHeader('Cache-Control', 'private, max-age=31536000')
-  res.sendFile(filePath)
+registerProtectedUploadRoutes({
+  app,
+  authenticate,
+  getDb: () => db,
+  sendError,
 })
 
 const db = getDb()

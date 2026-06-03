@@ -68,6 +68,9 @@
   and defect category endpoints are now registered from
   `backend/src/routes/photo-requirements.js`. `app.js`: 767 → 739 nonblank
   lines (−28 net); `routes/settings.js`: 31 nonblank lines.
+- **3.3.10 ✅ Protected uploads route extraction (2026-06-04):** authenticated
+  `/uploads/*` route moved to `backend/src/routes/uploads.js`. `app.js`:
+  739 → 718 nonblank lines (−21 net); `routes/uploads.js`: 37 nonblank lines.
 
 ## Цель
 
@@ -78,7 +81,7 @@ defects, photos, analytics, dashboard, seed, demo-data.
 ## Текущее состояние (подтверждено в коде)
 
 - `backend/src/server.js` — **81 nonblank строк** (был 3 315, после Epic 3.3.1–3.3.6).
-- `backend/src/app.js` — **739 nonblank строк**: Express app factory,
+- `backend/src/app.js` — **718 nonblank строк**: Express app factory,
   middleware chain wiring, rate limit, protected uploads, settings/reference
   routes and all extracted route module registrations.
 - Уже вынесены: `routes/auth.js`, `routes/regions.js`, `routes/vehicles.js`,
@@ -86,6 +89,7 @@ defects, photos, analytics, dashboard, seed, demo-data.
   `routes/dashboard.js`, `routes/analytics.js`, `routes/users.js`,
   `routes/companyUsage.js`,
   `routes/settings.js`,
+  `routes/uploads.js`,
   `routes/adminSaas.js`, `routes/audit.js`, `routes/companies.js`,
   `routes/completeInspection.js`, `routes/odometer.js`, `routes/photo-requirements.js`.
 - Уже вынесены: `utils/transliteration.js`, `utils/env.js`, `utils/asserts.js`,
@@ -519,6 +523,29 @@ defects, photos, analytics, dashboard, seed, demo-data.
 - `node --check backend/src/routes/settings.js` — clean.
 - `node --check backend/src/routes/photo-requirements.js` — clean.
 
+## Epic 3.3.10: Protected uploads route extraction (✅ 2026-06-04)
+
+### What moved
+
+**`backend/src/routes/uploads.js`** (new, 37 nonblank lines):
+- authenticated `/uploads/*` route.
+- tenant ownership lookup for photo URLs.
+- protected file response headers and MIME detection.
+
+### Changes in `app.js`
+
+- Removed inline protected upload route handler from `app.js`.
+- `app.js` now wires `registerProtectedUploadRoutes(...)` with `getDb: () => db`
+  to preserve the existing declaration order.
+- Removed direct `getMimeType`, `buildUploadUrl` and `resolveUploadPath` imports
+  from `app.js`.
+- `app.js`: 739 → **718 nonblank lines** (−21 net).
+
+### Verification
+
+- `node --check backend/src/app.js` — clean.
+- `node --check backend/src/routes/uploads.js` — clean.
+
 ## Целевая структура
 
 ```txt
@@ -545,6 +572,7 @@ backend/src/
 │   ├── users.js
 │   ├── companyUsage.js
 │   ├── settings.js
+│   ├── uploads.js
 │   ├── companies.js          # уже есть
 │   └── adminSaas.js          # уже есть
 ├── services/
@@ -580,7 +608,9 @@ backend/src/
    `routes/companyUsage.js`.
 9. ✅ **3.3.9 (2026-06-04):** Settings / reference routes extraction —
    `routes/settings.js` + `routes/photo-requirements.js` registration.
-10. **3.3.10 ⏳:** Прогнать все smoke-тесты и `verify:launch` после каждой
+10. ✅ **3.3.10 (2026-06-04):** Protected uploads route extraction —
+   `routes/uploads.js`.
+11. **3.3.11 ⏳:** Прогнать все smoke-тесты и `verify:launch` после каждой
    mini-epic.
 
 ## Критерии приёмки
@@ -643,6 +673,10 @@ backend/src/
   `app.js` 767 → 739 nonblank строк. Новый `routes/settings.js`
   (31 nonblank строк) содержит `/api/settings`; `routes/photo-requirements.js`
   теперь регистрирует photo requirement and defect category reference endpoints.
+- **2026-06-04:** Epic 3.3.10 ✅ — protected uploads route extraction.
+  `app.js` 739 → 718 nonblank строк. Новый `routes/uploads.js`
+  (37 nonblank строк) содержит authenticated `/uploads/*` route and tenant photo
+  ownership checks.
 
 ## Effort / Risk
 
