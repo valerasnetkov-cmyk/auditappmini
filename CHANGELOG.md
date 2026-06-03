@@ -7,6 +7,11 @@
   registration, logout and session routes moved from `backend/src/server.js`
   to `backend/src/routes/auth.js`; `server.js` now wires the route module and
   keeps the existing behavior.
+- **Epic 3.3.4 backend routes extraction**: region and vehicle list/detail,
+  CRUD, import, archive, history and vehicle-defect routes moved from
+  `backend/src/server.js` to `backend/src/routes/regions.js` and
+  `backend/src/routes/vehicles.js`; shared region helpers moved to
+  `backend/src/services/regions.js`.
 - **Resource admin вместо Directus CMS**: принято архитектурное решение отказаться от Directus как активной части проекта. Управление компаниями, владельцами, тарифами и лимитами переносится во встроенный backend/web контур "Администрирование ресурса".
 - **Границы роли `admin`**: администратор ресурса отвечает за весь сервисный уровень проекта, но не является владельцем или менеджером компаний и не получает доступ к технике, осмотрам, дефектам, фото и пользовательскому назначению внутри tenant-контуров.
 - **Smoke-gate**: backend smoke больше не содержит Directus service/mock проверки и включает MFA login flow, resource-admin CRUD, tenant isolation и лимиты компаний.

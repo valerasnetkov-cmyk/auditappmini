@@ -1,4 +1,4 @@
-# Epic 3.3: Декомпозиция `backend/src/server.js` (3 315 → 2 590 nonblank строк)
+# Epic 3.3: Декомпозиция `backend/src/server.js` (3 315 → 2 071 nonblank строк)
 
 ## Статус
 
@@ -22,6 +22,12 @@
   - **3.3.4.1 ✅ Auth routes extraction (2026-06-03):** auth, MFA, owner setup,
     public registration, logout and session routes moved to `backend/src/routes/auth.js`.
     `server.js`: 2 878 → 2 590 nonblank lines (−288 net); `routes/auth.js`: 331 nonblank lines.
+  - **3.3.4.2 ✅ Regions / vehicles routes extraction (2026-06-03):** region
+    CRUD/list and vehicle list/detail, CRUD, import, archive, history and
+    vehicle-defect routes moved to `backend/src/routes/regions.js` and
+    `backend/src/routes/vehicles.js`. Shared region helpers moved to
+    `backend/src/services/regions.js`. `server.js`: 2 590 → 2 071 nonblank
+    lines (−519 net); new modules: 97 / 429 / 58 nonblank lines.
 - ⏳ 3.3.5 Seed / demo-data вынос в `seed/`.
 - ⏳ 3.3.6 HTTP server bootstrap (server.js → ~50 строк) с graceful shutdown.
 
@@ -33,10 +39,11 @@ defects, photos, analytics, dashboard, seed, demo-data.
 
 ## Текущее состояние (подтверждено в коде)
 
-- `backend/src/server.js` — **2 590 nonblank строк** (был 3 315, после Epic 3.3.1–3.3.4.1).
+- `backend/src/server.js` — **2 071 nonblank строк** (был 3 315, после Epic 3.3.1–3.3.4.2).
 - Содержит: middleware chain wiring, rate limit, MFA,
   vehicles, inspections, defects, photos, analytics, dashboard, seed.
-- Уже вынесены: `routes/auth.js`, `routes/adminSaas.js`, `routes/audit.js`, `routes/companies.js`,
+- Уже вынесены: `routes/auth.js`, `routes/regions.js`, `routes/vehicles.js`,
+  `routes/adminSaas.js`, `routes/audit.js`, `routes/companies.js`,
   `routes/completeInspection.js`, `routes/odometer.js`, `routes/photo-requirements.js`.
 - Уже вынесены: `utils/transliteration.js`, `utils/env.js`, `utils/asserts.js`,
   `services/secretStore.js`, `services/redisClient.js`, `services/rateLimiter.js`,
@@ -206,6 +213,40 @@ defects, photos, analytics, dashboard, seed, demo-data.
 - `node --check backend/src/server.js` — clean.
 - `node --check backend/src/routes/auth.js` — clean.
 
+## Epic 3.3.4.2: Regions / vehicles routes extraction (✅ 2026-06-03)
+
+### What moved
+
+**`backend/src/routes/regions.js`** (new, 97 nonblank lines):
+- `/api/regions` list/create/update/delete routes.
+
+**`backend/src/routes/vehicles.js`** (new, 429 nonblank lines):
+- `/api/vehicles` list/create/update/archive/delete routes.
+- `/api/vehicles/list`
+- `/api/vehicles/import`
+- `/api/vehicles/:id`
+- `/api/vehicles/:id/history`
+- `/api/vehicles/:id/defects`
+- vehicle payload validation, duplicate checks and archive helpers.
+
+**`backend/src/services/regions.js`** (new, 58 nonblank lines):
+- region name normalization, region lookup/list/count helpers and mutation helpers.
+
+### Changes in `server.js`
+
+- Removed inline region and vehicle route handlers.
+- Removed vehicle-only validation/mutation helpers from `server.js`.
+- `server.js` now wires `registerRegionRoutes(...)` and `registerVehicleRoutes(...)`.
+- `getVehicleById(...)` stays in `server.js` for remaining inspections/photos/dashboard blocks.
+- `server.js`: 2 590 → **2 071 nonblank lines** (−519 net).
+
+### Verification
+
+- `node --check backend/src/server.js` — clean.
+- `node --check backend/src/routes/regions.js` — clean.
+- `node --check backend/src/routes/vehicles.js` — clean.
+- `node --check backend/src/services/regions.js` — clean.
+
 ## Целевая структура
 
 ```txt
@@ -253,7 +294,7 @@ backend/src/
    (multer disk storage, `ALLOWED_UPLOAD_MIME_TYPES`, sharp pipeline,
    EXIF stripping, geo-tagging, thumbnail).
 4. **3.3.4 ⏳:** Routes extraction — `routes/auth.js` (login, MFA, owner-setup) ✅,
-   `routes/vehicles.js`, `routes/inspections.js`, `routes/defects.js`,
+   `routes/regions.js` ✅, `routes/vehicles.js` ✅, `routes/inspections.js`, `routes/defects.js`,
    `routes/photos.js`, `routes/analytics.js`, `routes/dashboard.js`.
 5. **3.3.5 ⏳:** Seed extraction — `seed/regions.js`, `seed/admin.js`,
    `seed/demoData.js`.
@@ -287,6 +328,10 @@ backend/src/
 - **2026-06-03:** Epic 3.3.4.1 ✅ — auth routes extraction. `server.js` 2 878 →
   2 590 nonblank строк. Новый `routes/auth.js` (331 nonblank строка)
   содержит login/session, MFA, owner setup, public registration, logout and `/me` routes.
+- **2026-06-03:** Epic 3.3.4.2 ✅ — regions / vehicles routes extraction.
+  `server.js` 2 590 → 2 071 nonblank строк. Новые модули:
+  `routes/regions.js` 97, `routes/vehicles.js` 429, `services/regions.js` 58
+  nonblank строк.
 
 ## Effort / Risk
 

@@ -3,17 +3,15 @@ import express from 'express'
 import bcrypt from 'bcryptjs'
 import { v4 as uuidv4 } from 'uuid'
 import path from 'path'
-import {
-  LICENSE_PLATE_ALLOWED_CYRILLIC,
-  normalizeVehicleNumberToCyrillic,
-  isValidRussianLicensePlate,
-} from './utils/transliteration.js'
+import { LICENSE_PLATE_ALLOWED_CYRILLIC } from './utils/transliteration.js'
 import fs from 'fs'
 import { initDatabase, getDb } from './db.js'
 import registerCompleteInspectionRoutes from './routes/completeInspection.js'
 import registerCompanyRoutes from './routes/companies.js'
 import registerAuthRoutes, { createOwnerSetupInvitationFactory } from './routes/auth.js'
 import registerSaasAdminRoutes from './routes/adminSaas.js'
+import registerRegionRoutes from './routes/regions.js'
+import registerVehicleRoutes from './routes/vehicles.js'
 import { registerOdometerRoutes, registerVehicleNumberRecognitionRoutes } from './routes/odometer.js'
 import { photoRequirements, photoTypeLabels, defectCategories } from './routes/photo-requirements.js'
 import { createRateLimiter } from './services/rateLimiter.js'
@@ -59,8 +57,6 @@ import {
 const app = express()
 const PORT = process.env.PORT || 3001
 let isShuttingDown = false
-
-const VEHICLE_STATUSES = new Set(['active', 'repair', 'archived'])
 
 app.disable('x-powered-by')
 app.set('trust proxy', TRUST_PROXY)
@@ -344,22 +340,6 @@ function getVehicleById(id, companyId = null) {
   `)
 
   return companyId ? query.get(id, companyId) : query.get(id)
-}
-
-function getVehicleByNumber(number, companyId = null) {
-  const query = companyId
-    ? db.prepare(`
-      SELECT id, number, name, status, region, company_id, created_at, last_scheduled_inspection
-      FROM vehicles
-      WHERE number = ? AND company_id = ?
-    `)
-    : db.prepare(`
-    SELECT id, number, name, status, region, company_id, created_at, last_scheduled_inspection
-    FROM vehicles
-    WHERE number = ?
-  `)
-
-  return companyId ? query.get(number, companyId) : query.get(number)
 }
 
 function normalizeCompanyLimit(value) {
@@ -704,43 +684,6 @@ function writeTenantAuditLog(req, action, entityType, entityId, payload = null) 
   }
 }
 
-function getRegionByName(name) {
-  return db.prepare('SELECT id, name, created_at FROM regions WHERE name = ?').get(name)
-}
-
-function getRegionById(id) {
-  return db.prepare('SELECT id, name, created_at FROM regions WHERE id = ?').get(id)
-}
-
-function countVehiclesByRegion(regionName, companyId = null) {
-  const query = companyId
-    ? db.prepare('SELECT COUNT(*) as count FROM vehicles WHERE region = ? AND company_id = ?')
-    : db.prepare('SELECT COUNT(*) as count FROM vehicles WHERE region = ?')
-
-  const result = companyId ? query.get(regionName, companyId) : query.get(regionName)
-  return Number(result?.count || 0)
-}
-
-function listRegions(companyId = null) {
-  if (companyId) {
-    return db.prepare(`
-      SELECT r.id, r.name, r.created_at, COUNT(v.id) as vehicle_count
-      FROM regions r
-      LEFT JOIN vehicles v ON v.region = r.name AND v.company_id = ?
-      GROUP BY r.id, r.name, r.created_at
-      ORDER BY r.name
-    `).all(companyId)
-  }
-
-  return db.prepare(`
-    SELECT r.id, r.name, r.created_at, COUNT(v.id) as vehicle_count
-    FROM regions r
-    LEFT JOIN vehicles v ON v.region = r.name
-    GROUP BY r.id, r.name, r.created_at
-    ORDER BY r.name
-  `).all()
-}
-
 function getInspectionById(id, companyId = null) {
   const query = companyId
     ? db.prepare('SELECT * FROM inspections WHERE id = ? AND company_id = ?')
@@ -823,127 +766,8 @@ function updateUserRecord(id, { email, name, role, status, passwordHash, company
   }
 }
 
-function createVehicleRecord({ id, number, name, status, region, companyId = 'default' }) {
-  return db.prepare(`
-    INSERT INTO vehicles (id, number, name, status, region, company_id)
-    VALUES (?, ?, ?, ?, ?, ?)
-  `).run(id, number, name, status, region, companyId)
-}
-
-function updateVehicleRecord(id, { number, name, status, region, companyId = null }) {
-  const query = companyId
-    ? db.prepare(`
-      UPDATE vehicles SET number = ?, name = ?, status = ?, region = ?
-      WHERE id = ? AND company_id = ?
-    `)
-    : db.prepare(`
-    UPDATE vehicles SET number = ?, name = ?, status = ?, region = ?
-    WHERE id = ?
-  `)
-
-  return companyId
-    ? query.run(number.toUpperCase(), name, status, region || null, id, companyId)
-    : query.run(number.toUpperCase(), name, status, region || null, id)
-}
-
-function recordVehicleStatusChange({ vehicleId, oldStatus, newStatus, reason, changedBy }) {
-  return db.prepare(`
-    INSERT INTO vehicle_status_history (id, vehicle_id, old_status, new_status, reason, changed_by, created_at)
-    VALUES (?, ?, ?, ?, ?, ?, datetime('now'))
-  `).run(uuidv4(), vehicleId, oldStatus, newStatus, reason || null, changedBy)
-}
-
-function archiveVehiclesByIds({ ids, companyId, changedBy }) {
-  const uniqueIds = [...new Set((Array.isArray(ids) ? ids : []).map((id) => String(id || '').trim()).filter(Boolean))]
-
-  if (uniqueIds.length === 0) {
-    return { error: 'Не выбрана техника для архивации', status: 400 }
-  }
-
-  if (uniqueIds.length > 500) {
-    return { error: 'За один раз можно архивировать не более 500 единиц техники', status: 400 }
-  }
-
-  const placeholders = uniqueIds.map(() => '?').join(', ')
-  const existingVehicles = db.prepare(`
-    SELECT id, status
-    FROM vehicles
-    WHERE company_id = ? AND id IN (${placeholders})
-  `).all(companyId, ...uniqueIds)
-
-  if (existingVehicles.length === 0) {
-    return { error: API_MESSAGES.vehicleNotFound, status: 404 }
-  }
-
-  const vehiclesToArchive = existingVehicles.filter((vehicle) => vehicle.status !== 'archived')
-  if (vehiclesToArchive.length === 0) {
-    return {
-      requested: uniqueIds.length,
-      matched: existingVehicles.length,
-      archived: 0,
-      skipped: uniqueIds.length,
-      ids: [],
-    }
-  }
-
-  const archiveIds = vehiclesToArchive.map((vehicle) => vehicle.id)
-  const archivePlaceholders = archiveIds.map(() => '?').join(', ')
-
-  db.prepare(`
-    UPDATE vehicles
-    SET status = 'archived'
-    WHERE company_id = ? AND id IN (${archivePlaceholders})
-  `).run(companyId, ...archiveIds)
-
-  vehiclesToArchive.forEach((vehicle) => {
-    recordVehicleStatusChange({
-      vehicleId: vehicle.id,
-      oldStatus: vehicle.status,
-      newStatus: 'archived',
-      reason: 'Archived from vehicles list',
-      changedBy,
-    })
-  })
-
-  return {
-    requested: uniqueIds.length,
-    matched: existingVehicles.length,
-    archived: vehiclesToArchive.length,
-    skipped: uniqueIds.length - vehiclesToArchive.length,
-    ids: archiveIds,
-  }
-}
-
 function upsertSettingValue(key, value) {
   return db.prepare('INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)').run(key, String(value))
-}
-
-function createRegionRecord(name) {
-  return db.prepare(`
-    INSERT INTO regions (id, name, created_at)
-    VALUES (?, ?, datetime('now'))
-  `).run(uuidv4(), name)
-}
-
-function deleteRegionRecord(id) {
-  return db.prepare('DELETE FROM regions WHERE id = ?').run(id)
-}
-
-function ensureRegionRecordByName(name, companyId = null) {
-  const regionName = normalizeRegionName(name)
-  if (!regionName) return null
-
-  const existing = getRegionByName(regionName)
-  if (existing) return existing
-
-  if (countVehiclesByRegion(regionName, companyId) === 0) return null
-
-  createRegionRecord(regionName)
-  return getRegionByName(regionName)
-}
-
-function getRegionForMutation(id, fallbackName, companyId = null) {
-  return getRegionById(id) || ensureRegionRecordByName(fallbackName, companyId)
 }
 
 function randomInteger(maxExclusive) {
@@ -1033,47 +857,6 @@ registerVehicleNumberRecognitionRoutes({ app, db, authenticate, API_MESSAGES, up
 function sendInternalError(res, scope, err) {
   console.error(`${scope}:`, err)
   return res.status(500).json({ error: API_MESSAGES.internalServerError })
-}
-
-function normalizeRegionName(region) {
-  if (typeof region !== 'string') return null
-  const trimmed = region.trim()
-  return trimmed.length > 0 ? trimmed : null
-}
-
-function normalizeVehicleNumber(number) {
-  return normalizeVehicleNumberToCyrillic(number)
-}
-
-function validateVehiclePayload({ number, name, region }) {
-  const normalizedNumber = normalizeVehicleNumber(number)
-  const normalizedName = typeof name === 'string' ? name.trim() : ''
-  const normalizedRegion = normalizeRegionName(region)
-
-  if (!normalizedNumber || !normalizedName) {
-    return { error: API_MESSAGES.vehicleFieldsRequired }
-  }
-
-  if (!isValidRussianLicensePlate(normalizedNumber)) {
-    return { error: API_MESSAGES.invalidVehicleNumber }
-  }
-
-  if (normalizedRegion && !getRegionByName(normalizedRegion)) {
-    return { error: API_MESSAGES.invalidRegion }
-  }
-
-  return {
-    number: normalizedNumber,
-    name: normalizedName,
-    region: normalizedRegion,
-  }
-}
-
-function ensureVehicleNumberAvailable(number, currentVehicleId = null, companyId = null) {
-  const existingVehicle = getVehicleByNumber(number, companyId)
-  if (!existingVehicle) return null
-  if (currentVehicleId && existingVehicle.id === currentVehicleId) return null
-  return API_MESSAGES.vehicleNumberExists
 }
 
 const ASSIGNABLE_USER_ROLES = new Set(['inspector', 'manager'])
@@ -1406,447 +1189,32 @@ app.delete('/api/users/:id', authenticate, (req, res) => {
 
 // ============ REGIONS ============
 
-app.get('/api/regions', authenticate, (req, res) => {
-  const includeEmpty = req.query.includeEmpty === '1' || req.query.includeEmpty === 'true'
-  const companyId = req.user.company_id || 'default'
-  const regions = listRegions(companyId)
-  const normalizedRegions = regions.map((region) => ({
-    ...region,
-    vehicle_count: Number(region.vehicle_count || 0),
-    vehicleCount: Number(region.vehicle_count || 0),
-  }))
-
-  res.json(includeEmpty ? normalizedRegions : normalizedRegions.filter((region) => region.vehicle_count > 0))
-})
-
-app.post('/api/regions', authenticate, (req, res) => {
-  if (!ensureManager(req, res)) return
-  if (!ensureCompanyOperationalWriteAllowed(req, res, { mode: 'write' })) return
-
-  const regionName = normalizeRegionName(req.body?.name)
-  if (!regionName) {
-    return sendError(res, 400, API_MESSAGES.regionNameRequired)
-  }
-
-  if (getRegionByName(regionName)) {
-    return sendError(res, 400, API_MESSAGES.regionAlreadyExists)
-  }
-
-  createRegionRecord(regionName)
-  const region = getRegionByName(regionName)
-  res.status(201).json({ ...region, vehicle_count: 0, vehicleCount: 0 })
-})
-
-app.put('/api/regions/:id', authenticate, (req, res) => {
-  if (!ensureManager(req, res)) return
-  if (!ensureCompanyOperationalWriteAllowed(req, res, { mode: 'write' })) return
-
-  const companyId = req.user.company_id || 'default'
-  
-  const region = getRegionForMutation(req.params.id, req.body?.currentName, companyId)
-  if (!region) {
-    return sendError(res, 404, API_MESSAGES.regionNotFound)
-  }
-  
-  const newName = normalizeRegionName(req.body?.name)
-  if (!newName) {
-    return sendError(res, 400, API_MESSAGES.regionNameRequired)
-  }
-  
-  const existing = getRegionByName(newName)
-  if (existing && existing.id !== region.id) {
-    db.prepare('UPDATE vehicles SET region = ? WHERE region = ? AND company_id = ?').run(existing.name, region.name, companyId)
-    if (countVehiclesByRegion(region.name) === 0) {
-      deleteRegionRecord(region.id)
-    }
-
-    const vehicleCount = countVehiclesByRegion(existing.name, companyId)
-    return res.json({
-      id: existing.id,
-      name: existing.name,
-      vehicle_count: vehicleCount,
-      vehicleCount,
-      merged_from: region.name,
-      merged_into: existing.name,
-    })
-  }
-  
-  db.prepare('UPDATE vehicles SET region = ? WHERE region = ? AND company_id = ?').run(newName, region.name, companyId)
-  if (countVehiclesByRegion(region.name) === 0) {
-    db.prepare('UPDATE regions SET name = ? WHERE id = ?').run(newName, region.id)
-  } else if (!getRegionByName(newName)) {
-    createRegionRecord(newName)
-  }
-  
-  const updatedRegion = getRegionByName(newName)
-  const vehicleCount = countVehiclesByRegion(newName, companyId)
-  res.json({ id: updatedRegion?.id || region.id, name: newName, vehicle_count: vehicleCount, vehicleCount })
-})
-
-app.delete('/api/regions/:id', authenticate, (req, res) => {
-  if (!ensureManager(req, res)) return
-  if (!ensureCompanyOperationalWriteAllowed(req, res, { mode: 'write' })) return
-
-  const companyId = req.user.company_id || 'default'
-
-  const region = getRegionById(req.params.id)
-  if (!region) {
-    return sendError(res, 404, API_MESSAGES.regionNotFound)
-  }
-
-  db.prepare('UPDATE vehicles SET region = NULL WHERE region = ? AND company_id = ?').run(region.name, companyId)
-  if (countVehiclesByRegion(region.name) === 0) {
-    deleteRegionRecord(req.params.id)
-  }
-  res.status(204).send()
+registerRegionRoutes({
+  app,
+  db,
+  authenticate,
+  sendError,
+  API_MESSAGES,
+  ensureManager,
+  ensureCompanyOperationalWriteAllowed,
 })
 
 // ============ VEHICLES ============
 
-app.get('/api/vehicles', authenticate, (req, res) => {
-  const { page = 1, limit = 20, search = '', status = 'all' } = req.query
-  const offset = (page - 1) * limit
-  const companyId = req.user.company_id || 'default'
-
-  let whereClause = 'company_id = ?'
-  const params = [companyId]
-
-  if (search) {
-    whereClause += ' AND (number LIKE ? OR name LIKE ?)'
-    params.push(`%${search}%`, `%${search}%`)
-  }
-
-  if (status && status !== 'all') {
-    if (!VEHICLE_STATUSES.has(String(status))) {
-      return sendError(res, 400, 'Неизвестный статус техники')
-    }
-    whereClause += ' AND status = ?'
-    params.push(status)
-  } else {
-    whereClause += " AND status != 'archived'"
-  }
-
-  const countQuery = db.prepare(`SELECT COUNT(*) as count FROM vehicles WHERE ${whereClause}`)
-  const { count } = countQuery.get(...params)
-
-  const query = db.prepare(`
-    SELECT id, number, name, status, region, company_id, created_at, last_scheduled_inspection
-    FROM vehicles
-    WHERE ${whereClause}
-    ORDER BY created_at DESC 
-    LIMIT ? OFFSET ?
-  `)
-  const vehicles = query.all(...params, Number(limit), offset)
-
-  // Get last inspection and defects count for each vehicle
-  const vehiclesWithStats = vehicles.map(v => {
-    const lastInspection = db.prepare(`
-      SELECT id, created_at FROM inspections 
-      WHERE vehicle_id = ? ORDER BY created_at DESC LIMIT 1
-    `).get(v.id)
-
-    const defectsCount = db.prepare(`
-      SELECT COUNT(*) as count FROM defects d
-      JOIN inspections i ON d.inspection_id = i.id
-      WHERE i.vehicle_id = ?
-    `).get(v.id).count
-
-    return { ...v, lastInspection, defectsCount: Number(defectsCount) }
-  })
-
-  res.json({
-    data: vehiclesWithStats,
-    pagination: {
-      page: Number(page),
-      limit: Number(limit),
-      total: count,
-      pages: Math.ceil(count / limit)
-    }
-  })
-})
-
-app.get('/api/vehicles/list', authenticate, (req, res) => {
-  try {
-    const companyId = req.user.company_id || 'default'
-    const vehicles = db.prepare(`
-      SELECT id, number, name, status, region
-      FROM vehicles
-      WHERE company_id = ? AND status != 'archived'
-      ORDER BY number
-    `).all(companyId)
-    res.json(vehicles)
-  } catch (err) {
-    console.error('Vehicles list error:', err)
-    return sendInternalError(res, 'Vehicles list error', err)
-  }
-})
-
-app.get('/api/vehicles/:id/history', authenticate, (req, res) => {
-  const companyId = req.user.company_id || 'default'
-  const vehicle = getVehicleById(req.params.id, companyId)
-  if (!vehicle) {
-    return sendError(res, 404, API_MESSAGES.vehicleNotFound)
-  }
-
-  const history = db.prepare(`
-    SELECT h.*, u.name as changed_by_name
-    FROM vehicle_status_history h
-    LEFT JOIN users u ON h.changed_by = u.id
-    WHERE h.vehicle_id = ?
-    ORDER BY h.created_at DESC
-  `).all(req.params.id)
-  res.json(history)
-})
-
-app.get('/api/vehicles/:id/defects', authenticate, (req, res) => {
-  const companyId = req.user.company_id || 'default'
-  const vehicle = getVehicleById(req.params.id, companyId)
-  if (!vehicle) {
-    return sendError(res, 404, API_MESSAGES.vehicleNotFound)
-  }
-
-  const limit = Number(req.query.limit || 20)
-  const defects = db.prepare(`
-    SELECT d.id, d.inspection_id, d.title, d.comment, d.created_at, d.status, d.closed_at,
-           i.type as inspection_type, i.created_at as inspection_date, i.created_at as inspection_time,
-           i.accident_occurred_at, i.accident_location,
-           v.id as vehicle_id, v.number as vehicle_number, v.name as vehicle_name, v.region as vehicle_region,
-           u.name as inspector_name
-    FROM defects d
-    JOIN inspections i ON d.inspection_id = i.id
-    JOIN vehicles v ON i.vehicle_id = v.id
-    JOIN users u ON i.inspector_id = u.id
-    WHERE v.id = ? AND v.company_id = ?
-    ORDER BY d.created_at DESC
-    LIMIT ?
-  `).all(req.params.id, companyId, limit)
-
-  const defectsWithPhotos = defects.map((defect) => {
-    const photos = db.prepare(`SELECT ${PHOTO_SELECT_COLUMNS} FROM photos WHERE defect_id = ? AND company_id = ? ORDER BY created_at ASC`).all(defect.id, companyId)
-    return { ...defect, photos }
-  })
-
-  res.json(defectsWithPhotos)
-})
-
-app.get('/api/vehicles/:id', authenticate, (req, res) => {
-  const companyId = req.user.company_id || 'default'
-  const vehicle = getVehicleById(req.params.id, companyId)
-  if (!vehicle) {
-    return sendError(res, 404, API_MESSAGES.vehicleNotFound)
-  }
-  res.json(vehicle)
-})
-
-app.post('/api/vehicles', authenticate, (req, res) => {
-  if (!ensureCompanyOperationalWriteAllowed(req, res, { mode: 'create' })) return
-
-  const { number, name, status = 'active', region } = req.body
-  const companyId = req.user.company_id || 'default'
-  if (!VEHICLE_STATUSES.has(String(status))) {
-    return sendError(res, 400, 'Неизвестный статус техники')
-  }
-
-  const validated = validateVehiclePayload({ number, name, region })
-  if (validated.error) {
-    return sendError(res, 400, validated.error)
-  }
-
-  const duplicateError = ensureVehicleNumberAvailable(validated.number, null, companyId)
-  if (duplicateError) {
-    return sendError(res, 400, duplicateError)
-  }
-
-  const limitViolation = getCompanyLimitViolation(companyId, 'vehicles')
-  if (limitViolation) {
-    return sendCompanyLimitViolation(res, limitViolation)
-  }
-
-  const id = uuidv4()
-
-  createVehicleRecord({
-    id,
-    number: validated.number,
-    name: validated.name,
-    status,
-    region: validated.region,
-    companyId,
-  })
-
-  const vehicle = getVehicleById(id, companyId)
-  res.status(201).json(vehicle)
-})
-
-// POST /api/vehicles/import - bulk import vehicles from CSV
-app.post('/api/vehicles/import', authenticate, (req, res) => {
-  if (!ensureManager(req, res)) return
-  if (!ensureCompanyOperationalWriteAllowed(req, res, { mode: 'create' })) return
-
-  const companyId = req.user.company_id || 'default'
-  
-  const { vehicles } = req.body
-  if (!Array.isArray(vehicles)) {
-    return sendError(res, 400, 'Требуется массив vehicles')
-  }
-  
-  const imported = []
-  const errors = []
-  const regionsAdded = []
-  const vehicleLimitState = getCompanyResourceLimitState(companyId, 'vehicles')
-  
-  // First pass: collect all unique regions and auto-create them
-  const regions = new Set()
-  vehicles.forEach(v => {
-    if (v.region) regions.add(v.region)
-  })
-  
-  regions.forEach(regionName => {
-    const normalized = normalizeRegionName(regionName)
-    if (normalized && !getRegionByName(normalized)) {
-      createRegionRecord(normalized)
-      regionsAdded.push(normalized)
-    }
-  })
-  
-  vehicles.forEach((v, idx) => {
-    const { number, name, region } = v
-    
-    // Use normalized region name if provided, otherwise empty
-    const normalizedRegion = region ? normalizeRegionName(region) : ''
-    
-    const validated = validateVehiclePayload({ number, name, region: normalizedRegion })
-    if (validated.error) {
-      errors.push({ row: idx + 1, error: validated.error })
-      return
-    }
-    
-    const duplicateError = ensureVehicleNumberAvailable(validated.number, null, companyId)
-    if (duplicateError) {
-      errors.push({ row: idx + 1, error: duplicateError })
-      return
-    }
-
-    if (vehicleLimitState && vehicleLimitState.current + imported.length + 1 > vehicleLimitState.max) {
-      errors.push({
-        row: idx + 1,
-        error: `${API_MESSAGES.vehicleLimitExceeded}. Текущее значение: ${vehicleLimitState.current + imported.length}/${vehicleLimitState.max}.`,
-      })
-      return
-    }
-    
-    const id = uuidv4()
-    createVehicleRecord({
-      id,
-      number: validated.number,
-      name: validated.name,
-      status: 'active',
-      region: validated.region,
-      companyId,
-    })
-    imported.push({ number: validated.number })
-  })
-  
-  res.json({ imported: imported.length, errors, vehicles: imported, regionsAdded: regionsAdded.length })
-})
-
-app.post('/api/vehicles/archive', authenticate, (req, res) => {
-  if (!ensureManager(req, res)) return
-  if (!ensureCompanyOperationalWriteAllowed(req, res, { mode: 'write' })) return
-
-  const companyId = req.user.company_id || 'default'
-  const result = archiveVehiclesByIds({
-    ids: req.body?.ids,
-    companyId,
-    changedBy: req.user.id,
-  })
-
-  if (result.error) {
-    return sendError(res, result.status || 400, result.error)
-  }
-
-  res.json(result)
-})
-
-app.post('/api/vehicles/:id/archive', authenticate, (req, res) => {
-  if (!ensureManager(req, res)) return
-  if (!ensureCompanyOperationalWriteAllowed(req, res, { mode: 'write' })) return
-
-  const companyId = req.user.company_id || 'default'
-  const result = archiveVehiclesByIds({
-    ids: [req.params.id],
-    companyId,
-    changedBy: req.user.id,
-  })
-
-  if (result.error) {
-    return sendError(res, result.status || 400, result.error)
-  }
-
-  res.json(result)
-})
-
-app.put('/api/vehicles/:id', authenticate, (req, res) => {
-  if (!ensureCompanyOperationalWriteAllowed(req, res, { mode: 'write' })) return
-
-  const { number, name, status, region, reason } = req.body
-  const companyId = req.user.company_id || 'default'
-  if (!VEHICLE_STATUSES.has(String(status))) {
-    return sendError(res, 400, 'Неизвестный статус техники')
-  }
-
-  const oldVehicle = getVehicleById(req.params.id, companyId)
-  if (!oldVehicle) {
-    return sendError(res, 404, API_MESSAGES.vehicleNotFound)
-  }
-
-  const validated = validateVehiclePayload({ number, name, region })
-  if (validated.error) {
-    return sendError(res, 400, validated.error)
-  }
-
-  const duplicateError = ensureVehicleNumberAvailable(validated.number, req.params.id, companyId)
-  if (duplicateError) {
-    return sendError(res, 400, duplicateError)
-  }
-
-  updateVehicleRecord(req.params.id, {
-    number: validated.number,
-    name: validated.name,
-    status,
-    region: validated.region,
-    companyId,
-  })
-
-  if (oldVehicle.status !== status) {
-    recordVehicleStatusChange({
-      vehicleId: req.params.id,
-      oldStatus: oldVehicle.status,
-      newStatus: status,
-      reason,
-      changedBy: req.user.id
-    })
-  }
-
-  const vehicle = getVehicleById(req.params.id, companyId)
-  res.json(vehicle)
-})
-
-app.delete('/api/vehicles/:id', authenticate, (req, res) => {
-  if (!ensureManager(req, res)) return
-  if (!ensureCompanyOperationalWriteAllowed(req, res, { mode: 'write' })) return
-
-  const companyId = req.user.company_id || 'default'
-  const result = archiveVehiclesByIds({
-    ids: [req.params.id],
-    companyId,
-    changedBy: req.user.id,
-  })
-
-  if (result.error) {
-    return sendError(res, result.status || 400, result.error)
-  }
-
-  res.status(204).send()
+registerVehicleRoutes({
+  app,
+  db,
+  authenticate,
+  sendError,
+  sendInternalError,
+  sendCompanyLimitViolation,
+  API_MESSAGES,
+  PHOTO_SELECT_COLUMNS,
+  getVehicleById,
+  getCompanyLimitViolation,
+  getCompanyResourceLimitState,
+  ensureManager,
+  ensureCompanyOperationalWriteAllowed,
 })
 
 // ============ INSPECTIONS ============
