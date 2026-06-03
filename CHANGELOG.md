@@ -27,6 +27,9 @@
   `backend/src/routes/analytics.js`.
 - **Epic 3.3.5 backend seed extraction**: demo-data generation for `/api/seed`
   moved from `backend/src/server.js` to `backend/src/seed/demoData.js`.
+- **Epic 3.3.6 backend bootstrap extraction**: Express app wiring moved to
+  `backend/src/app.js`; `backend/src/server.js` now owns only database init,
+  HTTP listen, socket tracking and graceful shutdown.
 - **Resource admin вместо Directus CMS**: принято архитектурное решение отказаться от Directus как активной части проекта. Управление компаниями, владельцами, тарифами и лимитами переносится во встроенный backend/web контур "Администрирование ресурса".
 - **Границы роли `admin`**: администратор ресурса отвечает за весь сервисный уровень проекта, но не является владельцем или менеджером компаний и не получает доступ к технике, осмотрам, дефектам, фото и пользовательскому назначению внутри tenant-контуров.
 - **Smoke-gate**: backend smoke больше не содержит Directus service/mock проверки и включает MFA login flow, resource-admin CRUD, tenant isolation и лимиты компаний.

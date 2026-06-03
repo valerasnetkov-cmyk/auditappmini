@@ -1,4 +1,4 @@
-# Epic 3.3: Декомпозиция `backend/src/server.js` (3 315 → 1 158 nonblank строк)
+# Epic 3.3: Декомпозиция `backend/src/server.js` (3 315 → 81 nonblank строк)
 
 ## Статус
 
@@ -51,7 +51,10 @@
   demo-data generation moved to `backend/src/seed/demoData.js`. `server.js`:
   1 287 → 1 158 nonblank lines (−129 net); `seed/demoData.js`: 146 nonblank
   lines.
-- ⏳ 3.3.6 HTTP server bootstrap (server.js → ~50 строк) с graceful shutdown.
+- **3.3.6 ✅ HTTP server bootstrap extraction (2026-06-04):** Express app
+  wiring moved to `backend/src/app.js`; `server.js` now owns `initDatabase()`,
+  `app.listen(...)`, socket tracking and graceful shutdown. `server.js`:
+  1 158 → 81 nonblank lines; `app.js`: 1 090 nonblank lines.
 
 ## Цель
 
@@ -61,9 +64,10 @@ defects, photos, analytics, dashboard, seed, demo-data.
 
 ## Текущее состояние (подтверждено в коде)
 
-- `backend/src/server.js` — **1 158 nonblank строк** (был 3 315, после Epic 3.3.1–3.3.5).
-- Содержит: middleware chain wiring, rate limit, MFA,
-  users/settings/reference routes and remaining bootstrap wiring.
+- `backend/src/server.js` — **81 nonblank строк** (был 3 315, после Epic 3.3.1–3.3.6).
+- `backend/src/app.js` — **1 090 nonblank строк**: Express app factory,
+  middleware chain wiring, rate limit, protected uploads, users/settings/
+  reference routes and all extracted route module registrations.
 - Уже вынесены: `routes/auth.js`, `routes/regions.js`, `routes/vehicles.js`,
   `routes/inspections.js`, `routes/defects.js`, `routes/photos.js`,
   `routes/dashboard.js`, `routes/analytics.js`,
@@ -73,7 +77,8 @@ defects, photos, analytics, dashboard, seed, demo-data.
   `services/secretStore.js`, `services/redisClient.js`, `services/rateLimiter.js`,
   `services/photoUpload.js`,
   `config.js`, `middleware/requestId.js`, `middleware/accessLog.js`,
-  `middleware/security.js`, `middleware/auth.js`, `seed/demoData.js`.
+  `middleware/security.js`, `middleware/auth.js`, `seed/demoData.js`,
+  `app.js`.
 
 ## Epic 3.3.1: Config extraction (✅ 2026-06-02)
 
@@ -397,6 +402,31 @@ defects, photos, analytics, dashboard, seed, demo-data.
 - `node --check backend/src/server.js` — clean.
 - `node --check backend/src/seed/demoData.js` — clean.
 
+## Epic 3.3.6: HTTP server bootstrap extraction (✅ 2026-06-04)
+
+### What moved
+
+**`backend/src/app.js`** (new, 1 090 nonblank lines):
+- `createApp({ getIsShuttingDown })` Express app factory.
+- middleware chain, security headers, CORS, body parser and rate limit wiring.
+- liveness/readiness endpoints and shutdown-aware 503 guard.
+- protected uploads, users/settings/reference routes and extracted route module
+  registrations.
+- global upload/body error adapter.
+
+### Changes in `server.js`
+
+- `server.js` now owns only process/runtime concerns:
+  `initDatabase()`, `createApp(...)`, `app.listen(...)`, socket tracking,
+  signal/IPC handlers and Redis-aware graceful shutdown.
+- `server.js`: 1 158 → **81 nonblank lines**.
+- `app.js`: **1 090 nonblank lines**.
+
+### Verification
+
+- `node --check backend/src/server.js` — clean.
+- `node --check backend/src/app.js` — clean.
+
 ## Целевая структура
 
 ```txt
@@ -447,7 +477,7 @@ backend/src/
    `routes/regions.js` ✅, `routes/vehicles.js` ✅, `routes/inspections.js` ✅, `routes/defects.js` ✅,
    `routes/photos.js` ✅, `routes/analytics.js` ✅, `routes/dashboard.js` ✅.
 5. ✅ **3.3.5 (2026-06-03):** Seed extraction — `seed/demoData.js`.
-6. **3.3.6 ⏳:** HTTP server bootstrap — `app.js` factory, `server.js` ~50 строк
+6. ✅ **3.3.6 (2026-06-04):** HTTP server bootstrap — `app.js` factory, `server.js` 81 строк
    (читает config, вызывает `app.listen(...)`, регистрирует graceful shutdown
    `SIGTERM`/`SIGINT`).
 7. **3.3.7 ⏳:** Прогнать все smoke-тесты и `verify:launch` после каждой
@@ -498,6 +528,10 @@ backend/src/
   `server.js` 1 287 → 1 158 nonblank строк. Новый модуль `seed/demoData.js`
   (146 nonblank строк) содержит `/api/seed` и генерацию demo company/users/
   vehicles/inspections/checklists/defects.
+- **2026-06-04:** Epic 3.3.6 ✅ — HTTP server bootstrap extraction.
+  `server.js` 1 158 → 81 nonblank строк. Новый `app.js` (1 090 nonblank строк)
+  содержит `createApp(...)`, Express middleware/routes wiring and readiness
+  endpoints; `server.js` оставлен для init/listen/socket tracking/graceful shutdown.
 
 ## Effort / Risk
 
