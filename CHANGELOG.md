@@ -50,6 +50,8 @@
 - **Epic 3.3 backend app decomposition**: health/readiness endpoints and
   shutdown guard moved from `backend/src/app.js` to `backend/src/routes/health.js`;
   `app.js` is now below 500 nonblank lines.
+- **Epic 3.3 backend app decomposition**: auth-sensitive rate-limit middleware
+  wiring moved from `backend/src/app.js` to `backend/src/middleware/authRateLimit.js`.
 - **Resource admin вместо Directus CMS**: принято архитектурное решение отказаться от Directus как активной части проекта. Управление компаниями, владельцами, тарифами и лимитами переносится во встроенный backend/web контур "Администрирование ресурса".
 - **Границы роли `admin`**: администратор ресурса отвечает за весь сервисный уровень проекта, но не является владельцем или менеджером компаний и не получает доступ к технике, осмотрам, дефектам, фото и пользовательскому назначению внутри tenant-контуров.
 - **Smoke-gate**: backend smoke больше не содержит Directus service/mock проверки и включает MFA login flow, resource-admin CRUD, tenant isolation и лимиты компаний.

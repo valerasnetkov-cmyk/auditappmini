@@ -20,7 +20,6 @@ import registerProtectedUploadRoutes from './routes/uploads.js'
 import registerDemoDataSeedRoutes from './seed/demoData.js'
 import { registerOdometerRoutes, registerVehicleNumberRecognitionRoutes } from './routes/odometer.js'
 import { photoRequirements, registerPhotoRequirementRoutes } from './routes/photo-requirements.js'
-import { createRateLimiter } from './services/rateLimiter.js'
 import { createCompanyPolicy } from './services/companyPolicy.js'
 import { createRoleGuards } from './services/roleGuards.js'
 import { createUserStore } from './services/users.js'
@@ -37,6 +36,7 @@ import { createRequestIdMiddleware } from './middleware/requestId.js'
 import { createAccessLogMiddleware } from './middleware/accessLog.js'
 import { createSecurityHeadersMiddleware, createCorsMiddleware } from './middleware/security.js'
 import { createAuthenticateMiddleware } from './middleware/auth.js'
+import { createAuthRateLimitMiddlewares, noStore } from './middleware/authRateLimit.js'
 import {
   TRUST_PROXY,
   SECURITY_HSTS_ENABLED,
@@ -91,53 +91,14 @@ function sendError(res, status, message) {
   return res.status(status).json({ error: message })
 }
 
-function normalizeRateLimitPath(pathname) {
-  return String(pathname || '')
-    .replace(/^\/api\/users\/[^/]+\/mfa\/verify$/, '/api/users/:id/mfa/verify')
-    .replace(/^\/api\/auth\/mfa\/verify$/, '/api/auth/mfa/verify')
-}
-
-function sensitiveIpRateLimitKey(req) {
-  return [
-    'ip',
-    req.ip,
-    req.method,
-    normalizeRateLimitPath(req.path),
-  ].join(':')
-}
-
-function sensitiveAccountRateLimitKey(req) {
-  const accountKey = String(req.body?.email || req.params?.id || req.body?.token || '').trim().toLowerCase()
-  return [
-    'account',
-    req.ip,
-    req.method,
-    normalizeRateLimitPath(req.path),
-    accountKey,
-  ].join(':')
-}
-
-function noStore(req, res, next) {
-  res.setHeader('Cache-Control', 'no-store')
-  next()
-}
-
-const sensitiveIpRateLimit = createRateLimiter({
-  name: 'sensitive-ip',
-  windowMs: SENSITIVE_RATE_LIMIT_WINDOW_MS,
-  max: SENSITIVE_RATE_LIMIT_MAX,
-  keyGenerator: sensitiveIpRateLimitKey,
+const {
+  publicAuthRateLimit,
+  authenticatedSensitiveRateLimit,
+} = createAuthRateLimitMiddlewares({
+  sensitiveWindowMs: SENSITIVE_RATE_LIMIT_WINDOW_MS,
+  sensitiveIpMax: SENSITIVE_RATE_LIMIT_MAX,
+  sensitiveAccountMax: AUTH_ACCOUNT_RATE_LIMIT_MAX,
 })
-
-const sensitiveAccountRateLimit = createRateLimiter({
-  name: 'sensitive-account',
-  windowMs: SENSITIVE_RATE_LIMIT_WINDOW_MS,
-  max: AUTH_ACCOUNT_RATE_LIMIT_MAX,
-  keyGenerator: sensitiveAccountRateLimitKey,
-})
-
-const publicAuthRateLimit = [noStore, sensitiveIpRateLimit, sensitiveAccountRateLimit]
-const authenticatedSensitiveRateLimit = [noStore, sensitiveIpRateLimit]
 
 function isTenantUserEndpoint(pathname) {
   const path = String(pathname || '')

@@ -87,6 +87,10 @@
   endpoints, uploads/Redis readiness checks and shutdown guard moved to
   `backend/src/routes/health.js`. `app.js`: 545 → 469 nonblank lines
   (−76 net); `routes/health.js`: 89 nonblank lines.
+- **3.3.15 ✅ Auth rate-limit middleware extraction (2026-06-04):** sensitive
+  auth rate-limit path normalization, key generators and `noStore` middleware
+  moved to `backend/src/middleware/authRateLimit.js`. `app.js`: 469 → 436
+  nonblank lines (−33 net); `middleware/authRateLimit.js`: 50 nonblank lines.
 
 ## Цель
 
@@ -97,7 +101,7 @@ defects, photos, analytics, dashboard, seed, demo-data.
 ## Текущее состояние (подтверждено в коде)
 
 - `backend/src/server.js` — **81 nonblank строк** (был 3 315, после Epic 3.3.1–3.3.6).
-- `backend/src/app.js` — **469 nonblank строк**: Express app factory,
+- `backend/src/app.js` — **436 nonblank строк**: Express app factory,
   middleware chain wiring, rate limit, protected uploads, settings/reference
   routes and all extracted route module registrations.
 - Уже вынесены: `routes/auth.js`, `routes/regions.js`, `routes/vehicles.js`,
@@ -114,7 +118,8 @@ defects, photos, analytics, dashboard, seed, demo-data.
   `services/photoUpload.js`, `services/companyPolicy.js`, `services/roleGuards.js`,
   `services/users.js`,
   `config.js`, `middleware/requestId.js`, `middleware/accessLog.js`,
-  `middleware/security.js`, `middleware/auth.js`, `seed/demoData.js`,
+  `middleware/security.js`, `middleware/auth.js`, `middleware/authRateLimit.js`,
+  `seed/demoData.js`,
   `app.js`.
 
 ## Epic 3.3.1: Config extraction (✅ 2026-06-02)
@@ -655,6 +660,29 @@ defects, photos, analytics, dashboard, seed, demo-data.
 - `node --check backend/src/app.js` — clean.
 - `node --check backend/src/routes/health.js` — clean.
 
+## Epic 3.3.15: Auth rate-limit middleware extraction (✅ 2026-06-04)
+
+### What moved
+
+**`backend/src/middleware/authRateLimit.js`** (new, 50 nonblank lines):
+- sensitive auth path normalization.
+- IP/account rate-limit key generators.
+- shared `noStore` middleware.
+- `createAuthRateLimitMiddlewares(...)` factory for public/authenticated auth
+  rate-limit stacks.
+
+### Changes in `app.js`
+
+- Removed inline auth rate-limit helper block from `app.js`.
+- `app.js` now wires `createAuthRateLimitMiddlewares(...)` with config-derived
+  window and max values.
+- `app.js`: 469 → **436 nonblank lines** (−33 net).
+
+### Verification
+
+- `node --check backend/src/app.js` — clean.
+- `node --check backend/src/middleware/authRateLimit.js` — clean.
+
 ## Целевая структура
 
 ```txt
@@ -667,6 +695,7 @@ backend/src/
 │   └── security.js           # security headers, CSP, CORS
 ├── middleware/
 │   ├── auth.js               # authenticate, requireRole
+│   ├── authRateLimit.js
 │   ├── rateLimit.js          # см. Epic 3.2
 │   ├── requestId.js          # X-Request-Id
 │   └── accessLog.js          # ACCESS_LOG_FORMAT=json
@@ -731,7 +760,9 @@ backend/src/
    `services/users.js`.
 14. ✅ **3.3.14 (2026-06-04):** Health routes extraction —
    `routes/health.js`; `app.js` below 500 nonblank lines.
-15. **3.3.15 ⏳:** Прогнать все smoke-тесты и `verify:launch` после каждой
+15. ✅ **3.3.15 (2026-06-04):** Auth rate-limit middleware extraction —
+   `middleware/authRateLimit.js`.
+16. **3.3.16 ⏳:** Прогнать все smoke-тесты и `verify:launch` после каждой
    mini-epic.
 
 ## Критерии приёмки
@@ -813,6 +844,10 @@ backend/src/
   `app.js` 545 → 469 nonblank строк. Новый `routes/health.js`
   (89 nonblank строк) содержит liveness/readiness endpoints, DB/uploads/Redis
   readiness checks and shutdown guard.
+- **2026-06-04:** Epic 3.3.15 ✅ — auth rate-limit middleware extraction.
+  `app.js` 469 → 436 nonblank строк. Новый `middleware/authRateLimit.js`
+  (50 nonblank строк) содержит sensitive auth path normalization, key
+  generators and no-store/rate-limit middleware stacks.
 
 ## Effort / Risk
 
