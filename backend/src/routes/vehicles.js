@@ -173,11 +173,13 @@ export default function registerVehicleRoutes({
     const offset = (page - 1) * limit
     const companyId = req.user.company_id || 'default'
 
-    let whereClause = 'company_id = ?'
+    let countWhereClause = 'company_id = ?'
+    let vehicleWhereClause = 'v.company_id = ?'
     const params = [companyId]
 
     if (search) {
-      whereClause += ' AND (number LIKE ? OR name LIKE ?)'
+      countWhereClause += ' AND (number LIKE ? OR name LIKE ?)'
+      vehicleWhereClause += ' AND (v.number LIKE ? OR v.name LIKE ?)'
       params.push(`%${search}%`, `%${search}%`)
     }
 
@@ -185,37 +187,63 @@ export default function registerVehicleRoutes({
       if (!VEHICLE_STATUSES.has(String(status))) {
         return sendError(res, 400, 'Неизвестный статус техники')
       }
-      whereClause += ' AND status = ?'
+      countWhereClause += ' AND status = ?'
+      vehicleWhereClause += ' AND v.status = ?'
       params.push(status)
     } else {
-      whereClause += " AND status != 'archived'"
+      countWhereClause += " AND status != 'archived'"
+      vehicleWhereClause += " AND v.status != 'archived'"
     }
 
-    const countQuery = db.prepare(`SELECT COUNT(*) as count FROM vehicles WHERE ${whereClause}`)
+    const countQuery = db.prepare(`SELECT COUNT(*) as count FROM vehicles WHERE ${countWhereClause}`)
     const { count } = countQuery.get(...params)
 
     const query = db.prepare(`
-      SELECT id, number, name, status, region, company_id, created_at, last_scheduled_inspection
-      FROM vehicles
-      WHERE ${whereClause}
-      ORDER BY created_at DESC
+      WITH latest_inspections AS (
+        SELECT id, vehicle_id, created_at,
+               ROW_NUMBER() OVER (PARTITION BY vehicle_id ORDER BY created_at DESC, id DESC) AS rn
+        FROM inspections
+        WHERE company_id = ?
+      ),
+      defect_counts AS (
+        SELECT i.vehicle_id, COUNT(*) AS count
+        FROM defects d
+        JOIN inspections i ON d.inspection_id = i.id
+        WHERE i.company_id = ?
+        GROUP BY i.vehicle_id
+      )
+      SELECT
+        v.id,
+        v.number,
+        v.name,
+        v.status,
+        v.region,
+        v.company_id,
+        v.created_at,
+        v.last_scheduled_inspection,
+        li.id AS last_inspection_id,
+        li.created_at AS last_inspection_created_at,
+        COALESCE(dc.count, 0) AS defects_count
+      FROM vehicles v
+      LEFT JOIN latest_inspections li ON li.vehicle_id = v.id AND li.rn = 1
+      LEFT JOIN defect_counts dc ON dc.vehicle_id = v.id
+      WHERE ${vehicleWhereClause}
+      ORDER BY v.created_at DESC
       LIMIT ? OFFSET ?
     `)
-    const vehicles = query.all(...params, Number(limit), offset)
+    const vehicles = query.all(companyId, companyId, ...params, Number(limit), offset)
 
-    const vehiclesWithStats = vehicles.map(v => {
-      const lastInspection = db.prepare(`
-        SELECT id, created_at FROM inspections
-        WHERE vehicle_id = ? ORDER BY created_at DESC LIMIT 1
-      `).get(v.id)
+    const vehiclesWithStats = vehicles.map(({
+      last_inspection_id,
+      last_inspection_created_at,
+      defects_count,
+      ...vehicle
+    }) => {
+      const lastInspection = last_inspection_id
+        ? { id: last_inspection_id, created_at: last_inspection_created_at }
+        : undefined
 
-      const defectsCount = db.prepare(`
-        SELECT COUNT(*) as count FROM defects d
-        JOIN inspections i ON d.inspection_id = i.id
-        WHERE i.vehicle_id = ?
-      `).get(v.id).count
-
-      return { ...v, lastInspection, defectsCount: Number(defectsCount) }
+      return { ...vehicle, lastInspection, defectsCount: Number(defects_count || 0) }
     })
 
     res.json({

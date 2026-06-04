@@ -41,7 +41,11 @@
   backend replicas; без Redis деградирует в in-memory режим.
 - **Security headers**: CSP, COOP, CORP, X-Frame-Options,
   X-Content-Type-Options, Referrer-Policy установлены глобально.
-- **MFA**: TOTP-based, опционально для privileged ролей.
+- **MFA**: TOTP-based, опционально для privileged ролей. Setup
+  подтверждается через `POST /api/users/:id/mfa/enable`; старый
+  `POST /api/users/:id/mfa/verify` временно сохранён как alias. Отключение MFA
+  требует пароль текущего пользователя и валидный TOTP target user, если MFA
+  уже включён.
 - **Cookie session**: `audit_session` — `httpOnly`, `sameSite=lax`,
   `secure` в production.
 - **Image upload**: проверка MIME + реального формата через `sharp` +
@@ -69,8 +73,14 @@
   `.gitignore`). Backup через `npm run backup:local` + verify через
   `npm run backup:verify`.
 - **Uploads** хранятся в `backend/uploads/` (под `.gitignore`).
+- **Runtime artifacts** (`.tmp-*`, `backend/data/`, `backend/uploads/`,
+  `backend/backups/`) считаются локальным/операционным состоянием. Их cleanup
+  выполняется на окружении, а не коммитится как изменение кода.
 - **`.env*` файлы** под `.gitignore`; в репозитории только `.env.example`
   с пустыми placeholder-значениями.
+- **Demo admin password**: `backend/.env.example` оставляет
+  `ADMIN_PASSWORD=admin123` только для локального dev. Production doctor/config
+  блокируют это значение.
 
 ## Безопасность CI/CD
 
@@ -82,7 +92,9 @@
 ## Backlog (открытые security-задачи)
 
 - **Refresh tokens / token rotation**: сейчас JWT живёт 7 дней без
-  revocation list (см. `CHANGELOG.md` § "Audit findings 2026-05-27").
+  server-side revocation list (см. `CHANGELOG.md` § "Audit findings
+  2026-05-27"). Следующий security epic должен отдельно спроектировать
+  server-side session table, refresh-cookie flow, rotation и revocation.
 - **CSP nonces**: текущая CSP использует `unsafe-inline` для совместимости;
   можно усилить nonce-based.
 - **Encryption at rest**: БД и uploads не зашифрованы; для

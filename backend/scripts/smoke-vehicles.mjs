@@ -179,6 +179,15 @@ async function run() {
       }),
     })
 
+    const defect = await request(`/api/inspections/${inspection.id}/defects`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({
+        title: 'Smoke vehicle list defect',
+        comment: 'Created to verify aggregated defect counts',
+      }),
+    })
+
     const vehicleInspections = await request(`/api/vehicles/${created.id}/inspections?limit=10`, {
       headers: { Authorization: `Bearer ${login.token}` },
     })
@@ -245,6 +254,16 @@ async function run() {
     const vehiclesDefaultList = await request('/api/vehicles?limit=100', {
       headers: { Authorization: `Bearer ${login.token}` },
     })
+    const createdVehicleListItem = vehiclesDefaultList.data.find((vehicle) => vehicle.id === created.id)
+    if (!createdVehicleListItem) {
+      throw new Error('Created vehicle is missing from default vehicle list')
+    }
+    if (createdVehicleListItem.lastInspection?.id !== inspection.id) {
+      throw new Error('Vehicle list did not include the latest inspection id')
+    }
+    if (createdVehicleListItem.defectsCount !== 1) {
+      throw new Error(`Vehicle list expected defectsCount=1 but got ${createdVehicleListItem.defectsCount}`)
+    }
     const vehiclesArchiveList = await request('/api/vehicles?status=archived&limit=100', {
       headers: { Authorization: `Bearer ${login.token}` },
     })
@@ -270,9 +289,12 @@ async function run() {
           archivedVehicles: archiveResult.archived,
           archivedHiddenFromDefaultList: !vehiclesDefaultList.data.some((vehicle) => archiveResult.ids.includes(vehicle.id)),
           archivedVisibleInArchiveFilter: archiveResult.ids.every((id) => vehiclesArchiveList.data.some((vehicle) => vehicle.id === id && vehicle.status === 'archived')),
+          listLastInspectionId: createdVehicleListItem.lastInspection?.id ?? null,
+          listDefectsCount: createdVehicleListItem.defectsCount,
           staleRegionIdFallbackUpdated: fallbackUpdatedRegion.name === fallbackRenamedRegionName,
           staleRegionIdOldNameRemoved: !regionsAfterFallbackUpdate.some((region) => region.name === fallbackRegionName),
           inspectionId: inspection.id,
+          defectId: defect.id,
           listedInspections: Array.isArray(vehicleInspections?.data) ? vehicleInspections.data.length : 0,
           listedDefects: vehicleInspections?.data?.[0]?.defects_count ?? null,
           historyEntries: Array.isArray(history) ? history.length : 0,

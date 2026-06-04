@@ -19,7 +19,7 @@ test('MFA Owner: setup and verify for a user (API-driven)', async ({ request }) 
     if (!secret) throw new Error('MFA setup response does not contain secret')
 
     const code = speakeasy.totp({ secret, encoding: 'base32' })
-    const verify = await request.post(`${API_BASE}/api/users/${user.id}/mfa/verify`, {
+    const verify = await request.post(`${API_BASE}/api/users/${user.id}/mfa/enable`, {
       headers,
       data: { token: code },
     })

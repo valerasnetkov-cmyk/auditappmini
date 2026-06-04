@@ -161,6 +161,84 @@ export default function registerAuthRoutes({
   isSelf,
   isAssignableCompanyUserRole,
 }) {
+  function getManagedMfaUser(req, res, userId, columns = 'id, email, name, role, company_id, mfa_secret') {
+    const companyId = req.user.company_id || 'default'
+    if (!ensureCompanyOwnerOrSelf(req, res, userId, API_MESSAGES.accessDenied)) return null
+
+    const user = db.prepare(`
+      SELECT ${columns}
+      FROM users
+      WHERE id = ? AND company_id = ?
+    `).get(userId, companyId)
+    if (!user) {
+      sendError(res, 404, API_MESSAGES.userNotFound)
+      return null
+    }
+    if (!isSelf(req, userId) && !isAssignableCompanyUserRole(user.role)) {
+      sendError(res, 403, API_MESSAGES.accessDenied)
+      return null
+    }
+
+    return { user, companyId }
+  }
+
+  function handleUserMfaEnable(req, res) {
+    const userId = req.params.id
+    const { token } = req.body || {}
+    const managed = getManagedMfaUser(req, res, userId)
+    if (!managed) return
+
+    const { user, companyId } = managed
+    if (!user.mfa_secret) return sendError(res, 400, API_MESSAGES.mfaNotConfigured)
+    const verified = speakeasy.totp.verify({
+      secret: user.mfa_secret,
+      encoding: 'base32',
+      token: String(token || ''),
+      window: 1,
+    })
+    if (!verified) return sendError(res, 401, API_MESSAGES.invalidMfaCode)
+    db.prepare('UPDATE users SET mfa_enabled = 1 WHERE id = ? AND company_id = ?').run(userId, companyId)
+    return sendAuthSession(res, {
+      ...user,
+      company_id: user.company_id || companyId,
+    })
+  }
+
+  function handleUserMfaDisable(req, res) {
+    const userId = req.params.id
+    const { password, token } = req.body || {}
+    const managed = getManagedMfaUser(req, res, userId, 'id, email, name, role, company_id, mfa_enabled, mfa_secret')
+    if (!managed) return
+
+    if (typeof password !== 'string' || !password) {
+      return sendError(res, 400, 'Password is required to disable MFA')
+    }
+
+    const actor = db.prepare(`
+      SELECT id, password
+      FROM users
+      WHERE id = ?
+    `).get(req.user.id)
+    const passwordOk = bcrypt.compareSync(password, actor?.password || '$2a$10$J9e3WdYLmopA7LzXnxjx7Oq4FMdt0MBGDGg2po7GTL58e86qfqxxK')
+    if (!actor || !passwordOk) {
+      return sendError(res, 401, API_MESSAGES.invalidCredentials)
+    }
+
+    const { user, companyId } = managed
+    if (user.mfa_enabled && user.mfa_secret) {
+      const verified = speakeasy.totp.verify({
+        secret: user.mfa_secret,
+        encoding: 'base32',
+        token: String(token || ''),
+        window: 1,
+      })
+      if (!verified) return sendError(res, 401, API_MESSAGES.invalidMfaCode)
+    }
+
+    db.prepare('UPDATE users SET mfa_enabled = 0, mfa_secret = NULL WHERE id = ? AND company_id = ?').run(userId, companyId)
+    return res.json({ ok: true, mfa_enabled: false })
+  }
+
   app.post('/api/auth/login', ...publicAuthRateLimit, (req, res) => {
     const { email, password } = req.body
 
@@ -324,30 +402,9 @@ export default function registerAuthRoutes({
     res.json({ otpauth_url: secret.otpauth_url, secret: secret.base32 })
   })
 
-  app.post('/api/users/:id/mfa/verify', authenticate, ...authenticatedSensitiveRateLimit, (req, res) => {
-    const userId = req.params.id
-    const { token } = req.body
-    const companyId = req.user.company_id || 'default'
-    if (!ensureCompanyOwnerOrSelf(req, res, userId, API_MESSAGES.accessDenied)) return
-
-    const user = db.prepare(`
-      SELECT id, email, name, role, company_id, mfa_secret
-      FROM users
-      WHERE id = ? AND company_id = ?
-    `).get(userId, companyId)
-    if (!user) return sendError(res, 404, API_MESSAGES.userNotFound)
-    if (!isSelf(req, userId) && !isAssignableCompanyUserRole(user.role)) {
-      return sendError(res, 403, API_MESSAGES.accessDenied)
-    }
-    if (!user.mfa_secret) return sendError(res, 400, API_MESSAGES.mfaNotConfigured)
-    const verified = speakeasy.totp.verify({ secret: user.mfa_secret, encoding: 'base32', token })
-    if (!verified) return sendError(res, 401, API_MESSAGES.invalidMfaCode)
-    db.prepare('UPDATE users SET mfa_enabled = 1 WHERE id = ? AND company_id = ?').run(userId, companyId)
-    return sendAuthSession(res, {
-      ...user,
-      company_id: user.company_id || companyId,
-    })
-  })
+  app.post('/api/users/:id/mfa/enable', authenticate, ...authenticatedSensitiveRateLimit, handleUserMfaEnable)
+  app.post('/api/users/:id/mfa/verify', authenticate, ...authenticatedSensitiveRateLimit, handleUserMfaEnable)
+  app.post('/api/users/:id/mfa/disable', authenticate, ...authenticatedSensitiveRateLimit, handleUserMfaDisable)
 
   // Legacy public registration endpoint for local/mobile experiments.
   // In the SaaS production model companies are created by the resource admin,

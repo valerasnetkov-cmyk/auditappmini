@@ -269,7 +269,9 @@ defects, photos, analytics, dashboard, seed, demo-data.
 - `/api/auth/mfa/verify`
 - `/api/auth/owner-setup`
 - `/api/users/:id/mfa/setup`
+- `/api/users/:id/mfa/enable`
 - `/api/users/:id/mfa/verify`
+- `/api/users/:id/mfa/disable`
 - `/api/auth/register`
 - `/api/auth/logout`
 - `/api/auth/me`
@@ -725,7 +727,7 @@ backend/src/
 │   ├── requestId.js          # X-Request-Id
 │   └── accessLog.js          # ACCESS_LOG_FORMAT=json
 ├── routes/                   # уже существует
-│   ├── auth.js               # login, me, mfa/verify, owner-setup
+│   ├── auth.js               # login, me, MFA lifecycle, owner-setup
 │   ├── health.js
 │   ├── vehicles.js
 │   ├── inspections.js

@@ -2,7 +2,9 @@ import { createRateLimiter } from '../services/rateLimiter.js'
 
 function normalizeRateLimitPath(pathname) {
   return String(pathname || '')
+    .replace(/^\/api\/users\/[^/]+\/mfa\/enable$/, '/api/users/:id/mfa/enable')
     .replace(/^\/api\/users\/[^/]+\/mfa\/verify$/, '/api/users/:id/mfa/verify')
+    .replace(/^\/api\/users\/[^/]+\/mfa\/disable$/, '/api/users/:id/mfa/disable')
     .replace(/^\/api\/auth\/mfa\/verify$/, '/api/auth/mfa/verify')
 }
 
