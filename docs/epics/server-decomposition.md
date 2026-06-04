@@ -83,6 +83,10 @@
   lookup/create/update DB helpers moved to `backend/src/services/users.js`.
   `app.js`: 581 → 545 nonblank lines (−36 net); `services/users.js`:
   54 nonblank lines.
+- **3.3.14 ✅ Health routes extraction (2026-06-04):** liveness/readiness
+  endpoints, uploads/Redis readiness checks and shutdown guard moved to
+  `backend/src/routes/health.js`. `app.js`: 545 → 469 nonblank lines
+  (−76 net); `routes/health.js`: 89 nonblank lines.
 
 ## Цель
 
@@ -93,7 +97,7 @@ defects, photos, analytics, dashboard, seed, demo-data.
 ## Текущее состояние (подтверждено в коде)
 
 - `backend/src/server.js` — **81 nonblank строк** (был 3 315, после Epic 3.3.1–3.3.6).
-- `backend/src/app.js` — **545 nonblank строк**: Express app factory,
+- `backend/src/app.js` — **469 nonblank строк**: Express app factory,
   middleware chain wiring, rate limit, protected uploads, settings/reference
   routes and all extracted route module registrations.
 - Уже вынесены: `routes/auth.js`, `routes/regions.js`, `routes/vehicles.js`,
@@ -102,6 +106,7 @@ defects, photos, analytics, dashboard, seed, demo-data.
   `routes/companyUsage.js`,
   `routes/settings.js`,
   `routes/uploads.js`,
+  `routes/health.js`,
   `routes/adminSaas.js`, `routes/audit.js`, `routes/companies.js`,
   `routes/completeInspection.js`, `routes/odometer.js`, `routes/photo-requirements.js`.
 - Уже вынесены: `utils/transliteration.js`, `utils/env.js`, `utils/asserts.js`,
@@ -625,6 +630,31 @@ defects, photos, analytics, dashboard, seed, demo-data.
 - `node --check backend/src/app.js` — clean.
 - `node --check backend/src/services/users.js` — clean.
 
+## Epic 3.3.14: Health routes extraction (✅ 2026-06-04)
+
+### What moved
+
+**`backend/src/routes/health.js`** (new, 89 nonblank lines):
+- `/health`, `/api/health`, `/api/health/live`.
+- `/api/health/ready`.
+- DB, uploads writability and Redis readiness checks.
+- shutdown-aware 503 guard for non-health routes.
+
+### Changes in `app.js`
+
+- Removed inline health/readiness route handlers and shutdown guard from
+  `app.js`.
+- `app.js` now wires `registerHealthRoutes(...)` before auth middleware
+  creation, preserving the previous request ordering.
+- Removed direct `path`, `fs`, Redis status and `uploadsDir` imports from
+  `app.js`.
+- `app.js`: 545 → **469 nonblank lines** (−76 net).
+
+### Verification
+
+- `node --check backend/src/app.js` — clean.
+- `node --check backend/src/routes/health.js` — clean.
+
 ## Целевая структура
 
 ```txt
@@ -642,6 +672,7 @@ backend/src/
 │   └── accessLog.js          # ACCESS_LOG_FORMAT=json
 ├── routes/                   # уже существует
 │   ├── auth.js               # login, me, mfa/verify, owner-setup
+│   ├── health.js
 │   ├── vehicles.js
 │   ├── inspections.js
 │   ├── defects.js
@@ -698,7 +729,9 @@ backend/src/
    `services/roleGuards.js`.
 13. ✅ **3.3.13 (2026-06-04):** User store service extraction —
    `services/users.js`.
-14. **3.3.14 ⏳:** Прогнать все smoke-тесты и `verify:launch` после каждой
+14. ✅ **3.3.14 (2026-06-04):** Health routes extraction —
+   `routes/health.js`; `app.js` below 500 nonblank lines.
+15. **3.3.15 ⏳:** Прогнать все smoke-тесты и `verify:launch` после каждой
    mini-epic.
 
 ## Критерии приёмки
@@ -776,6 +809,10 @@ backend/src/
 - **2026-06-04:** Epic 3.3.13 ✅ — user store service extraction.
   `app.js` 581 → 545 nonblank строк. Новый `services/users.js`
   (54 nonblank строк) содержит user lookup/create/update DB helpers.
+- **2026-06-04:** Epic 3.3.14 ✅ — health routes extraction.
+  `app.js` 545 → 469 nonblank строк. Новый `routes/health.js`
+  (89 nonblank строк) содержит liveness/readiness endpoints, DB/uploads/Redis
+  readiness checks and shutdown guard.
 
 ## Effort / Risk
 
