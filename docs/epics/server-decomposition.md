@@ -75,6 +75,10 @@
   resource usage, feature flags and subscription write-guard helpers moved to
   `backend/src/services/companyPolicy.js`. `app.js`: 718 → 613 nonblank lines
   (−105 net); `services/companyPolicy.js`: 130 nonblank lines.
+- **3.3.12 ✅ Role guards service extraction (2026-06-04):** role predicates,
+  owner/admin/manager guards and assignable tenant-user role helpers moved to
+  `backend/src/services/roleGuards.js`. `app.js`: 613 → 581 nonblank lines
+  (−32 net); `services/roleGuards.js`: 60 nonblank lines.
 
 ## Цель
 
@@ -85,7 +89,7 @@ defects, photos, analytics, dashboard, seed, demo-data.
 ## Текущее состояние (подтверждено в коде)
 
 - `backend/src/server.js` — **81 nonblank строк** (был 3 315, после Epic 3.3.1–3.3.6).
-- `backend/src/app.js` — **613 nonblank строк**: Express app factory,
+- `backend/src/app.js` — **581 nonblank строк**: Express app factory,
   middleware chain wiring, rate limit, protected uploads, settings/reference
   routes and all extracted route module registrations.
 - Уже вынесены: `routes/auth.js`, `routes/regions.js`, `routes/vehicles.js`,
@@ -98,7 +102,7 @@ defects, photos, analytics, dashboard, seed, demo-data.
   `routes/completeInspection.js`, `routes/odometer.js`, `routes/photo-requirements.js`.
 - Уже вынесены: `utils/transliteration.js`, `utils/env.js`, `utils/asserts.js`,
   `services/secretStore.js`, `services/redisClient.js`, `services/rateLimiter.js`,
-  `services/photoUpload.js`, `services/companyPolicy.js`,
+  `services/photoUpload.js`, `services/companyPolicy.js`, `services/roleGuards.js`,
   `config.js`, `middleware/requestId.js`, `middleware/accessLog.js`,
   `middleware/security.js`, `middleware/auth.js`, `seed/demoData.js`,
   `app.js`.
@@ -573,6 +577,28 @@ defects, photos, analytics, dashboard, seed, demo-data.
 - `node --check backend/src/app.js` — clean.
 - `node --check backend/src/services/companyPolicy.js` — clean.
 
+## Epic 3.3.12: Role guards service extraction (✅ 2026-06-04)
+
+### What moved
+
+**`backend/src/services/roleGuards.js`** (new, 60 nonblank lines):
+- `isAdmin`, `isCompanyOwner`, `isSelf` and manager/owner predicates.
+- `ensureManager`, `ensureCompanyOwner`, `ensureCompanyOwnerOrSelf`,
+  `ensureAdmin`.
+- tenant-user role assignment helpers.
+
+### Changes in `app.js`
+
+- Removed inline role predicate and authorization guard block from `app.js`.
+- `app.js` now creates `roleGuards` through `createRoleGuards({ sendError,
+  API_MESSAGES })` and passes the same callbacks to route modules.
+- `app.js`: 613 → **581 nonblank lines** (−32 net).
+
+### Verification
+
+- `node --check backend/src/app.js` — clean.
+- `node --check backend/src/services/roleGuards.js` — clean.
+
 ## Целевая структура
 
 ```txt
@@ -607,6 +633,7 @@ backend/src/
 │   ├── vehicleNumberOcr.js
 │   ├── photoPipeline.js
 │   ├── companyPolicy.js
+│   ├── roleGuards.js
 │   └── subscription.js
 └── seed/
     ├── regions.js
@@ -640,7 +667,9 @@ backend/src/
    `routes/uploads.js`.
 11. ✅ **3.3.11 (2026-06-04):** Company policy service extraction —
    `services/companyPolicy.js`.
-12. **3.3.12 ⏳:** Прогнать все smoke-тесты и `verify:launch` после каждой
+12. ✅ **3.3.12 (2026-06-04):** Role guards service extraction —
+   `services/roleGuards.js`.
+13. **3.3.13 ⏳:** Прогнать все smoke-тесты и `verify:launch` после каждой
    mini-epic.
 
 ## Критерии приёмки
@@ -711,6 +740,10 @@ backend/src/
   `app.js` 718 → 613 nonblank строк. Новый `services/companyPolicy.js`
   (130 nonblank строк) содержит company limits, feature flags and subscription
   write-guard helpers.
+- **2026-06-04:** Epic 3.3.12 ✅ — role guards service extraction.
+  `app.js` 613 → 581 nonblank строк. Новый `services/roleGuards.js`
+  (60 nonblank строк) содержит role predicates, authorization guards and
+  assignable tenant-user role helpers.
 
 ## Effort / Risk
 

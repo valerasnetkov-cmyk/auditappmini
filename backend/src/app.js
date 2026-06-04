@@ -24,6 +24,7 @@ import { photoRequirements, registerPhotoRequirementRoutes } from './routes/phot
 import { createRateLimiter } from './services/rateLimiter.js'
 import { isRedisConfigured, getRedisStatus, pingRedis } from './services/redisClient.js'
 import { createCompanyPolicy } from './services/companyPolicy.js'
+import { createRoleGuards } from './services/roleGuards.js'
 import {
   uploadsDir,
   upload,
@@ -423,6 +424,19 @@ const API_MESSAGES = {
   internalServerError: 'Internal server error',
 }
 
+const roleGuards = createRoleGuards({ sendError, API_MESSAGES })
+const {
+  isAdmin,
+  isCompanyOwner,
+  isSelf,
+  ensureManager,
+  ensureCompanyOwner,
+  ensureCompanyOwnerOrSelf,
+  ensureAdmin,
+  canAssignRole,
+  isAssignableCompanyUserRole,
+} = roleGuards
+
 const companyPolicy = createCompanyPolicy({ db, sendError, API_MESSAGES })
 const {
   normalizeCompanyLimit,
@@ -449,63 +463,6 @@ registerVehicleNumberRecognitionRoutes({ app, db, authenticate, API_MESSAGES, up
 function sendInternalError(res, scope, err) {
   console.error(`${scope}:`, err)
   return res.status(500).json({ error: API_MESSAGES.internalServerError })
-}
-
-const ASSIGNABLE_USER_ROLES = new Set(['inspector', 'manager'])
-
-function isManager(req) {
-  return req.user?.role === 'manager' || req.user?.role === 'owner'
-}
-
-function isAdmin(req) {
-  return req.user?.role === 'admin'
-}
-
-function isCompanyOwner(req) {
-  return req.user?.role === 'owner'
-}
-
-function isSelf(req, userId) {
-  return req.user?.id === userId
-}
-
-function ensureManager(req, res, message = API_MESSAGES.managersOnly) {
-  if (isManager(req)) return true
-  sendError(res, 403, message)
-  return false
-}
-
-function ensureManagerOrSelf(req, res, userId, message = API_MESSAGES.noAccess) {
-  if (isManager(req) || isSelf(req, userId)) return true
-  sendError(res, 403, message)
-  return false
-}
-
-function ensureCompanyOwner(req, res, message = API_MESSAGES.companyOwnersOnly) {
-  if (isCompanyOwner(req)) return true
-  sendError(res, 403, message)
-  return false
-}
-
-function ensureCompanyOwnerOrSelf(req, res, userId, message = API_MESSAGES.noAccess) {
-  if (isCompanyOwner(req) || isSelf(req, userId)) return true
-  sendError(res, 403, message)
-  return false
-}
-
-function ensureAdmin(req, res, message = API_MESSAGES.adminsOnly) {
-  if (isAdmin(req)) return true
-  sendError(res, 403, message)
-  return false
-}
-
-function canAssignRole(req, role) {
-  if (!role || !ASSIGNABLE_USER_ROLES.has(role)) return false
-  return isCompanyOwner(req)
-}
-
-function isAssignableCompanyUserRole(role) {
-  return ASSIGNABLE_USER_ROLES.has(role)
 }
 
 const createOwnerSetupInvitation = createOwnerSetupInvitationFactory({ db })
