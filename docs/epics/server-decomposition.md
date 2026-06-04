@@ -79,6 +79,10 @@
   owner/admin/manager guards and assignable tenant-user role helpers moved to
   `backend/src/services/roleGuards.js`. `app.js`: 613 → 581 nonblank lines
   (−32 net); `services/roleGuards.js`: 60 nonblank lines.
+- **3.3.13 ✅ User store service extraction (2026-06-04):** user
+  lookup/create/update DB helpers moved to `backend/src/services/users.js`.
+  `app.js`: 581 → 545 nonblank lines (−36 net); `services/users.js`:
+  54 nonblank lines.
 
 ## Цель
 
@@ -89,7 +93,7 @@ defects, photos, analytics, dashboard, seed, demo-data.
 ## Текущее состояние (подтверждено в коде)
 
 - `backend/src/server.js` — **81 nonblank строк** (был 3 315, после Epic 3.3.1–3.3.6).
-- `backend/src/app.js` — **581 nonblank строк**: Express app factory,
+- `backend/src/app.js` — **545 nonblank строк**: Express app factory,
   middleware chain wiring, rate limit, protected uploads, settings/reference
   routes and all extracted route module registrations.
 - Уже вынесены: `routes/auth.js`, `routes/regions.js`, `routes/vehicles.js`,
@@ -103,6 +107,7 @@ defects, photos, analytics, dashboard, seed, demo-data.
 - Уже вынесены: `utils/transliteration.js`, `utils/env.js`, `utils/asserts.js`,
   `services/secretStore.js`, `services/redisClient.js`, `services/rateLimiter.js`,
   `services/photoUpload.js`, `services/companyPolicy.js`, `services/roleGuards.js`,
+  `services/users.js`,
   `config.js`, `middleware/requestId.js`, `middleware/accessLog.js`,
   `middleware/security.js`, `middleware/auth.js`, `seed/demoData.js`,
   `app.js`.
@@ -599,6 +604,27 @@ defects, photos, analytics, dashboard, seed, demo-data.
 - `node --check backend/src/app.js` — clean.
 - `node --check backend/src/services/roleGuards.js` — clean.
 
+## Epic 3.3.13: User store service extraction (✅ 2026-06-04)
+
+### What moved
+
+**`backend/src/services/users.js`** (new, 54 nonblank lines):
+- user summary/detail lookup helpers.
+- email-to-user-id lookup helper.
+- user create/update DB helpers.
+
+### Changes in `app.js`
+
+- Removed inline user store helper block from `app.js`.
+- `app.js` now creates `userStore` through `createUserStore({ db })` and passes
+  the same callbacks to auth, users and seed route modules.
+- `app.js`: 581 → **545 nonblank lines** (−36 net).
+
+### Verification
+
+- `node --check backend/src/app.js` — clean.
+- `node --check backend/src/services/users.js` — clean.
+
 ## Целевая структура
 
 ```txt
@@ -634,6 +660,7 @@ backend/src/
 │   ├── photoPipeline.js
 │   ├── companyPolicy.js
 │   ├── roleGuards.js
+│   ├── users.js
 │   └── subscription.js
 └── seed/
     ├── regions.js
@@ -669,7 +696,9 @@ backend/src/
    `services/companyPolicy.js`.
 12. ✅ **3.3.12 (2026-06-04):** Role guards service extraction —
    `services/roleGuards.js`.
-13. **3.3.13 ⏳:** Прогнать все smoke-тесты и `verify:launch` после каждой
+13. ✅ **3.3.13 (2026-06-04):** User store service extraction —
+   `services/users.js`.
+14. **3.3.14 ⏳:** Прогнать все smoke-тесты и `verify:launch` после каждой
    mini-epic.
 
 ## Критерии приёмки
@@ -744,6 +773,9 @@ backend/src/
   `app.js` 613 → 581 nonblank строк. Новый `services/roleGuards.js`
   (60 nonblank строк) содержит role predicates, authorization guards and
   assignable tenant-user role helpers.
+- **2026-06-04:** Epic 3.3.13 ✅ — user store service extraction.
+  `app.js` 581 → 545 nonblank строк. Новый `services/users.js`
+  (54 nonblank строк) содержит user lookup/create/update DB helpers.
 
 ## Effort / Risk
 

@@ -25,6 +25,7 @@ import { createRateLimiter } from './services/rateLimiter.js'
 import { isRedisConfigured, getRedisStatus, pingRedis } from './services/redisClient.js'
 import { createCompanyPolicy } from './services/companyPolicy.js'
 import { createRoleGuards } from './services/roleGuards.js'
+import { createUserStore } from './services/users.js'
 import {
   uploadsDir,
   upload,
@@ -289,27 +290,6 @@ function readSettings() {
   return result
 }
 
-function getUserSummaryById(id, companyId = null) {
-  const query = companyId
-    ? db.prepare('SELECT id, email, name, role, status, company_id FROM users WHERE id = ? AND company_id = ?')
-    : db.prepare('SELECT id, email, name, role, status, company_id FROM users WHERE id = ?')
-
-  return companyId ? query.get(id, companyId) : query.get(id)
-}
-
-function getUserIdByEmail(email) {
-  const user = db.prepare('SELECT id FROM users WHERE email = ?').get(email)
-  return user?.id ?? null
-}
-
-function getUserRecordById(id, companyId = null) {
-  const query = companyId
-    ? db.prepare('SELECT id, email, name, role, status, company_id, created_at FROM users WHERE id = ? AND company_id = ?')
-    : db.prepare('SELECT id, email, name, role, status, company_id, created_at FROM users WHERE id = ?')
-
-  return companyId ? query.get(id, companyId) : query.get(id)
-}
-
 function getVehicleById(id, companyId = null) {
   const query = companyId
     ? db.prepare(`
@@ -332,44 +312,6 @@ function getInspectionById(id, companyId = null) {
     : db.prepare('SELECT * FROM inspections WHERE id = ?')
 
   return companyId ? query.get(id, companyId) : query.get(id)
-}
-
-function createUserRecord({ id, email, passwordHash, name, role, status = 'active', companyId = 'default', ignoreExisting = false }) {
-  const statement = ignoreExisting
-    ? db.prepare('INSERT OR IGNORE INTO users (id, email, password, name, role, status, company_id) VALUES (?, ?, ?, ?, ?, ?, ?)')
-    : db.prepare('INSERT INTO users (id, email, password, name, role, status, company_id) VALUES (?, ?, ?, ?, ?, ?, ?)')
-
-  return statement.run(id, email, passwordHash, name, role, status, companyId)
-}
-
-function updateUserRecord(id, { email, name, role, status, passwordHash, companyId = null }) {
-  const update = (sql, params) => {
-    if (!companyId) {
-      return db.prepare(sql).run(...params)
-    }
-
-    return db.prepare(`${sql} AND company_id = ?`).run(...params, companyId)
-  }
-
-  if (email !== undefined) {
-    update('UPDATE users SET email = ? WHERE id = ?', [email, id])
-  }
-
-  if (name !== undefined) {
-    update('UPDATE users SET name = ? WHERE id = ?', [name, id])
-  }
-
-  if (role !== undefined) {
-    update('UPDATE users SET role = ? WHERE id = ?', [role, id])
-  }
-
-  if (status !== undefined) {
-    update('UPDATE users SET status = ? WHERE id = ?', [status, id])
-  }
-
-  if (passwordHash !== undefined) {
-    update('UPDATE users SET password = ? WHERE id = ?', [passwordHash, id])
-  }
 }
 
 const API_MESSAGES = {
@@ -423,6 +365,15 @@ const API_MESSAGES = {
   vehicleNumberRequiresConfirmation: 'Требуется подтверждение номера инспектором',
   internalServerError: 'Internal server error',
 }
+
+const userStore = createUserStore({ db })
+const {
+  getUserSummaryById,
+  getUserIdByEmail,
+  getUserRecordById,
+  createUserRecord,
+  updateUserRecord,
+} = userStore
 
 const roleGuards = createRoleGuards({ sendError, API_MESSAGES })
 const {
