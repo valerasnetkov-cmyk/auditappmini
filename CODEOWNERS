@@ -6,7 +6,7 @@
 # Default owners для всего репозитория
 *                           @auditappmini/maintainers
 
-# Backend (Express + sql.js)
+# Backend (Express + better-sqlite3)
 backend/                    @auditappmini/backend-maintainers
 backend/src/db.js           @auditappmini/backend-maintainers
 backend/src/server.js       @auditappmini/backend-maintainers
@@ -27,7 +27,7 @@ web/src/lib/                @auditappmini/web-maintainers
 web/.env.example            @auditappmini/security-maintainers
 web/package.json            @auditappmini/web-maintainers
 
-# Mobile (Expo SDK 51)
+# Mobile (Expo SDK 54)
 mobile/                     @auditappmini/mobile-maintainers
 mobile/app/                 @auditappmini/mobile-maintainers
 mobile/src/                 @auditappmini/mobile-maintainers

@@ -57,8 +57,8 @@
    в единый `docs/theme.md`.
 5. **Переписать mojibake-файлы** с актуальным содержимым (где документ
    отражает устаревший контекст — обновить под текущее состояние кода).
-6. **Добавить `docs/SECURITY.md`** (открытый backlog в audit findings).
-7. **Добавить `CODEOWNERS`** в корне репозитория.
+6. ✅ **Добавить `docs/SECURITY.md`** (закрыто).
+7. ✅ **Добавить `CODEOWNERS`** в корне репозитория (закрыто).
 8. **Прогнать `git grep` для поиска** всех `docs/*.md` ссылок в коде,
    обновить перекрёстные ссылки.
 
@@ -68,6 +68,13 @@
 - `docs/README.md` отражает фактическое содержимое `docs/`.
 - В корне остаются только `README.md`, `CHANGELOG.md`, `plan.md`.
 - Добавлен `docs/SECURITY.md` и `CODEOWNERS`.
+
+## Status 2026-06-05
+
+Partially closed: `docs/SECURITY.md` and root `CODEOWNERS` exist and are
+synced with the current backend storage/rate-limit and mobile Expo SDK state.
+The broader mojibake cleanup and duplicate-doc consolidation remain separate
+documentation cleanup work.
 - Все перекрёстные ссылки работают.
 
 ## Effort / Risk

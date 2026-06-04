@@ -8,10 +8,15 @@
 
 ## Текущее состояние (подтверждено в коде)
 
-- `backend/src/server.js:375` — `function createRateLimiter({ name, windowMs, max, keyGenerator })`.
-- `backend/src/server.js:525` — `const sensitiveIpRateLimit = createRateLimiter(...)`.
-- `backend/src/server.js:532` — `const sensitiveAccountRateLimit = createRateLimiter(...)`.
-- Хранилище — локальная `Map` в памяти процесса.
+- `backend/src/services/rateLimiter.js` — `createRateLimiter(...)`.
+- `backend/src/middleware/authRateLimit.js` создаёт sensitive IP/account
+  limiters для auth-sensitive endpoints.
+- Если `REDIS_URL` задан и Redis доступен, limiter использует atomic
+  `INCR` + `PEXPIRE` через Lua script и общий bucket для всех backend replicas.
+- Если Redis не сконфигурирован или недоступен, limiter деградирует в
+  in-memory mode с warning; без Redis лимит остаётся per-replica.
+- `/api/health/ready` проверяет Redis при заданном `REDIS_URL` и возвращает
+  `503`, если Redis недоступен.
 
 ## Проблемы
 
@@ -23,16 +28,24 @@
 
 ## Подзадачи
 
-1. Добавить `ioredis` (или `redis`) в `backend/package.json`.
-2. Ввести `REDIS_URL` в `backend/.env.example` и `backend/.env.production.example`.
-3. Реализовать `createRateLimiter` поверх Redis (Lua-скрипт для atomic
+1. ✅ Добавить `ioredis` (или `redis`) в `backend/package.json`.
+2. ✅ Ввести `REDIS_URL` в `backend/.env.example` и `backend/.env.production.example`.
+3. ✅ Реализовать `createRateLimiter` поверх Redis (Lua-скрипт для atomic
    `INCR` + `EXPIRE`).
-4. Добавить fallback на in-memory при недоступности Redis (с предупреждением
+4. ✅ Добавить fallback на in-memory при недоступности Redis (с предупреждением
    в лог).
-5. Прогнать `smoke:security` и `smoke:production-guard`.
-6. Обновить `docs/production-env.md` (Redis как required dependency).
-7. Обновить `docs/launch-checklist.md` (проверка Redis-инстанса).
-8. Добавить health-check Redis в `/api/health/ready`.
+5. ✅ Прогнать `smoke:security` и `smoke:production-guard`.
+6. ✅ Обновить `docs/production-env.md` (Redis как production recommendation
+   для multi-replica).
+7. ✅ Обновить `docs/launch-checklist.md` (проверка Redis-инстанса).
+8. ✅ Добавить health-check Redis в `/api/health/ready`.
+
+## Status 2026-06-05
+
+Closed for current pilot architecture. Redis is optional for single-replica
+development/pilot mode and recommended for multi-replica or blue/green
+deployments; readiness fails when `REDIS_URL` is configured but Redis is
+unavailable.
 
 ## Альтернативы
 

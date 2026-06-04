@@ -25,7 +25,7 @@
 
 ## Безопасность runtime
 
-### Backend (`backend/src/server.js`)
+### Backend (`backend/src/app.js`, `backend/src/server.js`)
 
 - **JWT secret**: без `JWT_SECRET` backend **отказывается стартовать** в
   `NODE_ENV=production` (Epic 3.9). В dev генерируется случайный
@@ -35,9 +35,10 @@
   запрещены в production.
 - **CORS**: список разрешённых origin'ов читается из `CORS_ALLOWED_ORIGINS`
   (через запятую). Wildcard (`*`) запрещён в production.
-- **Rate limit**: `createRateLimiter` (server.js) ограничивает попытки
-  логина и другие чувствительные endpoint'ы. **Текущая реализация —
-  локальная Map**; не работает при multi-replica (см. Epic 3.2).
+- **Rate limit**: `createRateLimiter` (`backend/src/services/rateLimiter.js`)
+  ограничивает попытки логина и другие чувствительные endpoint'ы. При
+  заданном `REDIS_URL` limiter использует Redis/Lua для общего bucket на все
+  backend replicas; без Redis деградирует в in-memory режим.
 - **Security headers**: CSP, COOP, CORP, X-Frame-Options,
   X-Content-Type-Options, Referrer-Policy установлены глобально.
 - **MFA**: TOTP-based, опционально для privileged ролей.
@@ -80,8 +81,6 @@
 
 ## Backlog (открытые security-задачи)
 
-- **Epic 3.2**: распределённый rate limit (Redis) — текущий локальный
-  обходится при multi-replica.
 - **Refresh tokens / token rotation**: сейчас JWT живёт 7 дней без
   revocation list (см. `CHANGELOG.md` § "Audit findings 2026-05-27").
 - **CSP nonces**: текущая CSP использует `unsafe-inline` для совместимости;
