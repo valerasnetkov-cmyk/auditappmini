@@ -190,7 +190,7 @@ export default function registerInspectionRoutes({
     `).run(id, vehicle_id, req.user.id, type, accidentValidation.accidentOccurredAt, accidentValidation.accidentLocation, companyId)
 
     if (type === 'scheduled') {
-      db.prepare('UPDATE vehicles SET last_scheduled_inspection = datetime("now") WHERE id = ? AND company_id = ?').run(vehicle_id, companyId)
+      db.prepare("UPDATE vehicles SET last_scheduled_inspection = datetime('now') WHERE id = ? AND company_id = ?").run(vehicle_id, companyId)
     }
 
     const insertChecklist = db.prepare(`

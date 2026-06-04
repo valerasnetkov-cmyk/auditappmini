@@ -20,6 +20,11 @@
 | 3.9 | Удаление `DEFAULT_JWT_SECRET` fallback | [`jwt-secret-store.md`](./jwt-secret-store.md) | Low | S | M | ✅ закрыт (2026-06-02) |
 | 3.10 | Объединение документации в `docs/` | [`documentation-consolidation.md`](./documentation-consolidation.md) | Low | S | L | ✅ закрыт (2026-06-02) |
 
+## Current status overrides
+
+- Epic 3.1 is closed for Variant A (`better-sqlite3`) on 2026-06-04.
+- Epic 3.3 is closed through launch verification on 2026-06-04.
+
 ## Effort-шкала
 
 - **S** — < 1 дня (1-2 подзадачи).

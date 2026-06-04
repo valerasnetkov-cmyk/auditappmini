@@ -61,6 +61,15 @@
 - **Backend documentation**: `docs/backend.md` now documents the decomposed
   runtime structure around `server.js`, `app.js`, config, middleware, routes,
   services and seed modules.
+- **Epic 3.1 database driver migration**: backend runtime storage now uses
+  `better-sqlite3` with a compatibility wrapper for existing `getDb()` callers;
+  `saveDatabase()` is now a no-op because SQLite writes directly to disk.
+- **Backup verification driver**: `smoke:backup` and `backup:verify` now create
+  and inspect SQLite files through `better-sqlite3`, including read-only
+  `PRAGMA integrity_check`.
+- **Backup default database path**: `backup:local` now defaults to
+  `backend/data/database.sqlite`, matching `.env.example` and the runtime
+  persistent storage location.
 - **Resource admin вместо Directus CMS**: принято архитектурное решение отказаться от Directus как активной части проекта. Управление компаниями, владельцами, тарифами и лимитами переносится во встроенный backend/web контур "Администрирование ресурса".
 - **Границы роли `admin`**: администратор ресурса отвечает за весь сервисный уровень проекта, но не является владельцем или менеджером компаний и не получает доступ к технике, осмотрам, дефектам, фото и пользовательскому назначению внутри tenant-контуров.
 - **Smoke-gate**: backend smoke больше не содержит Directus service/mock проверки и включает MFA login flow, resource-admin CRUD, tenant isolation и лимиты компаний.
@@ -73,6 +82,8 @@
 - **MFA challenge login**: добавлен `/api/auth/mfa/verify` и web-форма ввода TOTP после password login для пользователей с включенным MFA.
 
 ### Removed
+- **Backend `sql.js` dependency**: removed from active backend dependencies
+  after runtime, smoke and backup verification paths moved to `better-sqlite3`.
 - **Directus из целевой архитектуры**: Directus больше не рассматривается как optional CMS для MVP-пилота; удалены Directus runtime routes/services, bootstrap/seed scripts, provisioning sync, endpoints, env-переменные, active docs и каталог `directus/`.
 
 ### Security

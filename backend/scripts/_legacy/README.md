@@ -1,5 +1,9 @@
 # Legacy Scripts (для исторической справки)
 
+> Note: active backend dependencies no longer include `sql.js` after Epic 3.1.
+> Scripts in this directory are archival references only and are not expected to
+> run without manual restoration/migration of their historical dependencies.
+
 Этот каталог содержит унаследованные ad-hoc скрипты, которые раньше
 находились в `backend/tests/`. Они не запускаются через test runner и
 предназначены только для исторической справки.

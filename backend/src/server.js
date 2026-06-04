@@ -1,5 +1,5 @@
 import 'dotenv/config'
-import { initDatabase } from './db.js'
+import { closeDatabase, initDatabase } from './db.js'
 import { GRACEFUL_SHUTDOWN_TIMEOUT_MS } from './config.js'
 import { isRedisConfigured, shutdownRedis } from './services/redisClient.js'
 import { createApp } from './app.js'
@@ -21,6 +21,11 @@ function forceCloseOpenSockets() {
   openSockets.clear()
 }
 
+function exitAfterStorageShutdown(code) {
+  closeDatabase()
+  process.exit(code)
+}
+
 function gracefulShutdown(signal) {
   if (isShuttingDown) {
     console.log(`[shutdown] ${signal} received while shutdown is already in progress`)
@@ -31,14 +36,14 @@ function gracefulShutdown(signal) {
   console.log(`[shutdown] ${signal} received; stopping HTTP server`)
 
   if (!server) {
-    process.exit(0)
+    exitAfterStorageShutdown(0)
     return
   }
 
   const shutdownTimer = setTimeout(() => {
     console.error(`[shutdown] Forced shutdown after ${GRACEFUL_SHUTDOWN_TIMEOUT_MS}ms`)
     forceCloseOpenSockets()
-    process.exit(1)
+    exitAfterStorageShutdown(1)
   }, GRACEFUL_SHUTDOWN_TIMEOUT_MS)
   shutdownTimer.unref?.()
 
@@ -47,7 +52,7 @@ function gracefulShutdown(signal) {
 
     if (err) {
       console.error('[shutdown] HTTP server closed with error:', err)
-      process.exit(1)
+      exitAfterStorageShutdown(1)
       return
     }
 
@@ -58,13 +63,13 @@ function gracefulShutdown(signal) {
         })
         .finally(() => {
           console.log('[shutdown] HTTP server closed gracefully')
-          process.exit(0)
+          exitAfterStorageShutdown(0)
         })
       return
     }
 
     console.log('[shutdown] HTTP server closed gracefully')
-    process.exit(0)
+    exitAfterStorageShutdown(0)
   })
 
   server.closeIdleConnections?.()
@@ -94,5 +99,5 @@ initDatabase().then(() => {
   })
 }).catch(err => {
   console.error('Failed to initialize database:', err)
-  process.exit(1)
+  exitAfterStorageShutdown(1)
 })

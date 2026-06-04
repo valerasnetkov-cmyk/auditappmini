@@ -43,6 +43,13 @@ backend/src/seed/                  # demo-data and seed endpoints
 route, middleware, service or config modules first; `server.js` should only
 change when boot, listen or shutdown behavior changes.
 
+## Database runtime
+
+`backend/src/db.js` uses `better-sqlite3` against `DATABASE_PATH`. The module
+keeps the existing `getDb()` facade (`run`, `get`, `all`) for route and service
+code, while the underlying SQLite file is updated directly by the native driver.
+`saveDatabase()` is retained only as a compatibility no-op.
+
 ---
 
 ## Tenant middleware

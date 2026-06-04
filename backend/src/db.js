@@ -1,4 +1,4 @@
-import initSqlJs from 'sql.js'
+import Database from 'better-sqlite3'
 import bcrypt from 'bcryptjs'
 import { v4 as uuidv4 } from 'uuid'
 import path from 'path'
@@ -14,6 +14,94 @@ const dbPath = configuredDbPath
   : path.join(backendRoot, 'data', 'database.sqlite')
 
 let db = null
+
+function normalizeParams(params) {
+  if (params.length === 0) return []
+  if (params.length === 1 && Array.isArray(params[0])) return params[0]
+  return params
+}
+
+function isReadSql(sql) {
+  return /^\s*(SELECT|PRAGMA|WITH)\b/i.test(sql)
+}
+
+function runStatement(statement, params) {
+  const normalized = normalizeParams(params)
+  return normalized.length > 0 ? statement.run(normalized) : statement.run()
+}
+
+function allStatement(statement, params) {
+  const normalized = normalizeParams(params)
+  return normalized.length > 0 ? statement.all(normalized) : statement.all()
+}
+
+function getStatement(statement, params) {
+  const normalized = normalizeParams(params)
+  return normalized.length > 0 ? statement.get(normalized) : statement.get()
+}
+
+function createSqlJsLikeStatement(statement) {
+  let boundParams = []
+  let rows = null
+  let currentRow = null
+
+  return {
+    bind: (...params) => {
+      boundParams = normalizeParams(params)
+    },
+    run: (...params) => runStatement(statement, params.length > 0 ? params : boundParams),
+    step: () => {
+      if (rows === null) {
+        rows = allStatement(statement, boundParams)
+      }
+
+      currentRow = rows.shift() || null
+      return currentRow !== null
+    },
+    getAsObject: () => currentRow || {},
+    free: () => {},
+  }
+}
+
+function createDatabase(filePath) {
+  const sqlite = new Database(filePath)
+  sqlite.pragma('journal_mode = WAL')
+  sqlite.pragma('foreign_keys = ON')
+
+  return {
+    raw: sqlite,
+    run: (sql, ...params) => {
+      const normalized = normalizeParams(params)
+      if (normalized.length === 0) {
+        try {
+          return sqlite.prepare(sql).run()
+        } catch (error) {
+          if (!/more than one statement/i.test(error.message)) {
+            throw error
+          }
+
+          sqlite.exec(sql)
+          return { changes: 0, lastInsertRowid: undefined }
+        }
+      }
+
+      return runStatement(sqlite.prepare(sql), normalized)
+    },
+    exec: (sql) => {
+      if (!isReadSql(sql)) {
+        sqlite.exec(sql)
+        return []
+      }
+
+      const statement = sqlite.prepare(sql)
+      const columns = statement.columns().map((column) => column.name)
+      const values = statement.raw().all()
+      return values.length > 0 ? [{ columns, values }] : []
+    },
+    prepare: (sql) => createSqlJsLikeStatement(sqlite.prepare(sql)),
+    close: () => sqlite.close(),
+  }
+}
 
 const DEFAULT_REGIONS = [
   'Москва',
@@ -604,15 +692,10 @@ function applySchemaMigrations() {
 }
 
 export async function initDatabase() {
-  const SQL = await initSqlJs()
   fs.mkdirSync(path.dirname(dbPath), { recursive: true })
 
-  if (fs.existsSync(dbPath)) {
-    const data = fs.readFileSync(dbPath)
-    db = new SQL.Database(data)
-  } else {
-    db = new SQL.Database()
-  }
+  db?.close?.()
+  db = createDatabase(dbPath)
 
   db.run(`
     CREATE TABLE IF NOT EXISTS users (
@@ -913,56 +996,32 @@ export async function initDatabase() {
 }
 
 function saveDatabase() {
-  if (db) {
-    fs.mkdirSync(path.dirname(dbPath), { recursive: true })
-    const data = db.export()
-    fs.writeFileSync(dbPath, Buffer.from(data))
-  }
+  // better-sqlite3 writes changes directly to the database file.
 }
 
 export function getDb() {
   return {
     prepare: (sql) => ({
       run: (...params) => {
-        if (params.length > 0) {
-          db.run(sql, params)
-        } else {
-          db.run(sql)
-        }
-        saveDatabase()
-        return { changes: 0 }
+        const result = db.run(sql, ...params)
+        return { changes: result.changes || 0, lastInsertRowid: result.lastInsertRowid }
       },
       get: (...params) => {
-        const stmt = db.prepare(sql)
-        // Handle both: .get(a, b) and .get([a, b])
-        const bindParams = params.length === 1 && Array.isArray(params[0]) ? params[0] : params
-        if (bindParams.length > 0) stmt.bind(bindParams)
-        // IMPORTANT: step() only once - calling twice breaks it!
-        if (stmt.step()) {
-          const row = stmt.getAsObject()
-          stmt.free()
-          return row
-        }
-        stmt.free()
-        return undefined
+        return getStatement(db.raw.prepare(sql), params)
       },
       all: (...params) => {
-        const stmt = db.prepare(sql)
-        const bindParams = params.length === 1 && Array.isArray(params[0]) ? params[0] : params
-        if (bindParams.length > 0) stmt.bind(bindParams)
-        const results = []
-        while (stmt.step()) {
-          results.push(stmt.getAsObject())
-        }
-        stmt.free()
-        return results
+        return allStatement(db.raw.prepare(sql), params)
       },
     }),
     exec: (sql) => {
-      db.run(sql)
-      saveDatabase()
+      db.exec(sql)
     },
   }
+}
+
+export function closeDatabase() {
+  db?.close?.()
+  db = null
 }
 
 export default {

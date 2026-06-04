@@ -65,6 +65,20 @@
 - `ps aux` показывает стабильный RSS backend без роста под нагрузкой.
 - README обновлён: `docs/sql-outline.md` указывает `better-sqlite3`.
 
+## Status 2026-06-04
+
+Closed for Variant A (`better-sqlite3`):
+
+- `backend/src/db.js` imports `better-sqlite3`, opens `DATABASE_PATH`
+  directly, enables WAL/foreign keys and preserves the existing `getDb()`
+  facade for callers.
+- `saveDatabase()` is retained as a compatibility no-op because the native
+  SQLite driver writes changes directly to disk.
+- Active smoke and backup scripts use `better-sqlite3`; `sql.js` was removed
+  from active backend dependencies.
+- Legacy scripts under `backend/scripts/_legacy/` are archival and are not part
+  of the active npm verification surface.
+
 ## Effort / Risk
 
 - **Effort:** L (5-7 дней, требует регрессионного тестирования).

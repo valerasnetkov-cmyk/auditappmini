@@ -1,5 +1,11 @@
 # SQL Outline
 
+## Runtime note
+
+Backend runtime uses SQLite through `better-sqlite3` at `DATABASE_PATH`.
+This file remains a schema outline only; production/pilot backup verification
+uses `npm --prefix backend run backup:verify`.
+
 ## Важно
 
 Это безопасный SQL-скелет без секретов, паролей и production-ссылок.

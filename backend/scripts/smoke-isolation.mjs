@@ -79,30 +79,34 @@ function makeToken(payload) {
 }
 
 async function seedIsolationPrincipals() {
-  const { initDatabase, getDb } = await import('../src/db.js')
+  const { initDatabase, getDb, closeDatabase } = await import('../src/db.js')
   await initDatabase()
-  const db = getDb()
-  const passwordHash = bcrypt.hashSync('smoke123', 10)
+  try {
+    const db = getDb()
+    const passwordHash = bcrypt.hashSync('smoke123', 10)
 
-  db.prepare(`
-    INSERT OR IGNORE INTO companies (id, slug, name, region_code, data_residency, status)
-    VALUES (?, ?, ?, ?, ?, 'active')
-  `).run('other-company', 'other-company', 'Other Company', 'RU-SAK', 'RU')
+    db.prepare(`
+      INSERT OR IGNORE INTO companies (id, slug, name, region_code, data_residency, status)
+      VALUES (?, ?, ?, ?, ?, 'active')
+    `).run('other-company', 'other-company', 'Other Company', 'RU-SAK', 'RU')
 
-  db.prepare(`
-    INSERT INTO users (id, email, password, name, role, status, company_id)
-    VALUES (?, ?, ?, ?, ?, 'active', ?)
-  `).run('other-company-owner', 'owner@other.example', passwordHash, 'Other Company Owner', 'owner', 'other-company')
+    db.prepare(`
+      INSERT INTO users (id, email, password, name, role, status, company_id)
+      VALUES (?, ?, ?, ?, ?, 'active', ?)
+    `).run('other-company-owner', 'owner@other.example', passwordHash, 'Other Company Owner', 'owner', 'other-company')
 
-  db.prepare(`
-    INSERT INTO users (id, email, password, name, role, status, company_id)
-    VALUES (?, ?, ?, ?, ?, 'active', ?)
-  `).run('default-company-owner', 'owner@default.example', passwordHash, 'Default Company Owner', 'owner', 'default')
+    db.prepare(`
+      INSERT INTO users (id, email, password, name, role, status, company_id)
+      VALUES (?, ?, ?, ?, ?, 'active', ?)
+    `).run('default-company-owner', 'owner@default.example', passwordHash, 'Default Company Owner', 'owner', 'default')
 
-  db.prepare(`
-    INSERT INTO users (id, email, password, name, role, status, company_id)
-    VALUES (?, ?, ?, ?, ?, 'active', ?)
-  `).run('default-inspector', 'inspector@default.example', passwordHash, 'Default Inspector', 'inspector', 'default')
+    db.prepare(`
+      INSERT INTO users (id, email, password, name, role, status, company_id)
+      VALUES (?, ?, ?, ?, ?, 'active', ?)
+    `).run('default-inspector', 'inspector@default.example', passwordHash, 'Default Inspector', 'inspector', 'default')
+  } finally {
+    closeDatabase()
+  }
 }
 
 async function run() {
