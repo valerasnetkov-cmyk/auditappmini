@@ -106,7 +106,7 @@ export default function Layout({ children, currentPage }: LayoutProps) {
           <div className="flex items-center gap-3">
             <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary text-sm font-semibold text-foreground-inverse">AT</div>
             <div>
-              <h1 className="text-lg font-bold leading-tight text-foreground">Audit Tech</h1>
+              <h1 className="text-lg font-bold leading-tight text-foreground">Аудит авто</h1>
               <p className="text-xs text-foreground-muted">
                 {resourceAdminContext ? 'Администрирование ресурса' : 'Контроль осмотров и дефектов'}
               </p>

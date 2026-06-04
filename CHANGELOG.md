@@ -749,7 +749,7 @@ Read-only обследование ресурса. Полный отчёт — `
 ## [1.0.0] - 2024-05-XX
 
 ### Added
-- Initial release of Audit Tech application.
+- Initial release of Аудит авто application.
 - Vehicle inspection and defect tracking system.
 - QR code based vehicle identification.
 - Multi-role user support.

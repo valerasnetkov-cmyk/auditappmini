@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import Layout from '@/components/Layout'
 import { DailyInspectionsChart, InspectionTypeChart, RegionBarChart, VehicleStatusChart } from '@/components/DashboardCharts'
 import SubscriptionStatusBanner from '@/components/SubscriptionStatusBanner'
+import api from '@/lib/api/client'
 import { clearAuthToken, isManagerRole, requireAuthToken } from '@/lib/auth'
 import { getCompanyOperationRestriction } from '@/lib/companyAccess'
 import { AccidentCard } from './_components/AccidentCard'
@@ -25,6 +26,8 @@ export default function DashboardPage() {
   const [dateRange, setDateRange] = useState<DateRange>('week')
   const [customFrom, setCustomFrom] = useState('')
   const [customTo, setCustomTo] = useState('')
+  const [routeChecked, setRouteChecked] = useState(false)
+  const [routeError, setRouteError] = useState('')
 
   const { toast, showToast } = useToast()
   const dashboard = useDashboard()
@@ -45,8 +48,38 @@ export default function DashboardPage() {
 
   useEffect(() => {
     if (!requireAuthToken()) return
-    void triggerLoad()
-  }, [triggerLoad])
+    let cancelled = false
+
+    async function routeByRole() {
+      const result = await api.getMe()
+      if (cancelled) return
+
+      if (result.error === 'AUTH_REQUIRED') {
+        router.replace('/login')
+        return
+      }
+
+      if (result.error) {
+        setRouteError(result.error)
+        setRouteChecked(true)
+        return
+      }
+
+      if (result.data?.role === 'admin') {
+        router.replace('/saas-admin/dashboard')
+        return
+      }
+
+      setRouteChecked(true)
+      await triggerLoad()
+    }
+
+    void routeByRole()
+
+    return () => {
+      cancelled = true
+    }
+  }, [router, triggerLoad])
 
   const handleDateRangeChange = (range: DateRange) => {
     setDateRange(range)
@@ -68,11 +101,13 @@ export default function DashboardPage() {
     window.location.reload()
   }
 
-  if (dashboard.error) {
+  const pageError = routeError || dashboard.error
+
+  if (pageError) {
     return (
       <div className="app-shell flex min-h-screen items-center justify-center p-6">
         <div className="card max-w-xl p-8 text-center">
-          <h1 className="text-2xl font-bold text-status-danger">{dashboard.error}</h1>
+          <h1 className="text-2xl font-bold text-status-danger">{pageError}</h1>
           <p className="mt-3 text-sm text-foreground-secondary">
             Убедитесь, что backend запущен на http://localhost:3001. Для локального старта используйте `npm run dev` из корня проекта.
           </p>
@@ -82,6 +117,10 @@ export default function DashboardPage() {
         </div>
       </div>
     )
+  }
+
+  if (!routeChecked) {
+    return <DashboardLoading />
   }
 
   return (

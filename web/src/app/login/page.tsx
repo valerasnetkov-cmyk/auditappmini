@@ -3,6 +3,7 @@
 import { FormEvent, useEffect, useState } from 'react'
 import api from '@/lib/api/client'
 import { hasAuthSession } from '@/lib/auth'
+import type { AuthUser } from '@/lib/types'
 
 function getSafeNextPath(value: string | null) {
   if (!value || !value.startsWith('/') || value.startsWith('//') || value.startsWith('/login')) {
@@ -10,6 +11,11 @@ function getSafeNextPath(value: string | null) {
   }
 
   return value
+}
+
+function getPostLoginPath(user: AuthUser | undefined, nextPath: string) {
+  if (user?.role === 'admin') return '/saas-admin/dashboard'
+  return nextPath || '/'
 }
 
 export default function LoginPage() {
@@ -39,7 +45,9 @@ export default function LoginPage() {
     }
 
     if (hasAuthSession()) {
-      window.location.href = safeNextPath
+      void api.getMe().then((result) => {
+        window.location.href = getPostLoginPath(result.data, safeNextPath)
+      })
     }
   }, [])
 
@@ -52,7 +60,7 @@ export default function LoginPage() {
       const result = await api.login(email, password)
 
       if (result.data?.token) {
-        window.location.href = nextPath
+        window.location.href = getPostLoginPath(result.data.user, nextPath)
         return
       }
 
@@ -79,7 +87,7 @@ export default function LoginPage() {
       const result = await api.verifyLoginMfa(mfaToken, mfaCode)
 
       if (result.data?.token) {
-        window.location.href = nextPath
+        window.location.href = getPostLoginPath(result.data.user, nextPath)
         return
       }
 
