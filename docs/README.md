@@ -11,7 +11,8 @@
 
 ## Точки входа
 
-- `../README.md` — общее описание проекта, роли, типы осмотров, правила MVP.
+- `../README.md` — актуальная входная страница проекта: стек, запуск,
+  проверки, архитектура backend, роли, API-группы и ссылки на operations docs.
 - `../CHANGELOG.md` — журнал изменений (включая секции audit findings).
 - `../plan.md` — рабочий roadmap реализации и audit findings remediation.
 
@@ -74,7 +75,10 @@
 
 - [`QA-MFA-UI.md`](./QA-MFA-UI.md) — QA-сценарии MFA UI.
 - [`audit-2026-06-02.md`](./audit-2026-06-02.md) — **полный отчёт аудита от 2026-06-02** (состояние, расхождения, epic'и).
-- [`epics/`](./epics/) — track-only документы архитектурного долга (Epic 3.1–3.10). Сводный index в [`epics/README.md`](./epics/README.md). Закрытые epic'ы: 3.2 (Redis rate limit), 3.4 (mobile decomposition), 3.5 (web inspections decomposition), 3.6 (test runner), 3.7 (mojibake cleanup), 3.9 (JWT secret store), 3.10 (docs consolidation).
+- [`audit-2026-06-03.md`](./audit-2026-06-03.md) — продолжение backend decomposition.
+- [`audit-2026-06-04.md`](./audit-2026-06-04.md) — Epic 3.1 и Epic 3.3 launch verification.
+- [`audit-2026-06-05.md`](./audit-2026-06-05.md) — синхронизация README/security/epic docs после крупных правок.
+- [`epics/`](./epics/) — track-only документы архитектурного долга (Epic 3.1–3.10). Сводный index в [`epics/README.md`](./epics/README.md). Закрытые epic'ы: 3.1 (`better-sqlite3`), 3.2 (Redis rate limit), 3.3 (backend decomposition), 3.4 (mobile decomposition), 3.5 (web inspections decomposition), 3.6 (test runner), 3.7 (mojibake cleanup), 3.8 (web decomposition), 3.9 (JWT secret store), 3.10 (docs consolidation).
 
 ## Контекстные изменения (changelog-документы)
 
