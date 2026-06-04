@@ -789,14 +789,16 @@ backend/src/
    `middleware/authRateLimit.js`.
 16. ✅ **3.3.16 (2026-06-04):** Tenant endpoint predicate extraction —
    `middleware/tenantEndpoints.js`.
-17. **3.3.17 ⏳:** Прогнать все smoke-тесты и `verify:launch` после каждой
-   mini-epic.
+17. ✅ **3.3.17 (2026-06-04):** Launch verification gate — full
+   `npm run verify:launch` passed after backend decomposition, including backend
+   unit/smoke, web build, mobile verify, Chromium E2E, launch doctors and audits.
 
 ## Критерии приёмки
 
 - `server.js` ≤ 100 строк (после 3.3.6).
 - Ни один `*.js` в `backend/src` не превышает 500 строк (кроме legacy/seed).
 - `npm --prefix backend run smoke` проходит без изменений.
+- `npm run verify:launch` проходит после финального verification gate.
 - `npm run verify:launch` проходит.
 - `docs/backend.md` обновлён под новую структуру.
 
@@ -878,6 +880,10 @@ backend/src/
 - **2026-06-04:** Epic 3.3.16 ✅ — tenant endpoint predicate extraction.
   `app.js` 436 → 416 nonblank строк. Новый `middleware/tenantEndpoints.js`
   (22 nonblank строк) содержит tenant endpoint prefixes and predicate.
+- **2026-06-04:** Epic 3.3.17 ✅ — launch verification gate.
+  `npm run verify:launch` passed after aligning mobile Expo SDK 54 patch
+  dependencies and making `scripts/e2e-local.mjs` provide an isolated 32-byte hex
+  `JWT_SECRET` for the backend process.
 
 ## Effort / Risk
 

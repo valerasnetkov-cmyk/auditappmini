@@ -54,6 +54,13 @@
   wiring moved from `backend/src/app.js` to `backend/src/middleware/authRateLimit.js`.
 - **Epic 3.3 backend app decomposition**: tenant endpoint prefix predicate moved
   from `backend/src/app.js` to `backend/src/middleware/tenantEndpoints.js`.
+- **Epic 3.3 launch verification**: mobile Expo SDK 54 patch dependencies were
+  aligned with `expo install --check` (`expo` `~54.0.35`,
+  `expo-file-system` `~19.0.23`) so `verify:launch` reaches the full launch
+  gate.
+- **Backend documentation**: `docs/backend.md` now documents the decomposed
+  runtime structure around `server.js`, `app.js`, config, middleware, routes,
+  services and seed modules.
 - **Resource admin вместо Directus CMS**: принято архитектурное решение отказаться от Directus как активной части проекта. Управление компаниями, владельцами, тарифами и лимитами переносится во встроенный backend/web контур "Администрирование ресурса".
 - **Границы роли `admin`**: администратор ресурса отвечает за весь сервисный уровень проекта, но не является владельцем или менеджером компаний и не получает доступ к технике, осмотрам, дефектам, фото и пользовательскому назначению внутри tenant-контуров.
 - **Smoke-gate**: backend smoke больше не содержит Directus service/mock проверки и включает MFA login flow, resource-admin CRUD, tenant isolation и лимиты компаний.
@@ -80,6 +87,10 @@
 - **Pre-launch blockers**: перед полноценным стартом обязательны production doctor на реальном pilot env, backup/restore verification и release evidence.
 
 ### Fixed
+- **Epic 3.3 launch verification**: isolated E2E bootstrap now provides its own
+  32-byte hex `JWT_SECRET`, so externally configured short development secrets
+  no longer prevent `npm run verify:e2e` / `npm run verify:launch` from starting
+  the backend.
 - **Tenant read-only UX для журналов и карточек**: списки и карточки осмотров, техники, дефектов и настройки компании теперь показывают статус тарифа компании и заранее блокируют создание, удаление, закрытие/переоткрытие дефектов, сохранение осмотра, завершение осмотра, загрузку/удаление фото, импорт, справочники и сервисные настройки при `suspended`, отключенной компании или `expired` там, где создается новая операционная запись.
 - **Resource-admin KPI dashboard 2.0**: `/saas-admin/dashboard` расширен SaaS-агрегатами для администратора ресурса: activation funnel, health center, limit usage heatmap, churn/upsell candidates, Companies 2.0, фиксация `last_login_at` при входе и smoke-проверки новых агрегатов без доступа к tenant endpoints.
 - **Resource-admin dashboard analytics**: дашборд дополнен Product Activity, типами осмотров, фото/storage аналитикой, Potential MRR, OCR service summary, фильтрами Companies 2.0 и action-ссылками health center; backend stats возвращает безопасные activity/storage/ocr агрегаты и smoke проверяет их наличие.

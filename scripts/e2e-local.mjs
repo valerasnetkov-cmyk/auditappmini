@@ -1,4 +1,5 @@
 import { spawn } from 'node:child_process'
+import crypto from 'node:crypto'
 import fs from 'node:fs/promises'
 import net from 'node:net'
 import path from 'node:path'
@@ -16,6 +17,7 @@ const RUN_ID = `${Date.now()}-${process.pid}`
 const TMP_DIR = path.join(ROOT_DIR, '.tmp-e2e', RUN_ID)
 const DATABASE_PATH = path.join(TMP_DIR, 'database.sqlite')
 const UPLOAD_DIR = path.join(TMP_DIR, 'uploads')
+const JWT_SECRET = crypto.randomBytes(32).toString('hex')
 
 function formatArgs(args) {
   return args.map((arg) => (/\s/.test(arg) ? `"${arg}"` : arg)).join(' ')
@@ -188,6 +190,7 @@ async function main() {
         CORS_ORIGINS: webBaseUrl,
         DATABASE_PATH,
         UPLOAD_DIR,
+        JWT_SECRET,
       },
     })
     children.push(backend)
