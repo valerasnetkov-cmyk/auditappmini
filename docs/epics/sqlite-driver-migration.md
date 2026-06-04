@@ -8,10 +8,15 @@
 
 ## Текущее состояние (подтверждено в коде)
 
-- `backend/src/db.js:1` — `import initSqlJs from 'sql.js'`.
-- `backend/src/db.js:985, 1002, 1033` — `saveDatabase()` после каждой записи
-  (`fs.writeFileSync` всей БД).
-- `backend/src/db.js:136` — упоминание `Fixed mojibake records` (см. Epic 3.7).
+- `backend/src/db.js` использует `better-sqlite3` и открывает `DATABASE_PATH`
+  напрямую.
+- `backend/src/db.js` включает WAL и foreign keys при создании connection.
+- `getDb()` сохраняет прежний facade (`run`, `get`, `all`) для route/service
+  callers.
+- `saveDatabase()` оставлен только как compatibility no-op: native SQLite
+  driver пишет изменения напрямую в файл.
+- `backend/package.json` больше не содержит активную зависимость `sql.js`.
+- Исторические `sql.js`-скрипты остаются только в `backend/scripts/_legacy/`.
 
 ## Проблемы
 
