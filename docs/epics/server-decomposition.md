@@ -91,6 +91,10 @@
   auth rate-limit path normalization, key generators and `noStore` middleware
   moved to `backend/src/middleware/authRateLimit.js`. `app.js`: 469 → 436
   nonblank lines (−33 net); `middleware/authRateLimit.js`: 50 nonblank lines.
+- **3.3.16 ✅ Tenant endpoint predicate extraction (2026-06-04):** tenant
+  endpoint prefix list and predicate moved to `backend/src/middleware/tenantEndpoints.js`.
+  `app.js`: 436 → 416 nonblank lines (−20 net);
+  `middleware/tenantEndpoints.js`: 22 nonblank lines.
 
 ## Цель
 
@@ -101,7 +105,7 @@ defects, photos, analytics, dashboard, seed, demo-data.
 ## Текущее состояние (подтверждено в коде)
 
 - `backend/src/server.js` — **81 nonblank строк** (был 3 315, после Epic 3.3.1–3.3.6).
-- `backend/src/app.js` — **436 nonblank строк**: Express app factory,
+- `backend/src/app.js` — **416 nonblank строк**: Express app factory,
   middleware chain wiring, rate limit, protected uploads, settings/reference
   routes and all extracted route module registrations.
 - Уже вынесены: `routes/auth.js`, `routes/regions.js`, `routes/vehicles.js`,
@@ -119,6 +123,7 @@ defects, photos, analytics, dashboard, seed, demo-data.
   `services/users.js`,
   `config.js`, `middleware/requestId.js`, `middleware/accessLog.js`,
   `middleware/security.js`, `middleware/auth.js`, `middleware/authRateLimit.js`,
+  `middleware/tenantEndpoints.js`,
   `seed/demoData.js`,
   `app.js`.
 
@@ -683,6 +688,25 @@ defects, photos, analytics, dashboard, seed, demo-data.
 - `node --check backend/src/app.js` — clean.
 - `node --check backend/src/middleware/authRateLimit.js` — clean.
 
+## Epic 3.3.16: Tenant endpoint predicate extraction (✅ 2026-06-04)
+
+### What moved
+
+**`backend/src/middleware/tenantEndpoints.js`** (new, 22 nonblank lines):
+- tenant endpoint prefix list.
+- `isTenantUserEndpoint(pathname)` predicate used by auth middleware.
+
+### Changes in `app.js`
+
+- Removed inline tenant endpoint prefix list and predicate from `app.js`.
+- `app.js` now imports `isTenantUserEndpoint` from `middleware/tenantEndpoints.js`.
+- `app.js`: 436 → **416 nonblank lines** (−20 net).
+
+### Verification
+
+- `node --check backend/src/app.js` — clean.
+- `node --check backend/src/middleware/tenantEndpoints.js` — clean.
+
 ## Целевая структура
 
 ```txt
@@ -696,6 +720,7 @@ backend/src/
 ├── middleware/
 │   ├── auth.js               # authenticate, requireRole
 │   ├── authRateLimit.js
+│   ├── tenantEndpoints.js
 │   ├── rateLimit.js          # см. Epic 3.2
 │   ├── requestId.js          # X-Request-Id
 │   └── accessLog.js          # ACCESS_LOG_FORMAT=json
@@ -762,7 +787,9 @@ backend/src/
    `routes/health.js`; `app.js` below 500 nonblank lines.
 15. ✅ **3.3.15 (2026-06-04):** Auth rate-limit middleware extraction —
    `middleware/authRateLimit.js`.
-16. **3.3.16 ⏳:** Прогнать все smoke-тесты и `verify:launch` после каждой
+16. ✅ **3.3.16 (2026-06-04):** Tenant endpoint predicate extraction —
+   `middleware/tenantEndpoints.js`.
+17. **3.3.17 ⏳:** Прогнать все smoke-тесты и `verify:launch` после каждой
    mini-epic.
 
 ## Критерии приёмки
@@ -848,6 +875,9 @@ backend/src/
   `app.js` 469 → 436 nonblank строк. Новый `middleware/authRateLimit.js`
   (50 nonblank строк) содержит sensitive auth path normalization, key
   generators and no-store/rate-limit middleware stacks.
+- **2026-06-04:** Epic 3.3.16 ✅ — tenant endpoint predicate extraction.
+  `app.js` 436 → 416 nonblank строк. Новый `middleware/tenantEndpoints.js`
+  (22 nonblank строк) содержит tenant endpoint prefixes and predicate.
 
 ## Effort / Risk
 

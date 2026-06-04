@@ -37,6 +37,7 @@ import { createAccessLogMiddleware } from './middleware/accessLog.js'
 import { createSecurityHeadersMiddleware, createCorsMiddleware } from './middleware/security.js'
 import { createAuthenticateMiddleware } from './middleware/auth.js'
 import { createAuthRateLimitMiddlewares, noStore } from './middleware/authRateLimit.js'
+import { isTenantUserEndpoint } from './middleware/tenantEndpoints.js'
 import {
   TRUST_PROXY,
   SECURITY_HSTS_ENABLED,
@@ -99,28 +100,6 @@ const {
   sensitiveIpMax: SENSITIVE_RATE_LIMIT_MAX,
   sensitiveAccountMax: AUTH_ACCOUNT_RATE_LIMIT_MAX,
 })
-
-function isTenantUserEndpoint(pathname) {
-  const path = String(pathname || '')
-  return [
-    '/api/vehicles',
-    '/api/inspections',
-    '/api/defects',
-    '/api/photos',
-    '/api/users',
-    '/api/dashboard',
-    '/api/analytics',
-    '/api/notifications',
-    '/api/settings',
-    '/api/company',
-    '/api/companies',
-    '/api/regions',
-    '/api/photo-requirements',
-    '/api/defect-categories',
-    '/api/seed',
-    '/uploads',
-  ].some((prefix) => path === prefix || path.startsWith(`${prefix}/`))
-}
 
 registerHealthRoutes({
   app,
