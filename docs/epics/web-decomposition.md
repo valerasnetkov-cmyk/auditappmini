@@ -17,9 +17,6 @@
 | **3.8.6** | `web/src/app/saas-admin/companies/page.tsx` | 450 | **113** (−75%) | ✅ закрыт (2026-06-02) |
 | **3.8.7** | `web/src/app/vehicles/[id]/page.tsx` | 669 | **176** (−74%) | ✅ закрыт (2026-06-02) |
 | **3.8.8** | `web/src/app/saas-admin/companies/[id]/page.tsx` | 445 | **168** (−62%) | ✅ закрыт (2026-06-02) |
-| 3.8.6 | `web/src/app/saas-admin/companies/page.tsx` | 450 | TBD | открыт |
-| (опц.) | `web/src/app/vehicles/[id]/page.tsx` | 669 | TBD | открыт |
-| (опц.) | `web/src/app/saas-admin/companies/[id]/page.tsx` | 518 | TBD | открыт |
 
 ## Текущее состояние (обновлено 2026-06-02 после Epic 3.8.8)
 
@@ -162,9 +159,6 @@ Verification: `npx tsc --noEmit` (0 errors в нашем коде, 2 pre-existin
 6. ✅ **Epic 3.8.6** — `web/src/app/saas-admin/companies/page.tsx` (450 → 113).
 7. ✅ **Epic 3.8.7** — `web/src/app/vehicles/[id]/page.tsx` (669 → 176).
 8. ✅ **Epic 3.8.8** — `web/src/app/saas-admin/companies/[id]/page.tsx` (445 → 168).
-6. **Epic 3.8.6** — `web/src/app/saas-admin/companies/page.tsx` (450 строк).
-7. (опц.) `web/src/app/vehicles/[id]/page.tsx` (669 строк).
-8. (опц.) `web/src/app/saas-admin/companies/[id]/page.tsx` (518 строк).
 
 ## Критерии приёмки (для каждого mini-epic)
 
