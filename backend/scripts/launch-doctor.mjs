@@ -145,6 +145,25 @@ function isValidAccessLogSkipPath(pathname) {
   )
 }
 
+function isPathInside(parentPath, targetPath) {
+  const relativePath = path.relative(parentPath, targetPath)
+  return relativePath === '' || (relativePath && !relativePath.startsWith('..') && !path.isAbsolute(relativePath))
+}
+
+function hasTemporaryPathSegment(targetPath) {
+  return targetPath
+    .split(path.sep)
+    .some((segment) => segment.toLowerCase().startsWith('.tmp'))
+}
+
+function requirePersistentStoragePath(name, resolvedPath) {
+  const value = process.env[name] || ''
+
+  requireProduction(path.isAbsolute(value), `${name} must be an absolute persistent storage path`)
+  requireProduction(!resolvedPath || !isPathInside(backendRoot, resolvedPath), `${name} must point outside the application release directory`)
+  requireProduction(!resolvedPath || !hasTemporaryPathSegment(resolvedPath), `${name} must not point to temporary storage`)
+}
+
 const jwtSecret = process.env.JWT_SECRET || ''
 requireProduction(Boolean(jwtSecret), 'JWT_SECRET is required')
 requireProduction(![DEFAULT_JWT_SECRET, DEV_JWT_SECRET].includes(jwtSecret), 'JWT_SECRET must not use a development value')
@@ -225,6 +244,18 @@ requireProduction(accessLogSkipPaths.every(isValidAccessLogSkipPath), 'ACCESS_LO
 const databasePath = process.env.DATABASE_PATH ? path.resolve(backendRoot, process.env.DATABASE_PATH) : null
 const uploadsDir = process.env.UPLOAD_DIR ? path.resolve(backendRoot, process.env.UPLOAD_DIR) : null
 const backupDir = process.env.BACKUP_DIR ? path.resolve(backendRoot, process.env.BACKUP_DIR) : null
+
+if (process.env.DATABASE_PATH) {
+  requirePersistentStoragePath('DATABASE_PATH', databasePath)
+}
+
+if (process.env.UPLOAD_DIR) {
+  requirePersistentStoragePath('UPLOAD_DIR', uploadsDir)
+}
+
+if (process.env.BACKUP_DIR) {
+  requirePersistentStoragePath('BACKUP_DIR', backupDir)
+}
 
 warn(!databasePath || fs.existsSync(path.dirname(databasePath)), `Database directory does not exist yet: ${databasePath ? path.dirname(databasePath) : '(not set)'}`)
 warn(!uploadsDir || fs.existsSync(uploadsDir), `Upload directory does not exist yet: ${uploadsDir || '(not set)'}`)

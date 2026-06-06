@@ -16,9 +16,9 @@ Legacy mobile-app removal record: `docs/mobile-app-retirement.md`.
 - Set `TRUST_PROXY` explicitly and keep sensitive endpoint rate limits enabled.
 - Keep `GRACEFUL_SHUTDOWN_TIMEOUT_MS` configured so PM2/redeploy stops do not abort active requests immediately.
 - Keep `REQUEST_ID_HEADER=x-request-id`, `ACCESS_LOG_FORMAT=json` and `ACCESS_LOG_SKIP_PATHS=/health,/api/health` for production diagnostics without noisy health-check logs.
-- Set `DATABASE_PATH` to a persistent disk path.
-- Set `UPLOAD_DIR` to a persistent disk path.
-- Set `BACKUP_DIR` to a persistent disk path outside the app release folder.
+- Set `DATABASE_PATH` to an absolute persistent disk path outside the app release folder.
+- Set `UPLOAD_DIR` to an absolute persistent disk path outside the app release folder.
+- Set `BACKUP_DIR` to an absolute persistent disk path outside the app release folder.
 - **For multi-replica or blue/green deployments:** set `REDIS_URL` to a reachable Redis instance and verify `/api/health/ready` reports `redis: true`. Without `REDIS_URL`, rate limit becomes per-replica and can be bypassed by switching workers (Epic 3.2).
 - Set `CORS_ORIGINS` to the real web origin list.
 - Set `NEXT_PUBLIC_API_URL` in the web environment to the production API URL.
@@ -70,4 +70,4 @@ Legacy mobile-app removal record: `docs/mobile-app-retirement.md`.
 - Local uploads are acceptable only with persistent volume and backups.
 - Active `web` and `mobile` codebases must pass their audit gates before release; attach the audit output to release evidence.
 - Legacy `mobile-app/` has been removed from the production repository; choose `mobile/` as the active mobile codebase.
-- Production backend startup intentionally fails when critical values such as `JWT_SECRET`, `TRUST_PROXY`, `DATABASE_PATH`, `UPLOAD_DIR`, `BACKUP_DIR`, wildcard CORS, public registration, disabled/invalid rate limits, or demo admin password are unsafe.
+- Production backend startup intentionally fails when critical values such as `JWT_SECRET`, `TRUST_PROXY`, absolute persistent `DATABASE_PATH`, absolute persistent `UPLOAD_DIR`, absolute persistent `BACKUP_DIR`, wildcard CORS, public registration, disabled/invalid rate limits, or demo admin password are unsafe.

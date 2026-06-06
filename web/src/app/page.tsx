@@ -1,231 +1,360 @@
-'use client'
+import type { Metadata } from 'next'
+import Image from 'next/image'
+import Link from 'next/link'
+import {
+  ArrowRightIcon,
+  CameraIcon,
+  ChartBarIcon,
+  ChatBubbleLeftRightIcon,
+  CheckCircleIcon,
+  ClipboardDocumentCheckIcon,
+  CloudArrowUpIcon,
+  ExclamationTriangleIcon,
+  FolderOpenIcon,
+  KeyIcon,
+  LockClosedIcon,
+  ShieldCheckIcon,
+  UserGroupIcon,
+} from '@heroicons/react/24/outline'
+import LoginForm from './login/LoginForm'
+import styles from './landing.module.css'
 
-import { useCallback, useEffect, useRef, useState } from 'react'
-import { useRouter } from 'next/navigation'
-import Layout from '@/components/Layout'
-import { DailyInspectionsChart, InspectionTypeChart, RegionBarChart, VehicleStatusChart } from '@/components/DashboardCharts'
-import SubscriptionStatusBanner from '@/components/SubscriptionStatusBanner'
-import api from '@/lib/api/client'
-import { clearAuthToken, isManagerRole, requireAuthToken } from '@/lib/auth'
-import { getCompanyOperationRestriction } from '@/lib/companyAccess'
-import { AccidentCard } from './_components/AccidentCard'
-import { ChartCard } from './_components/ChartCard'
-import { DashboardFilters } from './_components/DashboardFilters'
-import { DashboardLoading } from './_components/DashboardLoading'
-import { EmptyDashboard } from './_components/EmptyDashboard'
-import { NotificationsCard } from './_components/NotificationsCard'
-import { StatCard } from './_components/StatCard'
-import { useDashboard, useDashboardExport } from './_hooks/useDashboard'
-import { useToast } from './_hooks/useToast'
-import { getRangeStart, TOAST_CLASS_NAME, type DateRange } from './_lib/dashboard'
+export const metadata: Metadata = {
+  title: 'AuditAvto — цифровой контроль автопарка и фотофиксация осмотров',
+  description:
+    'Сервис для владельцев автопарков: осмотры техники, фотофиксация дефектов, пробег, ДТП и история состояния автомобилей в одной системе.',
+}
 
-export const dynamic = 'force-dynamic'
+const contactHref = 'mailto:info@auditavto.ru?subject=Запросить пилот AuditAvto'
 
-export default function DashboardPage() {
-  const router = useRouter()
-  const [dateRange, setDateRange] = useState<DateRange>('week')
-  const [customFrom, setCustomFrom] = useState('')
-  const [customTo, setCustomTo] = useState('')
-  const [routeChecked, setRouteChecked] = useState(false)
-  const [routeError, setRouteError] = useState('')
+const heroFeatures = [
+  ['Осмотр по регламенту', 'Чек-листы и обязательные пункты проверки.', ClipboardDocumentCheckIcon],
+  ['Фото как доказательство', 'Фото связаны с машиной, временем и осмотром.', CameraIcon],
+  ['История дефектов', 'Замечания и статусы сохраняются в одном месте.', FolderOpenIcon],
+  ['Пробег под контролем', 'Фиксация пробега без ручного хаоса.', ChartBarIcon],
+]
 
-  const { toast, showToast } = useToast()
-  const dashboard = useDashboard()
-  const exportHook = useDashboardExport()
+const problemCards = [
+  ['Фото теряются', 'Снимки уходят в чаты, телефоны сотрудников и папки без связи с конкретной техникой.', ChatBubbleLeftRightIcon],
+  ['Нет единого стандарта', 'Инспекторы фиксируют состояние по-разному: кто-то забывает ракурсы, одометр или повреждения.', ClipboardDocumentCheckIcon],
+  ['Возникают споры', 'Без истории сложно доказать, когда появился дефект и кто отвечал за осмотр.', ExclamationTriangleIcon],
+  ['Нет прозрачности', 'Руководитель видит последствия, но не полную картину по парку и осмотрам.', ChartBarIcon],
+]
 
-  const analyticsEnabled = dashboard.usage?.features.analytics.enabled !== false
-  const canSeedDemoData = isManagerRole(dashboard.user?.role)
-  const createRestriction = getCompanyOperationRestriction(dashboard.usage, 'create')
+const solutionCards = [
+  ['Единый сценарий', 'Техника, фото, чек-лист, дефекты, пробег и отчёт проходят по понятным шагам.', ClipboardDocumentCheckIcon],
+  ['Фото привязаны к осмотру', 'Каждое фото связано с машиной, датой, временем и событием.', CameraIcon],
+  ['Дефекты не теряются', 'Замечания остаются в истории и помогают видеть повторяющиеся проблемы.', CheckCircleIcon],
+  ['Данные у руководителя', 'Владелец и менеджер видят состояние техники без сбора отчётов вручную.', UserGroupIcon],
+]
 
-  const loadRef = useRef(dashboard.load)
-  useEffect(() => {
-    loadRef.current = dashboard.load
-  })
+const inspectionSteps = [
+  ['1', 'Выбор техники', 'Инспектор выбирает автомобиль или прицеп из списка.'],
+  ['2', 'Фото по зонам', 'Обязательные снимки помогают сохранить единый стандарт.'],
+  ['3', 'Чек-лист', 'Пункты осмотра проходят по регламенту компании.'],
+  ['4', 'Дефекты и пробег', 'Повреждения и одометр фиксируются с доказательствами.'],
+  ['5', 'Готовый отчёт', 'Система собирает данные в историю техники.'],
+]
 
-  const triggerLoad = useCallback(async () => {
-    await loadRef.current({ router, showToast, dateRange, customFrom, customTo })
-  }, [router, showToast, dateRange, customFrom, customTo])
+const productSections = [
+  {
+    title: 'Фотофиксация дефектов',
+    text: 'Каждый дефект фиксируется с фото, комментарием и привязкой к осмотру. Это помогает понять, когда появилось повреждение и повторяется ли проблема.',
+    image: '/auditavto/002.webp',
+    alt: 'Фотофиксация дефектов автомобиля с привязкой к истории осмотра',
+    points: ['Фото зоны повреждения', 'Дата и время обнаружения', 'Комментарий инспектора', 'История изменений'],
+  },
+  {
+    title: 'Пробег и ДТП',
+    text: 'Пробег подтверждается фото одометра. Для ДТП предусмотрен отдельный сценарий: место, дата, время, общий план и крупные планы повреждений.',
+    image: '/auditavto/004.webp',
+    alt: 'Фиксация пробега и ДТП в системе контроля автопарка',
+    points: ['Фото одометра', 'Динамика пробега', 'Место ДТП', 'Крупные планы повреждений'],
+  },
+]
 
-  useEffect(() => {
-    if (!requireAuthToken()) return
-    let cancelled = false
+const roles = [
+  ['Владелец', 'Видит общую картину по компании, технике, осмотрам и проблемным зонам.', UserGroupIcon],
+  ['Менеджер', 'Контролирует состояние парка, дефекты, осмотры и сроки.', ChartBarIcon],
+  ['Инспектор', 'Проводит осмотры, фиксирует фото, чек-листы, дефекты и пробег.', CameraIcon],
+]
 
-    async function routeByRole() {
-      const result = await api.getMe()
-      if (cancelled) return
+const benefits = [
+  'Контроль до выхода техники на линию',
+  'Доказательная база по повреждениям',
+  'Меньше зависимости от человеческого фактора',
+  'Прозрачность по технике и сотрудникам',
+]
 
-      if (result.error === 'AUTH_REQUIRED') {
-        router.replace('/login')
-        return
-      }
+const faqs = [
+  ['Что такое «Аудит авто»?', '«Аудит авто» — сервис фотофиксации состояния автотехники: осмотры, дефекты, пробег, ДТП и история по каждому автомобилю в одной системе.'],
+  ['Какую проблему решает сервис?', 'Он убирает хаос из фото в мессенджерах и устных договорённостей. Компания видит, кто, когда и в каком состоянии зафиксировал автомобиль.'],
+  ['Чем сервис лучше обычных фото в Maxx или Telegram?', 'Каждое фото привязано к автомобилю, осмотру, дате, времени, инспектору, дефекту и истории техники. Это уже не просто фото, а доказательная база.'],
+  ['Можно ли завершить осмотр без обязательных фото?', 'Нет. Система не даст закрыть осмотр без нужных снимков по выбранному типу проверки. Это защищает бизнес от формальных и неполных осмотров.'],
+  ['Какую выгоду получает владелец бизнеса?', 'Владелец получает прозрачный контроль автопарка: меньше спорных ситуаций, проще разбирать повреждения и ДТП, быстрее находить проблемную технику и подтверждать факты документально.'],
+]
 
-      if (result.error) {
-        setRouteError(result.error)
-        setRouteChecked(true)
-        return
-      }
+type IconType = typeof CameraIcon
 
-      if (result.data?.role === 'admin') {
-        router.replace('/saas-admin/dashboard')
-        return
-      }
-
-      setRouteChecked(true)
-      await triggerLoad()
-    }
-
-    void routeByRole()
-
-    return () => {
-      cancelled = true
-    }
-  }, [router, triggerLoad])
-
-  const handleDateRangeChange = (range: DateRange) => {
-    setDateRange(range)
-    if (range === 'custom' || range === 'week' || range === 'all') return
-    setCustomFrom(getRangeStart(range) || '')
-    setCustomTo(new Date().toISOString().split('T')[0])
-  }
-
-  const handleSeed = () =>
-    exportHook.seedData(
-      showToast,
-      canSeedDemoData,
-      createRestriction,
-      triggerLoad,
-    )
-
-  const handleLogout = () => {
-    clearAuthToken()
-    window.location.reload()
-  }
-
-  const pageError = routeError || dashboard.error
-
-  if (pageError) {
-    return (
-      <div className="app-shell flex min-h-screen items-center justify-center p-6">
-        <div className="card max-w-xl p-8 text-center">
-          <h1 className="text-2xl font-bold text-status-danger">{pageError}</h1>
-          <p className="mt-3 text-sm text-foreground-secondary">
-            Убедитесь, что backend запущен на http://localhost:3001. Для локального старта используйте `npm run dev` из корня проекта.
-          </p>
-          <button onClick={() => window.location.reload()} className="btn btn-primary mt-5">
-            Повторить
-          </button>
-        </div>
-      </div>
-    )
-  }
-
-  if (!routeChecked) {
-    return <DashboardLoading />
-  }
-
+function SmallCard({ title, text, icon: Icon }: { title: string; text: string; icon: IconType }) {
   return (
-    <Layout currentPage="dashboard">
-      <div className="p-6">
-        <header className="mb-6 flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-          <div>
-            <h1 className="page-title text-2xl">Дашборд</h1>
-            <p className="mt-1 text-sm text-foreground-muted">Сводка по технике, осмотрам, дефектам, ДТП и напоминаниям.</p>
-          </div>
-          <div className="flex flex-wrap items-center gap-3">
-            {dashboard.stats.totalVehicles === 0 && canSeedDemoData ? (
-              <button onClick={handleSeed} disabled={exportHook.seeding || Boolean(createRestriction)} className="btn btn-success disabled:opacity-50">
-                {exportHook.seeding ? 'Создание...' : 'Создать демо-данные'}
-              </button>
-            ) : null}
-            <button onClick={handleLogout} className="btn btn-secondary">Выйти</button>
-          </div>
-        </header>
+    <article className={styles.smallCard}>
+      <Icon aria-hidden="true" className={styles.cardIcon} />
+      <h3>{title}</h3>
+      <p>{text}</p>
+    </article>
+  )
+}
 
-        <SubscriptionStatusBanner usage={dashboard.usage} />
+function SectionTitle({ title, text }: { title: string; text: string }) {
+  return (
+    <div className={styles.sectionTitle}>
+      <h2>{title}</h2>
+      <p>{text}</p>
+    </div>
+  )
+}
 
-        <DashboardFilters
-          dateRange={dateRange} customFrom={customFrom} customTo={customTo}
-          analyticsEnabled={analyticsEnabled} onRangeChange={handleDateRangeChange}
-          onCustomFromChange={setCustomFrom} onCustomToChange={setCustomTo}
-          onExport={(type) => void exportHook.exportData(type, showToast, analyticsEnabled)}
+export default function LandingPage() {
+  return (
+    <main className={styles.page}>
+      <section className={styles.shell}>
+        <div className={styles.panel}>
+          <header className={styles.topbar}>
+            <Link href="/" aria-label="AuditAvto" className={styles.brand}>
+              <Image src="/auditavto/logo3.png" alt="AuditAvto" width={300} height={60} priority />
+            </Link>
+            <div className={styles.topMeta}>
+              <span><ShieldCheckIcon aria-hidden="true" /> Безопасно и надёжно</span>
+              <span><CloudArrowUpIcon aria-hidden="true" /> SaaS-платформа</span>
+            </div>
+          </header>
+
+          <div className={styles.hero}>
+            <div className={styles.heroCopy}>
+              <h1>Контроль автопарка без спорных фото и ручного хаоса</h1>
+              <p>
+                AuditAvto помогает фиксировать состояние техники: фото, дефекты, пробег, ДТП, время и историю осмотров — в одной системе.
+              </p>
+              <div className={styles.heroActions}>
+                <a href={contactHref} className={styles.primaryButton}>
+                  Запросить пилот
+                  <ArrowRightIcon aria-hidden="true" />
+                </a>
+                <a href="#how" className={styles.secondaryButton}>Посмотреть демо</a>
+              </div>
+              <p className={styles.audience}>
+                Для автопарков, доставки, аренды, строительной техники, сервисных и транспортных компаний.
+              </p>
+
+              <div className={`${styles.heroFeatureGrid} ${styles.desktopHeroFeatures}`}>
+                {heroFeatures.map(([title, text, Icon]) => (
+                  <SmallCard key={title as string} title={title as string} text={text as string} icon={Icon as IconType} />
+                ))}
+              </div>
+
+            </div>
+
+            <aside className={styles.loginPanel}>
+              <h2>Вход в систему</h2>
+              <p>Войдите в аккаунт вашей компании</p>
+              <LoginForm defaultNextPath="/dashboard" showAccessAction variant="landing" />
+              <div className={styles.loginNote}>
+                <UserGroupIcon aria-hidden="true" />
+                Для владельцев, менеджеров и инспекторов
+              </div>
+            </aside>
+
+            <div className={`${styles.heroFeatureGrid} ${styles.mobileHeroFeatures}`}>
+              {heroFeatures.map(([title, text, Icon]) => (
+                <SmallCard key={title as string} title={title as string} text={text as string} icon={Icon as IconType} />
+              ))}
+            </div>
+
+            <div className={styles.productPreview}>
+              <article className={styles.vehicleCard}>
+                <div className={styles.vehicleHeader}>
+                  <div>
+                    <h3>КАМАЗ 5490</h3>
+                    <span>A·123BC 797</span>
+                  </div>
+                  <strong>В работе</strong>
+                </div>
+                <div className={styles.vehiclePhoto}>
+                  <Image src="/auditavto/009.png" alt="Мобильный осмотр техники с фото, чек-листом, дефектами и пробегом" width={229} height={185}/>
+                </div>
+                <dl>
+                  <dt>Тип ТС</dt><dd>Грузовой тягач</dd>
+                  <dt>Год выпуска</dt><dd>2021</dd>
+                  <dt>Водитель</dt><dd>Иванов А. С.</dd>
+                </dl>
+              </article>
+
+              <article className={styles.checkCard}>
+                <div className={styles.checkHeader}>
+                  <h3>Осмотр от 24.05.2026</h3>
+                  <span>72%</span>
+                </div>
+                <div className={styles.progress}><span /></div>
+                <ul>
+                  <li><CheckCircleIcon aria-hidden="true" /> Кузов</li>
+                  <li><CheckCircleIcon aria-hidden="true" /> Фото по зонам</li>
+                  <li><ExclamationTriangleIcon aria-hidden="true" /> Шины и диски</li>
+                  <li><CheckCircleIcon aria-hidden="true" /> Документы</li>
+                </ul>
+              </article>
+
+              <article className={styles.metricCard}>
+                <span>Пробег, км</span>
+                <strong>128 450</strong>
+                <small>+1 250 относительно 23.05.2026</small>
+              </article>
+
+              <article className={styles.defectStrip}>
+                <div>
+                  <h3>Обнаруженные дефекты</h3>
+                  <span>3</span>
+                </div>
+                <div className={styles.defectPhotos}>
+                  {['004.webp', '005.webp', '001.webp'].map((image) => (
+                    <Image key={image} src={`/auditavto/${image}`} alt="Фото дефекта автомобиля" width={130} height={88} />
+                  ))}
+                </div>
+              </article>
+            </div>
+          </div>
+
+          <div className={styles.securityStrip}>
+            <div><LockClosedIcon aria-hidden="true" /><strong>Шифрование данных</strong><span>Защита информации на всех уровнях</span></div>
+            <div><CloudArrowUpIcon aria-hidden="true" /><strong>Резервное копирование</strong><span>Ежедневное хранение и восстановление</span></div>
+            <div><KeyIcon aria-hidden="true" /><strong>Контроль доступа</strong><span>Роли и права для вашей команды</span></div>
+          </div>
+        </div>
+      </section>
+
+      <section id="problem" className={styles.section}>
+        <SectionTitle
+          title="Когда осмотры ведутся в чатах — бизнес теряет контроль"
+          text="Фото теряются, дефекты фиксируются по-разному, пробег записывается вручную, а при споре сложно доказать, когда появилось повреждение."
         />
+        <div className={styles.twoColumn}>
+          <div className={styles.imageFrame}>
+            <Image src="/auditavto/008.webp" alt="Проблемы владельца автопарка при ведении осмотров в чатах и таблицах" fill sizes="(min-width: 960px) 45vw, 100vw" />
+          </div>
+          <div className={styles.cardGrid}>
+            {problemCards.map(([title, text, Icon]) => (
+              <SmallCard key={title as string} title={title as string} text={text as string} icon={Icon as IconType} />
+            ))}
+          </div>
+        </div>
+      </section>
 
-        {dashboard.loading ? (
-          <DashboardLoading />
-        ) : (
-          <>
-            {dashboard.stats.totalVehicles === 0 ? (
-              <EmptyDashboard
-                canSeed={canSeedDemoData} seeding={exportHook.seeding}
-                disabled={Boolean(createRestriction)}
-                restrictionMessage={createRestriction ? `${createRestriction.title}: ${createRestriction.message}` : ''}
-                onSeed={handleSeed}
-              />
-            ) : null}
+      <section id="solution" className={styles.section}>
+        <SectionTitle
+          title="AuditAvto превращает каждый осмотр в понятный цифровой отчёт"
+          text="Инспектор проходит сценарий проверки, делает обязательные фото, фиксирует дефекты и пробег. Руководитель получает структурированную историю по каждой машине."
+        />
+        <div className={styles.fourGrid}>
+          {solutionCards.map(([title, text, Icon]) => (
+            <SmallCard key={title as string} title={title as string} text={text as string} icon={Icon as IconType} />
+          ))}
+        </div>
+      </section>
 
-            <section className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
-              <StatCard label="Всего техники" value={dashboard.stats.totalVehicles} tone="info" code="VH" />
-              <StatCard label="Всего осмотров" value={dashboard.analytics?.total?.inspections || dashboard.stats.totalInspections} tone="success" code="IN" />
-              <StatCard label={analyticsEnabled ? 'Всего дефектов' : 'Техника с дефектами'}
-                value={analyticsEnabled ? dashboard.analytics?.total?.defects || 0 : dashboard.stats.vehiclesWithDefects} tone="danger" code="DF" />
-              <StatCard label={analyticsEnabled ? 'За выбранный период' : 'Сегодня осмотров'}
-                value={analyticsEnabled ? dashboard.analytics?.week?.inspections || 0 : dashboard.stats.inspectionsToday} tone="purple" code="PR" />
-            </section>
+      <section id="how" className={styles.section}>
+        <SectionTitle
+          title="Как работает осмотр"
+          text="Пять шагов вместо разрозненных сообщений, таблиц и ручных отчётов."
+        />
+        <div className={styles.steps}>
+          {inspectionSteps.map(([number, title, text]) => (
+            <article key={title}>
+              <span>{number}</span>
+              <h3>{title}</h3>
+              <p>{text}</p>
+            </article>
+          ))}
+        </div>
+      </section>
 
-            {!analyticsEnabled ? (
-              <section className="card mb-6 border-amber-200 bg-amber-50 p-5 text-sm text-amber-900">
-                Аналитический модуль отключён тарифом компании. Основная оперативная сводка остаётся доступной, а графики, ДТП-статистика по аналитике и экспорт скрыты до включения модуля владельцем компании.
-              </section>
-            ) : (
-              <>
-                <section className="mb-6 grid grid-cols-1 gap-6 xl:grid-cols-2">
-                  {dashboard.accidentStats ? <AccidentCard stats={dashboard.accidentStats} /> : null}
-                  {dashboard.analytics?.defectsByRegion?.length ? (
-                    <ChartCard title="Дефекты по регионам" tone="danger">
-                      <RegionBarChart items={dashboard.analytics.defectsByRegion} tone="danger" ariaLabel="График дефектов по регионам" />
-                    </ChartCard>
-                  ) : null}
-                </section>
-
-                {dashboard.analytics?.dailyInspections?.length ? (
-                  <section className="mb-6">
-                    <article className="card p-6">
-                      <h2 className="mb-4 text-lg font-bold text-status-info">Динамика осмотров</h2>
-                      <DailyInspectionsChart items={dashboard.analytics.dailyInspections} />
-                    </article>
-                  </section>
+      <section className={styles.section}>
+        <div className={styles.productSections}>
+          {productSections.map((section, index) => (
+            <article key={section.title} className={styles.productSection}>
+              <div className={styles.imageFrame}>
+                <Image src={section.image} alt={section.alt} fill sizes="(min-width: 960px) 42vw, 100vw" loading="eager" />
+              </div>
+              <div>
+                <h2>{section.title}</h2>
+                <p>{section.text}</p>
+                <ul>
+                  {section.points.map((point) => <li key={point}><CheckCircleIcon aria-hidden="true" />{point}</li>)}
+                </ul>
+                {index === 0 ? (
+                  <div className={styles.accentNote}>
+                    <CameraIcon aria-hidden="true" />
+                    <strong>Фото = доказательство</strong>
+                    <span>Привязка к осмотру обеспечивает прозрачность и защищает от споров.</span>
+                  </div>
                 ) : null}
+              </div>
+            </article>
+          ))}
+        </div>
+      </section>
 
-                <section className="mb-6 grid grid-cols-1 gap-6 xl:grid-cols-2">
-                  <ChartCard title="Техника по статусу" tone="info">
-                    <VehicleStatusChart items={dashboard.analytics?.vehiclesByStatus || []} />
-                  </ChartCard>
-                  <ChartCard title="Осмотры по типу" tone="success">
-                    <InspectionTypeChart items={dashboard.analytics?.inspectionsByType || []} />
-                  </ChartCard>
-                </section>
+      <section className={styles.section}>
+        <SectionTitle
+          title="Безопасность и роли"
+          text="Владелец видит общую картину, менеджер контролирует парк, инспектор проводит осмотры. Доступ разделён по ролям."
+        />
+        <div className={styles.threeGrid}>
+          {roles.map(([title, text, Icon]) => (
+            <SmallCard key={title as string} title={title as string} text={text as string} icon={Icon as IconType} />
+          ))}
+        </div>
+      </section>
 
-                <section className="mb-6 grid grid-cols-1 gap-6 xl:grid-cols-2">
-                  {dashboard.analytics?.vehiclesByRegion?.length ? (
-                    <ChartCard title="Техника по регионам" tone="info">
-                      <RegionBarChart items={dashboard.analytics.vehiclesByRegion} tone="info" ariaLabel="График техники по регионам" />
-                    </ChartCard>
-                  ) : null}
-                  {dashboard.analytics?.inspectionsByRegion?.length ? (
-                    <ChartCard title="Осмотры по регионам" tone="success">
-                      <RegionBarChart items={dashboard.analytics.inspectionsByRegion} tone="success" ariaLabel="График осмотров по регионам" />
-                    </ChartCard>
-                  ) : null}
-                </section>
-              </>
-            )}
+      <section className={styles.section}>
+        <div className={styles.benefitPanel}>
+          <div>
+            <h2>Что получает владелец автопарка</h2>
+            <p>Понятную историю по технике, доказательную базу по повреждениям и меньше зависимости от человеческого фактора.</p>
+          </div>
+          <ul>
+            {benefits.map((benefit) => <li key={benefit}><CheckCircleIcon aria-hidden="true" />{benefit}</li>)}
+          </ul>
+        </div>
+      </section>
 
-            {dashboard.notifications.length ? <NotificationsCard notifications={dashboard.notifications} /> : null}
-          </>
-        )}
-      </div>
+      <section className={styles.offer}>
+        <div>
+          <h2>Запустите цифровой контроль на пилотной группе техники</h2>
+          <p>Подключим компанию, добавим технику, настроим роли и базовые сценарии осмотров. После пилота вы увидите, где теряются данные и какие дефекты повторяются.</p>
+        </div>
+        <div className={styles.offerActions}>
+          <a href={contactHref} className={styles.primaryButton}>Запросить пилот <ArrowRightIcon aria-hidden="true" /></a>
+          <a href="mailto:info@auditavto.ru?subject=Получить консультацию AuditAvto" className={styles.secondaryButton}>Получить консультацию</a>
+        </div>
+      </section>
 
-      {toast ? <div className={TOAST_CLASS_NAME[toast.tone]}>{toast.text}</div> : null}
-    </Layout>
+      <section className={styles.section}>
+        <SectionTitle title="FAQ" text="Короткие ответы на вопросы перед пилотным запуском." />
+        <div className={styles.faq}>
+          {faqs.map(([question, answer]) => (
+            <details key={question}>
+              <summary>{question}</summary>
+              <p>{answer}</p>
+            </details>
+          ))}
+        </div>
+      </section>
+
+      <section className={styles.finalCta}>
+        <h2>Хватит собирать осмотры из чатов и таблиц</h2>
+        <p>Запустите AuditAvto на части автопарка и проверьте, насколько проще становится контроль техники, дефектов, пробега и ДТП.</p>
+        <a href={contactHref} className={styles.primaryButton}>Запросить пилот <ArrowRightIcon aria-hidden="true" /></a>
+      </section>
+    </main>
   )
 }

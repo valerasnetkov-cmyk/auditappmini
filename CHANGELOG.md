@@ -3,6 +3,33 @@
 ## Unreleased
 
 ### Changed
+- **AuditAvto landing design refinement**: the landing hero was visually
+  tightened with a lighter headline weight, softer card elevation, calmer
+  spacing, and adaptive hero ordering so the real login panel appears earlier
+  on mobile while desktop keeps the product-feature structure from the approved
+  concept.
+- **AuditAvto sales landing**: public `/` landing keeps the original
+  product/login first-screen structure while using the updated fleet-owner sales
+  copy, calmer heading scale, pilot/demo CTAs, pain → solution → benefit
+  narrative, inspection workflow, defect evidence, mileage/accident,
+  roles/security, owner benefits, pilot offer, FAQ and final CTA sections.
+  Styles live in a dedicated CSS module and page metadata targets the public
+  sales positioning.
+- **AuditAvto landing polish**: project icon metadata and the Next app icon now
+  use the supplied AuditAvto `icon.png`; landing headings were lightened and
+  scaled down for a calmer first-screen hierarchy.
+- **AuditAvto public landing**: `/` is now a public SaaS landing page with the
+  AuditAvto brand assets, product-style hero, real login form, downstream
+  marketing sections and responsive screenshots; the authenticated company
+  dashboard moved to `/dashboard`, and default post-login/internal dashboard
+  links now target the new route.
+- **Launch audit P1/P2 cleanup**: production backend guard and doctor now reject
+  relative, release-local, or temporary `DATABASE_PATH`, `UPLOAD_DIR` and
+  `BACKUP_DIR` values; the backend production env template and launch checklist
+  now require absolute persistent storage paths outside the app release folder.
+- **Launch audit P2 cleanup**: removed the web MFA page demo seed action with a
+  direct localhost request from the user-facing panel; backend seed endpoints
+  remain available for smoke/E2E tooling.
 - **Epic 3.3.4 backend routes extraction**: auth, MFA, owner setup,
   registration, logout and session routes moved from `backend/src/server.js`
   to `backend/src/routes/auth.js`; `server.js` now wires the route module and

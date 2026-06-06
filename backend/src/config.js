@@ -1,4 +1,6 @@
 import 'dotenv/config'
+import path from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { getSecret } from './services/secretStore.js'
 import {
   hasEnvValue,
@@ -11,6 +13,8 @@ import {
 import { assertPositiveInteger, assertOneOf } from './utils/asserts.js'
 
 export const isProduction = process.env.NODE_ENV === 'production'
+const __dirname = path.dirname(fileURLToPath(import.meta.url))
+const backendRoot = path.resolve(__dirname, '..')
 
 export const JWT_SECRET = getSecret('JWT_SECRET', { allowRandomFallback: !isProduction })
 
@@ -82,6 +86,35 @@ const ALLOWED_CORP_VALUES = ['same-origin', 'same-site', 'cross-origin']
 const ALLOWED_COOKIE_SAME_SITE = ['Strict', 'Lax', 'None']
 const SAFE_OWNER_DEFAULT_PASSWORD = 'admin123'
 
+function isPathInside(parentPath, targetPath) {
+  const relativePath = path.relative(parentPath, targetPath)
+  return relativePath === '' || (relativePath && !relativePath.startsWith('..') && !path.isAbsolute(relativePath))
+}
+
+function hasTemporaryPathSegment(targetPath) {
+  return targetPath
+    .split(path.sep)
+    .some((segment) => segment.toLowerCase().startsWith('.tmp'))
+}
+
+function assertProductionPersistentPath(name) {
+  const value = process.env[name] || ''
+
+  if (!path.isAbsolute(value)) {
+    throw new Error(`${name} must be an absolute persistent storage path in production`)
+  }
+
+  const resolvedPath = path.resolve(value)
+
+  if (isPathInside(backendRoot, resolvedPath)) {
+    throw new Error(`${name} must point outside the application release directory in production`)
+  }
+
+  if (hasTemporaryPathSegment(resolvedPath)) {
+    throw new Error(`${name} must not point to temporary storage in production`)
+  }
+}
+
 export function assertProductionConfig() {
   if (!isProduction) return
 
@@ -104,6 +137,10 @@ export function assertProductionConfig() {
   if (!process.env.BACKUP_DIR) {
     throw new Error('BACKUP_DIR must be configured in production')
   }
+
+  assertProductionPersistentPath('DATABASE_PATH')
+  assertProductionPersistentPath('UPLOAD_DIR')
+  assertProductionPersistentPath('BACKUP_DIR')
 
   if (process.env.ADMIN_EMAIL) {
     const adminPassword = process.env.ADMIN_PASSWORD || ''

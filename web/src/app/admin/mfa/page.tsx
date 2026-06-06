@@ -1,7 +1,6 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { useToast } from '@/app/contexts/ToastContext'
 import Link from 'next/link'
 import Layout from '@/components/Layout'
 import ManagerAccessDenied from '@/components/ManagerAccessDenied'
@@ -22,7 +21,6 @@ export default function AdminMfaListPage() {
   const [users, setUsers] = useState<UserRecord[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
-  const { showToast } = useToast()
 
   useEffect(() => {
     if (!ownerAccess.allowed) return
@@ -45,16 +43,6 @@ export default function AdminMfaListPage() {
       setError('Не удалось загрузить список пользователей')
     } finally {
       setLoading(false)
-    }
-  }
-
-  const seedDemoData = async () => {
-    try {
-      await fetch('http://localhost:3001/api/seed', { method: 'POST', headers: { 'Content-Type': 'application/json' } })
-      await loadUsers()
-      showToast('Demo данные посеяны')
-    } catch {
-      showToast('Не удалось Seed Demo Data')
     }
   }
 
@@ -84,12 +72,9 @@ export default function AdminMfaListPage() {
             <h1 className="text-2xl font-bold text-slate-900">Управление MFA</h1>
             <p className="mt-1 text-sm text-slate-500">Подключение двухфакторной аутентификации для пользователей системы.</p>
           </div>
-      <button onClick={() => void loadUsers()} className="rounded-xl border border-slate-200 px-4 py-2 text-sm text-slate-600 hover:bg-slate-50">
+          <button onClick={() => void loadUsers()} className="rounded-xl border border-slate-200 px-4 py-2 text-sm text-slate-600 hover:bg-slate-50">
             Обновить
-      </button>
-      <button onClick={seedDemoData} className="ml-2 rounded-xl border border-slate-200 px-4 py-2 text-sm text-slate-600 hover:bg-slate-50">
-        Seed Demo Data
-      </button>
+          </button>
         </div>
 
         {error ? (

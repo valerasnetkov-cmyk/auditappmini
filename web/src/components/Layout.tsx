@@ -72,7 +72,7 @@ export default function Layout({ children, currentPage }: LayoutProps) {
   }
 
   const menuItems: MenuItem[] = [
-    { href: '/', label: 'Дашборд', icon: 'AN', key: 'dashboard' },
+    { href: '/dashboard', label: 'Дашборд', icon: 'AN', key: 'dashboard' },
     { href: '/vehicles', label: 'Техника', icon: 'VH', key: 'vehicles' },
     { href: '/inspections', label: 'Осмотры', icon: 'IN', key: 'inspections' },
     { href: '/defects', label: 'Дефекты', icon: 'DF', key: 'defects' },
