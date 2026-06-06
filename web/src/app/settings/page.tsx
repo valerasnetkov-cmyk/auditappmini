@@ -1,351 +1,58 @@
-"use client"
+'use client'
 
 import { useEffect, useRef, useState } from 'react'
-import type { ChangeEvent, FormEvent } from 'react'
+import type { FormEvent } from 'react'
 import { useRouter } from 'next/navigation'
-import ExcelJS from 'exceljs'
 import Layout from '@/components/Layout'
 import LocaleSwitcher from '@/components/LocaleSwitcher'
-import SubscriptionStatusBanner from '@/components/SubscriptionStatusBanner'
 import ThemeSwitcher from '@/components/ThemeSwitcher'
 import api from '@/lib/api/client'
 import { hasAuthSession, isManagerRole } from '@/lib/auth'
-import { getCompanyOperationRestriction } from '@/lib/companyAccess'
-import type { CompanyFeatureAccess, CompanyResourceUsage, CompanyUsageResponse, RegionRecord, ServiceNotificationRecipient } from '@/lib/types'
-
-type ImportResult = {
-  imported: number
-  errors: { row: number; error: string }[]
-  regionsAdded?: number
-}
-
-type StatusMessage = {
-  tone: 'success' | 'warning' | 'danger' | 'info'
-  text: string
-}
-
-const COMPANY_USAGE_STALE_BACKEND_ERROR =
-  'Backend на http://localhost:3001 запущен старой версией и не знает endpoint /api/company/usage. Перезапустите backend из корня проекта или командой npm --prefix backend run dev.'
-
-function formatCompanyUsageError(error: string) {
-  if (error === 'HTTP 404') return COMPANY_USAGE_STALE_BACKEND_ERROR
-  return `Не удалось загрузить тариф компании: ${error}`
-}
-
-type ParsedVehicle = {
-  number: string
-  name: string
-  region: string
-}
-
-function getRegionVehicleCount(region: RegionRecord) {
-  return Number(region.vehicle_count ?? region.vehicleCount ?? 0)
-}
-
-function parseToken(value: unknown) {
-  return String(value || '').trim()
-}
-
-function normalizePlateValue(value: unknown) {
-  return parseToken(value).replace(/\s+/g, '').toUpperCase()
-}
-
-function isRussianPlateLike(value: string) {
-  return /^[АВЕКМНОРСТУХABEKMHOPCTYX]\d{3}[АВЕКМНОРСТУХABEKMHOPCTYX]{2}\d{2,3}$/i.test(value)
-}
-
-function formatNumber(value: number | undefined | null) {
-  return new Intl.NumberFormat('ru-RU').format(Number(value || 0))
-}
-
-function formatPlanCode(code?: string | null) {
-  if (!code) return 'Без тарифа'
-  return code.toUpperCase()
-}
-
-function formatUsageValue(usage: CompanyResourceUsage) {
-  if (usage.unlimited || usage.max === null) {
-    return `${formatNumber(usage.current)} / без лимита`
-  }
-
-  return `${formatNumber(usage.current)} / ${formatNumber(usage.max)}`
-}
-
-function getUsageBarWidth(usage: CompanyResourceUsage) {
-  if (usage.percent === null || usage.percent === undefined) return '0%'
-  return `${Math.max(0, Math.min(100, usage.percent))}%`
-}
-
-function getUsageTone(usage: CompanyResourceUsage) {
-  if (usage.exceeded) return 'bg-status-danger'
-  if (usage.percent !== null && usage.percent >= 90) return 'bg-status-warning'
-  return 'bg-status-success'
-}
-
-function getUsageHint(usage: CompanyResourceUsage, unit: string) {
-  if (usage.unlimited || usage.max === null) return 'Лимит не задан'
-  if (usage.exceeded) return `Превышение на ${formatNumber(usage.current - usage.max)} ${unit}`
-  return `Осталось ${formatNumber(usage.remaining)} ${unit}`
-}
-
-function getFeatureLabel(feature: CompanyFeatureAccess) {
-  return feature.enabled ? 'Доступно' : 'Отключено тарифом'
-}
-
-function getFeatureClassName(feature: CompanyFeatureAccess) {
-  return feature.enabled ? 'border-green-100 bg-green-50 text-status-success' : 'border-red-100 bg-red-50 text-status-danger'
-}
-
-function ResourceUsageCard({ title, usage, unit }: { title: string; usage: CompanyResourceUsage; unit: string }) {
-  return (
-    <div className="rounded-card border border-line bg-muted-surface p-4">
-      <div className="flex items-start justify-between gap-3">
-        <div>
-          <p className="text-xs font-semibold uppercase tracking-wide text-foreground-muted">{title}</p>
-          <p className="mt-2 text-xl font-bold text-foreground">{formatUsageValue(usage)}</p>
-        </div>
-        <span className={usage.exceeded ? 'badge badge-danger' : 'badge badge-info'}>
-          {usage.unlimited ? '∞' : `${usage.percent || 0}%`}
-        </span>
-      </div>
-      <div className="mt-3 h-2 overflow-hidden rounded-full bg-soft-surface">
-        <div className={`h-full rounded-full ${getUsageTone(usage)}`} style={{ width: usage.unlimited ? '100%' : getUsageBarWidth(usage) }} />
-      </div>
-      <p className="mt-2 text-xs text-foreground-muted">{getUsageHint(usage, unit)}</p>
-    </div>
-  )
-}
-
-function FeatureStatusCard({ title, feature }: { title: string; feature: CompanyFeatureAccess }) {
-  return (
-    <div className={`rounded-card border px-3 py-2 text-sm font-semibold ${getFeatureClassName(feature)}`}>
-      <div className="flex items-center justify-between gap-2">
-        <span>{title}</span>
-        <span>{getFeatureLabel(feature)}</span>
-      </div>
-    </div>
-  )
-}
-
-function CompanyUsagePanel({
-  usage,
-  loading,
-  onRefresh,
-}: {
-  usage: CompanyUsageResponse | null
-  loading: boolean
-  onRefresh: () => void
-}) {
-  if (loading && !usage) {
-    return (
-      <div className="card mb-4 p-4">
-        <div className="h-5 w-48 animate-pulse rounded bg-soft-surface" />
-        <div className="mt-4 grid gap-3 sm:grid-cols-2">
-          <div className="h-28 animate-pulse rounded-card bg-soft-surface" />
-          <div className="h-28 animate-pulse rounded-card bg-soft-surface" />
-        </div>
-      </div>
-    )
-  }
-
-  if (!usage) return null
-
-  return (
-    <div className="card mb-4 p-4">
-      <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-        <div>
-          <h2 className="text-lg font-semibold text-foreground">Тариф и доступные модули</h2>
-          <p className="mt-1 text-sm text-foreground-secondary">
-            Компания: <span className="font-semibold text-foreground">{usage.company.name}</span>
-            <span className="mx-2 text-foreground-muted">·</span>
-            Тариф: <span className="font-semibold text-foreground">{formatPlanCode(usage.plan.code)}</span>
-          </p>
-        </div>
-        <button type="button" onClick={onRefresh} disabled={loading} className="btn btn-secondary btn-sm disabled:opacity-50">
-          {loading ? 'Обновление...' : 'Обновить'}
-        </button>
-      </div>
-
-      <SubscriptionStatusBanner usage={usage} compact />
-
-      <div className="grid gap-3 sm:grid-cols-2">
-        <ResourceUsageCard title="Техника" usage={usage.usage.vehicles} unit="ед." />
-        <ResourceUsageCard title="Пользователи" usage={usage.usage.users} unit="чел." />
-      </div>
-
-      <div className="mt-4 grid gap-2 lg:grid-cols-3">
-        <FeatureStatusCard title="OCR номера и одометра" feature={usage.features.ocr} />
-        <FeatureStatusCard title="ДТП-осмотры" feature={usage.features.accidentModule} />
-        <FeatureStatusCard title="Аналитика" feature={usage.features.analytics} />
-      </div>
-
-      <p className="mt-3 text-xs text-foreground-muted">
-        Если нужен больший лимит или модуль отключен тарифом, обратитесь к администратору сервиса.
-      </p>
-    </div>
-  )
-}
-
-function ServiceNotificationRecipientsPanel({
-  recipients,
-  loading,
-  saving,
-  disabled,
-  disabledMessage,
-  onToggle,
-}: {
-  recipients: ServiceNotificationRecipient[]
-  loading: boolean
-  saving: boolean
-  disabled: boolean
-  disabledMessage: string
-  onToggle: (id: string, enabled: boolean) => void
-}) {
-  return (
-    <div className="card mb-4 p-4">
-      <div className="mb-4">
-        <h2 className="text-lg font-semibold text-foreground">Сервисные уведомления</h2>
-        <p className="mt-1 text-sm text-foreground-secondary">
-          Владелец получает уведомления всегда. Менеджеров можно подключить к предупреждениям по тарифу, лимитам и сервисным событиям.
-        </p>
-      </div>
-
-      {disabledMessage ? (
-        <div className="alert-danger mb-4 rounded-card px-4 py-3 text-sm">
-          {disabledMessage}
-        </div>
-      ) : null}
-
-      {loading ? (
-        <div className="h-20 animate-pulse rounded-card bg-soft-surface" />
-      ) : (
-        <div className="space-y-2">
-          {recipients.map((recipient) => (
-            <label key={recipient.id} className="flex items-center justify-between gap-4 rounded-card border border-line bg-muted-surface px-4 py-3">
-              <span>
-                <span className="block text-sm font-semibold text-foreground">{recipient.name}</span>
-                <span className="block text-xs text-foreground-muted">{recipient.email} · {recipient.role === 'owner' ? 'Владелец' : 'Менеджер'}</span>
-              </span>
-              <input
-                type="checkbox"
-                checked={recipient.serviceNotificationsEnabled}
-                disabled={recipient.locked || saving || disabled}
-                onChange={(event) => onToggle(recipient.id, event.target.checked)}
-                className="h-5 w-5 rounded border-line text-blue-600 disabled:opacity-50"
-              />
-            </label>
-          ))}
-          {!recipients.length ? (
-            <p className="rounded-card border border-line bg-muted-surface px-4 py-3 text-sm text-foreground-muted">
-              Активных владельцев и менеджеров пока нет.
-            </p>
-          ) : null}
-        </div>
-      )}
-    </div>
-  )
-}
+import { useCompanyUsagePanel } from './_hooks/useCompanyUsagePanel'
+import { useRegions } from './_hooks/useRegions'
+import { useServiceRecipients } from './_hooks/useServiceRecipients'
+import { useVehicleImport } from './_hooks/useVehicleImport'
+import { CompanyUsagePanel } from './_components/CompanyUsagePanel'
+import { ImportPanel } from './_components/ImportPanel'
+import { RegionsPanel } from './_components/RegionsPanel'
+import { ServiceNotificationRecipientsPanel } from './_components/ServiceNotificationRecipientsPanel'
+import {
+  buildWriteBlockedMessage,
+  pickRestriction,
+  type StatusMessage,
+} from './_lib/settings'
 
 export default function SettingsPage() {
   const router = useRouter()
-  const fileRef = useRef<HTMLInputElement>(null)
-
+  const [status, setStatus] = useState<StatusMessage | null>(null)
   const [loading, setLoading] = useState(true)
   const [isManager, setIsManager] = useState(false)
   const [currentRole, setCurrentRole] = useState('')
-  const [companyUsage, setCompanyUsage] = useState<CompanyUsageResponse | null>(null)
-  const [companyUsageLoading, setCompanyUsageLoading] = useState(false)
-  const [serviceRecipients, setServiceRecipients] = useState<ServiceNotificationRecipient[]>([])
-  const [serviceRecipientsLoading, setServiceRecipientsLoading] = useState(false)
-  const [serviceRecipientsSaving, setServiceRecipientsSaving] = useState(false)
-  const [importing, setImporting] = useState(false)
-  const [importResult, setImportResult] = useState<ImportResult | null>(null)
-  const [status, setStatus] = useState<StatusMessage | null>(null)
-  const [regions, setRegions] = useState<RegionRecord[]>([])
-  const [newRegion, setNewRegion] = useState('')
-  const [editingRegionId, setEditingRegionId] = useState<string | null>(null)
-  const [editingRegionName, setEditingRegionName] = useState('')
-  const [savingRegionId, setSavingRegionId] = useState<string | null>(null)
-  const [deletingRegionId, setDeletingRegionId] = useState<string | null>(null)
 
-  const loadCompanyUsage = async () => {
-    setCompanyUsageLoading(true)
-    const result = await api.getCompanyUsage()
+  const companyUsage = useCompanyUsagePanel()
+  const regions = useRegions()
+  const serviceRecipients = useServiceRecipients()
+  const vehicleImport = useVehicleImport()
 
-    if (result.error) {
-      setCompanyUsage(null)
-      setStatus({ tone: 'danger', text: formatCompanyUsageError(result.error) })
-    } else {
-      setCompanyUsage(result.data || null)
-      setStatus((current) => {
-        if (!current) return current
-        if (current.text === COMPANY_USAGE_STALE_BACKEND_ERROR) return null
-        if (current.text.startsWith('Не удалось загрузить тариф компании:')) return null
-        return current
-      })
-    }
+  const createRestriction = pickRestriction(companyUsage.usage, 'create')
+  const writeRestriction = pickRestriction(companyUsage.usage, 'write')
+  const writeBlockedMessage = buildWriteBlockedMessage(
+    companyUsage.usage,
+    companyUsage.loading,
+    writeRestriction,
+  )
+  const writeBlockedInfo: { tone: 'info' | 'danger'; text: string } | null = writeBlockedMessage
+    ? { tone: companyUsage.loading ? 'info' : 'danger', text: writeBlockedMessage } : null
 
-    setCompanyUsageLoading(false)
-  }
+  const regionsActionsRef = useRef(regions.actions)
+  const serviceRecipientsActionsRef = useRef(serviceRecipients.actions)
+  const companyUsageLoadRef = useRef(companyUsage.load)
 
-  const loadRegions = async () => {
-    const result = await api.getRegions()
-    if (result.error) {
-      setStatus({ tone: 'danger', text: result.error })
-      return
-    }
-
-    setRegions((result.data || []).filter((region) => getRegionVehicleCount(region) > 0))
-  }
-
-  const loadServiceRecipients = async () => {
-    setServiceRecipientsLoading(true)
-    const result = await api.getServiceNotificationRecipients()
-
-    if (result.error) {
-      setStatus({ tone: 'danger', text: `Не удалось загрузить получателей уведомлений: ${result.error}` })
-    } else {
-      setServiceRecipients(result.data?.recipients || [])
-    }
-
-    setServiceRecipientsLoading(false)
-  }
-
-  const handleServiceRecipientToggle = async (id: string, enabled: boolean) => {
-    if (companyUsageLoading) {
-      setStatus({ tone: 'info', text: 'Проверяем статус тарифа компании. Повторите действие через несколько секунд.' })
-      return
-    }
-
-    if (writeRestriction) {
-      setStatus({ tone: 'danger', text: `${writeRestriction.title}: ${writeRestriction.message}` })
-      return
-    }
-
-    const nextRecipients = serviceRecipients.map((recipient) => (
-      recipient.id === id ? { ...recipient, serviceNotificationsEnabled: enabled } : recipient
-    ))
-    setServiceRecipients(nextRecipients)
-    setServiceRecipientsSaving(true)
-    setStatus(null)
-
-    const result = await api.updateServiceNotificationRecipients(
-      nextRecipients.map((recipient) => ({
-        id: recipient.id,
-        serviceNotificationsEnabled: recipient.serviceNotificationsEnabled,
-      })),
-    )
-
-    if (result.error) {
-      setStatus({ tone: 'danger', text: `Не удалось сохранить получателей уведомлений: ${result.error}` })
-      await loadServiceRecipients()
-    } else {
-      setServiceRecipients(result.data?.recipients || [])
-      setStatus({ tone: 'success', text: 'Получатели сервисных уведомлений обновлены.' })
-    }
-
-    setServiceRecipientsSaving(false)
-  }
+  useEffect(() => {
+    regionsActionsRef.current = regions.actions
+    serviceRecipientsActionsRef.current = serviceRecipients.actions
+    companyUsageLoadRef.current = companyUsage.load
+  })
 
   useEffect(() => {
     if (!hasAuthSession()) {
@@ -366,10 +73,10 @@ export default function SettingsPage() {
 
       setLoading(false)
       if (managerRole) {
-        void Promise.all([loadRegions(), loadCompanyUsage()])
+        void Promise.all([regionsActionsRef.current.load(setStatus), companyUsageLoadRef.current(setStatus)])
       }
       if (role === 'owner') {
-        void loadServiceRecipients()
+        void serviceRecipientsActionsRef.current.load(setStatus)
       }
     }
 
@@ -380,233 +87,23 @@ export default function SettingsPage() {
     }
   }, [router])
 
-  const parseExcel = async (buffer: ArrayBuffer): Promise<ParsedVehicle[]> => {
-    try {
-      const workbook = new ExcelJS.Workbook()
-      await workbook.xlsx.load(buffer)
-
-      const sheet = workbook.worksheets[0]
-      if (!sheet) return []
-
-      const rows: unknown[][] = []
-      sheet.eachRow({ includeEmpty: false }, (row) => {
-        const values = Array.isArray(row.values) ? row.values.slice(1) : []
-        rows.push(values)
-      })
-      if (!rows.length) return []
-
-      const firstRow = rows[0].map((value) => parseToken(value).toLowerCase())
-      const hasHeader = firstRow.some(
-        (header) =>
-          header.includes('номер') ||
-          header.includes('гос') ||
-          header.includes('number') ||
-          header.includes('название') ||
-          header.includes('марка') ||
-          header.includes('регион'),
-      )
-
-      const headers = hasHeader ? firstRow : ['номер', 'название', 'регион']
-      const dataStart = hasHeader ? 1 : 0
-      const numberIdx = headers.findIndex((header) => header.includes('номер') || header.includes('number') || header.includes('гос') || header.includes('регистрац'))
-      const nameIdx = headers.findIndex((header) => header.includes('название') || header.includes('name') || header.includes('марка') || header.includes('модель'))
-      const regionIdx = headers.findIndex((header) => header.includes('регион') || header.includes('region') || header.includes('область'))
-
-      if (numberIdx === -1) return []
-
-      return rows
-        .slice(dataStart)
-        .map((columns) => ({
-          number: normalizePlateValue(columns[numberIdx]),
-          name: nameIdx !== -1 ? parseToken(columns[nameIdx]) : '',
-          region: regionIdx !== -1 ? parseToken(columns[regionIdx]) : '',
-        }))
-        .filter((vehicle) => vehicle.number.length > 3 && (isRussianPlateLike(vehicle.number) || vehicle.name || vehicle.region))
-    } catch {
-      return []
-    }
-  }
-
-  const handleImport = async () => {
-    if (companyUsageLoading) {
-      setStatus({ tone: 'info', text: 'Проверяем статус тарифа компании. Повторите импорт через несколько секунд.' })
-      return
-    }
-
-    const createRestriction = getCompanyOperationRestriction(companyUsage, 'create')
-    if (createRestriction) {
-      setStatus({ tone: 'danger', text: `${createRestriction.title}: ${createRestriction.message}` })
-      return
-    }
-
-    const file = fileRef.current?.files?.[0]
-    if (!file) {
-      setStatus({ tone: 'warning', text: 'Выберите Excel-файл для импорта.' })
-      return
-    }
-
-    setStatus(null)
-    setImportResult(null)
-    setImporting(true)
-
-    try {
-      const vehicles = await parseExcel(await file.arrayBuffer())
-      if (!vehicles.length) {
-        setStatus({ tone: 'danger', text: 'Не удалось распознать данные. Проверьте колонки: номер, название, регион.' })
-        return
-      }
-
-      const result = await api.importVehicles(vehicles)
-      if (result.error) {
-        setStatus({ tone: 'danger', text: result.error })
-        return
-      }
-
-      if (result.data) {
-        setImportResult(result.data)
-        setStatus({ tone: 'success', text: `Импортировано машин: ${result.data.imported}` })
-        await Promise.all([loadRegions(), loadCompanyUsage()])
-      }
-    } catch {
-      setStatus({ tone: 'danger', text: 'Ошибка при импорте Excel-файла.' })
-    } finally {
-      setImporting(false)
-    }
-  }
-
-  const handleAddRegion = async (event: FormEvent) => {
-    event.preventDefault()
-
-    const name = newRegion.trim()
-    if (!name) return
-    if (companyUsageLoading) {
-      setStatus({ tone: 'info', text: 'Проверяем статус тарифа компании. Повторите действие через несколько секунд.' })
-      return
-    }
-
-    if (writeRestriction) {
-      setStatus({ tone: 'danger', text: `${writeRestriction.title}: ${writeRestriction.message}` })
-      return
-    }
-
-    setStatus(null)
-    const result = await api.createRegion({ name })
-    if (result.error) {
-      setStatus({ tone: 'danger', text: result.error })
-      return
-    }
-
-    setNewRegion('')
-    setStatus({
-      tone: 'info',
-      text: 'Регион добавлен в справочник. В списке ниже он появится после привязки хотя бы одной машины.',
-    })
-    await loadRegions()
-  }
-
-  const startEditRegion = (region: RegionRecord) => {
-    if (writeRestrictionMessage) {
-      setStatus({ tone: writeRestriction ? 'danger' : 'info', text: writeRestrictionMessage })
-      return
-    }
-
-    setEditingRegionId(region.id)
-    setEditingRegionName(region.name)
-    setStatus(null)
-  }
-
-  const cancelEditRegion = () => {
-    setEditingRegionId(null)
-    setEditingRegionName('')
-  }
-
-  const handleSaveRegion = async (region: RegionRecord) => {
-    const name = editingRegionName.trim()
-    if (!name || name === region.name) {
-      cancelEditRegion()
-      return
-    }
-    if (companyUsageLoading) {
-      setStatus({ tone: 'info', text: 'Проверяем статус тарифа компании. Повторите действие через несколько секунд.' })
-      return
-    }
-
-    if (writeRestriction) {
-      setStatus({ tone: 'danger', text: `${writeRestriction.title}: ${writeRestriction.message}` })
-      return
-    }
-
-    setSavingRegionId(region.id)
-    setStatus(null)
-
-    try {
-      const result = await api.updateRegion(region.id, name, region.name)
-      if (result.error) {
-        setStatus({ tone: 'danger', text: result.error })
-        return
-      }
-
-      cancelEditRegion()
-      setStatus({
-        tone: 'success',
-        text: result.data?.merged_from && result.data?.merged_into
-          ? `Регион "${result.data.merged_from}" объединен с "${result.data.merged_into}". Вся связанная техника перенесена.`
-          : 'Регион обновлен. Название региона у связанной техники также изменено.',
-      })
-      await loadRegions()
-    } finally {
-      setSavingRegionId(null)
-    }
-  }
-
-  const handleDeleteRegion = async (region: RegionRecord) => {
-    if (companyUsageLoading) {
-      setStatus({ tone: 'info', text: 'Проверяем статус тарифа компании. Повторите действие через несколько секунд.' })
-      return
-    }
-
-    if (writeRestriction) {
-      setStatus({ tone: 'danger', text: `${writeRestriction.title}: ${writeRestriction.message}` })
-      return
-    }
-
-    const count = getRegionVehicleCount(region)
-    const confirmed = window.confirm(
-      `Удалить регион "${region.name}"? У ${count} машин регион будет очищен, сами карточки техники не удалятся.`,
+  const onImport = () =>
+    vehicleImport.actions.runImport(
+      setStatus,
+      companyUsage.loading
+        ? { tone: 'info', text: 'Проверяем статус тарифа компании. Повторите импорт через несколько секунд.' }
+        : createRestriction
+          ? { tone: 'danger', text: `${createRestriction.title}: ${createRestriction.message}` }
+          : null,
+      async () => {
+        await Promise.all([regions.actions.load(setStatus), companyUsage.load(setStatus)])
+      },
     )
-    if (!confirmed) return
 
-    setDeletingRegionId(region.id)
-    setStatus(null)
-
-    try {
-      const result = await api.deleteRegion(region.id)
-      if (result.error) {
-        setStatus({ tone: 'danger', text: result.error })
-        return
-      }
-
-      setStatus({ tone: 'success', text: 'Регион удален, техника отвязана от него.' })
-      await loadRegions()
-    } finally {
-      setDeletingRegionId(null)
-    }
+  const onAddRegion = (event: FormEvent) => {
+    event.preventDefault()
+    void regions.actions.addRegion(setStatus, () => writeBlockedInfo)
   }
-
-  const handleFileChange = (event: ChangeEvent<HTMLInputElement>) => {
-    if (event.target.files?.length) {
-      setStatus(null)
-      setImportResult(null)
-    }
-  }
-
-  const createRestriction = getCompanyOperationRestriction(companyUsage, 'create')
-  const writeRestriction = getCompanyOperationRestriction(companyUsage, 'write')
-  const writeRestrictionMessage = companyUsageLoading
-    ? 'Проверяем статус тарифа компании. Изменения станут доступны после проверки.'
-    : writeRestriction
-      ? `${writeRestriction.title}: ${writeRestriction.message}`
-      : ''
 
   if (loading) {
     return (
@@ -625,9 +122,7 @@ export default function SettingsPage() {
         </div>
 
         {status ? (
-          <div className={`mb-4 rounded-card px-4 py-3 text-sm alert-${status.tone}`}>
-            {status.text}
-          </div>
+          <div className={`mb-4 rounded-card px-4 py-3 text-sm alert-${status.tone}`}>{status.text}</div>
         ) : null}
 
         <div className="card mb-4 p-4">
@@ -641,184 +136,57 @@ export default function SettingsPage() {
         </div>
 
         {isManager ? (
-          <CompanyUsagePanel usage={companyUsage} loading={companyUsageLoading} onRefresh={() => void loadCompanyUsage()} />
+          <CompanyUsagePanel
+            usage={companyUsage.usage}
+            loading={companyUsage.loading}
+            onRefresh={() => void companyUsage.load(setStatus)}
+          />
         ) : null}
 
         {currentRole === 'owner' ? (
           <ServiceNotificationRecipientsPanel
-            recipients={serviceRecipients}
-            loading={serviceRecipientsLoading}
-            saving={serviceRecipientsSaving}
-            disabled={Boolean(writeRestrictionMessage)}
-            disabledMessage={writeRestrictionMessage}
-            onToggle={(id, enabled) => void handleServiceRecipientToggle(id, enabled)}
+            recipients={serviceRecipients.state.recipients} loading={serviceRecipients.state.loading}
+            saving={serviceRecipients.state.saving} disabled={Boolean(writeBlockedMessage)}
+            disabledMessage={writeBlockedMessage}
+            onToggle={(id, enabled) => {
+              void serviceRecipients.actions.toggle(id, enabled, setStatus, writeBlockedInfo)
+            }}
           />
         ) : null}
 
         {isManager ? (
-          <div className="card mb-4 p-4">
-            <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
-              <div>
-                <h2 className="text-lg font-semibold text-foreground">Импорт техники из Excel</h2>
-                <p className="mt-1 text-sm text-foreground-secondary">
-                  Загрузите файл `.xlsx` или `.xls` с колонками: номер, название, регион.
-                </p>
-                <p className="mt-1 text-xs text-foreground-muted">Пример: А123ВС77 | ГАЗель Next | Москва</p>
-              </div>
-            </div>
-
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-              <input
-                ref={fileRef}
-                type="file"
-                accept=".xlsx,.xls"
-                onChange={handleFileChange}
-                disabled={companyUsageLoading || Boolean(createRestriction)}
-                className="block w-full text-sm text-foreground-muted file:mr-4 file:rounded-pill file:border-0 file:bg-blue-50 file:px-4 file:py-2 file:text-sm file:font-semibold file:text-blue-700 hover:file:bg-blue-100"
-              />
-              <button onClick={handleImport} disabled={importing || companyUsageLoading || Boolean(createRestriction)} className="btn btn-primary whitespace-nowrap disabled:opacity-50">
-                {companyUsageLoading ? 'Проверка...' : importing ? 'Импорт...' : 'Импортировать'}
-              </button>
-            </div>
-
-            {createRestriction ? (
-              <div className="alert-danger mt-4 rounded-card px-4 py-3 text-sm">
-                {createRestriction.title}: {createRestriction.message}
-              </div>
-            ) : null}
-
-            {importResult ? (
-              <div className="alert-success mt-4 rounded-card p-4">
-                <p className="font-medium">Импортировано: {importResult.imported}</p>
-                {importResult.regionsAdded ? <p className="mt-1 text-sm">Новых регионов добавлено: {importResult.regionsAdded}</p> : null}
-                {importResult.errors.length ? (
-                  <div className="mt-3 text-sm">
-                    <p className="font-medium text-status-danger">Ошибок: {importResult.errors.length}</p>
-                    <ul className="mt-1 space-y-1">
-                      {importResult.errors.slice(0, 5).map((item) => (
-                        <li key={`${item.row}-${item.error}`}>Строка {item.row}: {item.error}</li>
-                      ))}
-                    </ul>
-                  </div>
-                ) : null}
-              </div>
-            ) : null}
-          </div>
+          <ImportPanel fileRef={vehicleImport.state.fileRef} importing={vehicleImport.state.importing}
+            importResult={vehicleImport.state.importResult} createBlocked={Boolean(createRestriction)}
+            companyUsageLoading={companyUsage.loading} onFileChange={vehicleImport.actions.onFileChange}
+            onImport={onImport} />
         ) : null}
 
         {isManager ? (
-          <div className="card mb-4 p-4">
-            <div className="mb-4">
-              <h2 className="text-lg font-semibold text-foreground">Регионы техники</h2>
-              <p className="mt-1 text-sm text-foreground-secondary">
-                Ниже показаны только регионы, у которых сейчас есть техника. Новые регионы добавляются в справочник и становятся доступны в выпадающих списках карточек техники.
-              </p>
-            </div>
-
-            {writeRestrictionMessage ? (
-              <div className="alert-danger mb-4 rounded-card px-4 py-3 text-sm">
-                {writeRestrictionMessage}
-              </div>
-            ) : null}
-
-            <form onSubmit={handleAddRegion} className="mb-4 flex flex-col gap-2 sm:flex-row">
-              <input
-                type="text"
-                value={newRegion}
-                onChange={(event) => setNewRegion(event.target.value)}
-                placeholder="Название региона"
-                disabled={Boolean(writeRestrictionMessage)}
-                className="input flex-1"
-              />
-              <button type="submit" disabled={!newRegion.trim() || Boolean(writeRestrictionMessage)} className="btn btn-success whitespace-nowrap disabled:opacity-50">
-                Добавить
-              </button>
-            </form>
-
-            <div className="space-y-2">
-              {regions.length ? (
-                regions.map((region) => {
-                  const isEditing = editingRegionId === region.id
-                  const vehicleCount = getRegionVehicleCount(region)
-
-                  return (
-                    <div key={region.id} className="rounded-card border border-line bg-muted-surface p-3">
-                      <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-                        <div className="min-w-0 flex-1">
-                          {isEditing ? (
-                            <input
-                              value={editingRegionName}
-                              onChange={(event) => setEditingRegionName(event.target.value)}
-                              onKeyDown={(event) => {
-                                if (event.key === 'Enter') {
-                                  event.preventDefault()
-                                  void handleSaveRegion(region)
-                                }
-
-                                if (event.key === 'Escape') {
-                                  cancelEditRegion()
-                                }
-                              }}
-                              className="input"
-                              disabled={Boolean(writeRestrictionMessage)}
-                              autoFocus
-                            />
-                          ) : (
-                            <>
-                              <div className="font-semibold text-foreground">{region.name}</div>
-                              <div className="mt-1 text-sm text-foreground-muted">Техники в регионе: {vehicleCount}</div>
-                            </>
-                          )}
-                        </div>
-
-                        <div className="flex flex-wrap gap-2">
-                          {isEditing ? (
-                            <>
-                              <button
-                                type="button"
-                                onClick={() => void handleSaveRegion(region)}
-                                disabled={savingRegionId === region.id || Boolean(writeRestrictionMessage)}
-                                className="btn btn-primary btn-sm disabled:opacity-50"
-                              >
-                                {savingRegionId === region.id ? 'Сохранение...' : 'Сохранить'}
-                              </button>
-                              <button type="button" onClick={cancelEditRegion} className="btn btn-secondary btn-sm">
-                                Отмена
-                              </button>
-                            </>
-                          ) : (
-                            <>
-                              <button type="button" onClick={() => startEditRegion(region)} disabled={Boolean(writeRestrictionMessage)} className="btn btn-secondary btn-sm disabled:opacity-50">
-                                Редактировать
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => void handleDeleteRegion(region)}
-                                disabled={deletingRegionId === region.id || Boolean(writeRestrictionMessage)}
-                                className="btn btn-danger btn-sm disabled:opacity-50"
-                              >
-                                {deletingRegionId === region.id ? 'Удаление...' : 'Удалить'}
-                              </button>
-                            </>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                  )
-                })
-              ) : (
-                <div className="rounded-card border border-dashed border-line-strong bg-muted-surface p-5 text-center text-sm text-foreground-muted">
-                  Пока нет регионов с привязанной техникой.
-                </div>
-              )}
-            </div>
-          </div>
+          <RegionsPanel
+            regions={regions.state.regions}
+            newRegion={regions.state.newRegion}
+            editingRegionId={regions.state.editingRegionId}
+            editingRegionName={regions.state.editingRegionName}
+            savingRegionId={regions.state.savingRegionId}
+            deletingRegionId={regions.state.deletingRegionId}
+            writeBlocked={Boolean(writeBlockedMessage)}
+            onChangeNewRegion={regions.actions.setNewRegion}
+            onChangeEditingName={regions.actions.setEditingRegionName}
+            onAddRegion={onAddRegion}
+            onStartEdit={(region) => regions.actions.startEdit(region, setStatus, writeBlockedInfo)}
+            onCancelEdit={regions.actions.cancelEdit}
+            onSaveRegion={(region) => {
+              void regions.actions.saveRegion(region, setStatus, writeBlockedInfo)
+            }}
+            onDeleteRegion={(region) => {
+              void regions.actions.deleteRegion(region, setStatus, writeBlockedInfo)
+            }}
+          />
         ) : null}
 
         <div className="card p-4">
           <h2 className="mb-4 text-lg font-semibold text-foreground">О системе</h2>
-          <p className="text-foreground-secondary">Аудит Техники v0.1.0</p>
-          <p className="mt-1 text-sm text-foreground-muted">Система независимой фотофиксации состояния техники</p>
+          <p className="text-foreground-secondary">Аудит Техники v0.1.0 · система независимой фотофиксации состояния техники</p>
         </div>
       </div>
     </Layout>

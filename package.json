@@ -20,7 +20,7 @@
     "audit:backend": "npm --prefix backend audit --audit-level=moderate",
     "audit:web:high": "npm --prefix web audit --audit-level=high",
     "audit:launch": "npm run audit:backend && npm run audit:web:high && npm run audit:mobile",
-    "verify:backend": "npm --prefix backend run smoke",
+    "verify:backend": "npm --prefix backend run test:unit && npm --prefix backend run smoke",
     "verify:web": "npm --prefix web run build",
     "verify:e2e": "node scripts/e2e-local.mjs",
     "verify": "npm run verify:backend && npm run verify:web && npm run verify:mobile",

@@ -1,49 +1,107 @@
-import initSqlJs from 'sql.js'
+import Database from 'better-sqlite3'
 import bcrypt from 'bcryptjs'
 import { v4 as uuidv4 } from 'uuid'
 import path from 'path'
 import { fileURLToPath } from 'url'
 import fs from 'fs'
-import { normalizeVehicleNumberToCyrillic, repairMojibakeRussian } from './utils/transliteration.js'
+import { normalizeVehicleNumberToCyrillic } from './utils/transliteration.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
+const backendRoot = path.resolve(__dirname, '..')
 const configuredDbPath = process.env.DATABASE_PATH
 const dbPath = configuredDbPath
   ? path.resolve(process.cwd(), configuredDbPath)
-  : path.join(__dirname, 'database.sqlite')
+  : path.join(backendRoot, 'data', 'database.sqlite')
 
 let db = null
 
-const TEXT_REPLACEMENTS = new Map([
-  ['Р С’Р Т‘Р СР С‘Р Р…Р С‘РЎРѓРЎвЂљРЎР‚Р В°РЎвЂљР С•РЎР‚', 'Администратор'],
-  ['Р вЂњР С’Р вЂ”Р ВµР В»РЎРЉ Next', 'ГАЗель Next'],
-  ['Р вЂњР С’Р вЂ”Р ВµР В»РЎРЉ Р вЂР С‘Р В·Р Р…Р ВµРЎРѓ', 'ГАЗель Бизнес'],
-  ['Р РЋР С•Р В±Р С•Р В»РЎРЉ', 'Соболь'],
-  ['Р СљР С•РЎРѓР С”Р Р†Р В°', 'Москва'],
-  ['Р СљР С•РЎРѓР С”Р С•Р Р†РЎРѓР С”Р В°РЎРЏ Р С•Р В±Р В».', 'Московская обл.'],
-  ['Р РЋР В°Р Р…Р С”РЎвЂљ-Р СџР ВµРЎвЂљР ВµРЎР‚Р В±РЎС“РЎР‚Р С–', 'Санкт-Петербург'],
-  ['Р С™РЎР‚Р В°РЎРѓР Р…Р С•Р Т‘Р В°РЎР‚', 'Краснодар'],
-  ['Р вЂўР С”Р В°РЎвЂљР ВµРЎР‚Р С‘Р Р…Р В±РЎС“РЎР‚Р С–', 'Екатеринбург'],
-  ['Р СњР С•Р Р†Р С•РЎРѓР С‘Р В±Р С‘РЎР‚РЎРѓР С”', 'Новосибирск'],
-  ['Р вЂ™Р Р…Р ВµРЎв‚¬Р Р…Р С‘Р в„– Р Р†Р С‘Р Т‘', 'Внешний вид'],
-  ['Р СџР С•Р Р†РЎР‚Р ВµР В¶Р Т‘Р ВµР Р…Р С‘РЎРЏ Р С”РЎС“Р В·Р С•Р Р†Р В°', 'Повреждения кузова'],
-  ['Р С™Р С•Р В»РЎвЂРЎРѓР В°', 'Колёса'],
-  ['Р РЋРЎвЂљР ВµР С”Р В»Р В°', 'Стекла'],
-  ['Р вЂњР С•РЎРѓР Р…Р С•Р СР ВµРЎР‚', 'Госномер'],
-  ['Р вЂєР В°Р С”Р С•Р С”РЎР‚Р В°РЎРѓР С•РЎвЂЎР Р…Р С•Р Вµ Р С—Р С•Р С”РЎР‚РЎвЂ№РЎвЂљР С‘Р Вµ', 'Лакокрасочное покрытие'],
-  ['Р В¤Р В°РЎР‚РЎвЂ№', 'Фары'],
-  ['Р вЂ”Р ВµРЎР‚Р С”Р В°Р В»Р В°', 'Зеркала'],
-  ['Р вЂќР Р†Р ВµРЎР‚Р С‘', 'Двери'],
-  ['Р вЂќР Р†Р С‘Р С–Р В°РЎвЂљР ВµР В»РЎРЉ', 'Двигатель'],
-  ['Р РЋР В°Р В»Р С•Р Р…', 'Салон'],
-  ['Р СџРЎР‚Р С‘Р В±Р С•РЎР‚Р Р…Р В°РЎРЏ Р С—Р В°Р Р…Р ВµР В»РЎРЉ', 'Приборная панель'],
-  ['Р С›РЎРѓРЎвЂљР ВµР С”Р В»Р ВµР Р…Р С‘Р Вµ', 'Остекление'],
-  ['Р ТђР С•Р Т‘Р С•Р Р†Р В°РЎРЏ', 'Ходовая'],
-  ['Р С™РЎС“Р В·Р С•Р Р†', 'Кузов'],
-  ['Р вЂР ВµР В·Р С•Р С—Р В°РЎРѓР Р…Р С•РЎРѓРЎвЂљРЎРЉ', 'Безопасность'],
-  ['Р вЂ”Р В°РЎвЂћР С‘Р С”РЎРѓР С‘РЎР‚Р С•Р Р†Р В°Р Р…Р С• Р С—РЎР‚Р С‘ Р С•РЎРѓР СР С•РЎвЂљРЎР‚Р Вµ', 'Зафиксировано при осмотре'],
-  ['Р СњР Вµ РЎС“Р С”Р В°Р В·Р В°Р Р…', 'Не указано'],
-])
+function normalizeParams(params) {
+  if (params.length === 0) return []
+  if (params.length === 1 && Array.isArray(params[0])) return params[0]
+  return params
+}
+
+function isReadSql(sql) {
+  return /^\s*(SELECT|PRAGMA|WITH)\b/i.test(sql)
+}
+
+function runStatement(statement, params) {
+  const normalized = normalizeParams(params)
+  return normalized.length > 0 ? statement.run(normalized) : statement.run()
+}
+
+function allStatement(statement, params) {
+  const normalized = normalizeParams(params)
+  return normalized.length > 0 ? statement.all(normalized) : statement.all()
+}
+
+function getStatement(statement, params) {
+  const normalized = normalizeParams(params)
+  return normalized.length > 0 ? statement.get(normalized) : statement.get()
+}
+
+function createSqlJsLikeStatement(statement) {
+  let boundParams = []
+  let rows = null
+  let currentRow = null
+
+  return {
+    bind: (...params) => {
+      boundParams = normalizeParams(params)
+    },
+    run: (...params) => runStatement(statement, params.length > 0 ? params : boundParams),
+    step: () => {
+      if (rows === null) {
+        rows = allStatement(statement, boundParams)
+      }
+
+      currentRow = rows.shift() || null
+      return currentRow !== null
+    },
+    getAsObject: () => currentRow || {},
+    free: () => {},
+  }
+}
+
+function createDatabase(filePath) {
+  const sqlite = new Database(filePath)
+  sqlite.pragma('journal_mode = WAL')
+  sqlite.pragma('foreign_keys = ON')
+
+  return {
+    raw: sqlite,
+    run: (sql, ...params) => {
+      const normalized = normalizeParams(params)
+      if (normalized.length === 0) {
+        try {
+          return sqlite.prepare(sql).run()
+        } catch (error) {
+          if (!/more than one statement/i.test(error.message)) {
+            throw error
+          }
+
+          sqlite.exec(sql)
+          return { changes: 0, lastInsertRowid: undefined }
+        }
+      }
+
+      return runStatement(sqlite.prepare(sql), normalized)
+    },
+    exec: (sql) => {
+      if (!isReadSql(sql)) {
+        sqlite.exec(sql)
+        return []
+      }
+
+      const statement = sqlite.prepare(sql)
+      const columns = statement.columns().map((column) => column.name)
+      const values = statement.raw().all()
+      return values.length > 0 ? [{ columns, values }] : []
+    },
+    prepare: (sql) => createSqlJsLikeStatement(sqlite.prepare(sql)),
+    close: () => sqlite.close(),
+  }
+}
 
 const DEFAULT_REGIONS = [
   'Москва',
@@ -73,11 +131,6 @@ const LICENSE_PLATE_LATIN_TO_CYRILLIC = {
 const LICENSE_PLATE_ALLOWED_LETTERS = ['А', 'В', 'Е', 'К', 'М', 'Н', 'О', 'Р', 'С', 'Т', 'У', 'Х']
 const LICENSE_PLATE_PATTERN = /^[АВЕКМНОРСТУХ]\d{3}[АВЕКМНОРСТУХ]{2}\d{2,3}$/
 
-function repairTextValue(value) {
-  if (typeof value !== 'string') return value
-  return repairMojibakeRussian(TEXT_REPLACEMENTS.get(value) || value)
-}
-
 function normalizeVehicleNumber(value) {
   return normalizeVehicleNumberToCyrillic(value)
 }
@@ -101,40 +154,6 @@ function buildCompliantVehicleNumber(source, salt = '') {
   const regionDigits = regionDigitsSource.length >= 2 ? regionDigitsSource : regionDigitsSource.padStart(2, '7')
 
   return `${firstLetter}${mainDigits}${secondLetter}${thirdLetter}${regionDigits}`
-}
-
-function repairTableColumn(table, column) {
-  const select = db.prepare(`SELECT rowid, ${column} as value FROM ${table} WHERE ${column} IS NOT NULL`)
-  const update = db.prepare(`UPDATE ${table} SET ${column} = ? WHERE rowid = ?`)
-  let repaired = 0
-
-  while (select.step()) {
-    const row = select.getAsObject()
-    const fixedValue = repairTextValue(row.value)
-    if (fixedValue !== row.value) {
-      update.run([fixedValue, row.rowid])
-      repaired += 1
-    }
-  }
-
-  select.free()
-  update.free()
-  return repaired
-}
-
-function repairDatabaseEncoding() {
-  const repaired =
-    repairTableColumn('users', 'name') +
-    repairTableColumn('vehicles', 'name') +
-    repairTableColumn('vehicles', 'region') +
-    repairTableColumn('regions', 'name') +
-    repairTableColumn('checklist_items', 'title') +
-    repairTableColumn('defects', 'title') +
-    repairTableColumn('defects', 'comment')
-
-  if (repaired > 0) {
-    console.log(`Fixed mojibake records: ${repaired}`)
-  }
 }
 
 function repairVehicleNumbers() {
@@ -183,7 +202,7 @@ function syncRegionDirectory() {
   `)
 
   DEFAULT_REGIONS.forEach((region) => {
-    insertRegion.run([uuidv4(), repairTextValue(region)])
+    insertRegion.run([uuidv4(), region])
   })
 
   const vehicleRegions = db.prepare(`
@@ -194,7 +213,7 @@ function syncRegionDirectory() {
 
   while (vehicleRegions.step()) {
     const row = vehicleRegions.getAsObject()
-    insertRegion.run([uuidv4(), repairTextValue(row.region)])
+    insertRegion.run([uuidv4(), row.region])
   }
 
   vehicleRegions.free()
@@ -673,15 +692,10 @@ function applySchemaMigrations() {
 }
 
 export async function initDatabase() {
-  const SQL = await initSqlJs()
   fs.mkdirSync(path.dirname(dbPath), { recursive: true })
 
-  if (fs.existsSync(dbPath)) {
-    const data = fs.readFileSync(dbPath)
-    db = new SQL.Database(data)
-  } else {
-    db = new SQL.Database()
-  }
+  db?.close?.()
+  db = createDatabase(dbPath)
 
   db.run(`
     CREATE TABLE IF NOT EXISTS users (
@@ -974,7 +988,6 @@ export async function initDatabase() {
     }
   }
 
-  repairDatabaseEncoding()
   repairVehicleNumbers()
   syncRegionDirectory()
 
@@ -983,56 +996,32 @@ export async function initDatabase() {
 }
 
 function saveDatabase() {
-  if (db) {
-    fs.mkdirSync(path.dirname(dbPath), { recursive: true })
-    const data = db.export()
-    fs.writeFileSync(dbPath, Buffer.from(data))
-  }
+  // better-sqlite3 writes changes directly to the database file.
 }
 
 export function getDb() {
   return {
     prepare: (sql) => ({
       run: (...params) => {
-        if (params.length > 0) {
-          db.run(sql, params)
-        } else {
-          db.run(sql)
-        }
-        saveDatabase()
-        return { changes: 0 }
+        const result = db.run(sql, ...params)
+        return { changes: result.changes || 0, lastInsertRowid: result.lastInsertRowid }
       },
       get: (...params) => {
-        const stmt = db.prepare(sql)
-        // Handle both: .get(a, b) and .get([a, b])
-        const bindParams = params.length === 1 && Array.isArray(params[0]) ? params[0] : params
-        if (bindParams.length > 0) stmt.bind(bindParams)
-        // IMPORTANT: step() only once - calling twice breaks it!
-        if (stmt.step()) {
-          const row = stmt.getAsObject()
-          stmt.free()
-          return row
-        }
-        stmt.free()
-        return undefined
+        return getStatement(db.raw.prepare(sql), params)
       },
       all: (...params) => {
-        const stmt = db.prepare(sql)
-        const bindParams = params.length === 1 && Array.isArray(params[0]) ? params[0] : params
-        if (bindParams.length > 0) stmt.bind(bindParams)
-        const results = []
-        while (stmt.step()) {
-          results.push(stmt.getAsObject())
-        }
-        stmt.free()
-        return results
+        return allStatement(db.raw.prepare(sql), params)
       },
     }),
     exec: (sql) => {
-      db.run(sql)
-      saveDatabase()
+      db.exec(sql)
     },
   }
+}
+
+export function closeDatabase() {
+  db?.close?.()
+  db = null
 }
 
 export default {

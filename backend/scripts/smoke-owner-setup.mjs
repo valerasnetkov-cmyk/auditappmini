@@ -1,11 +1,12 @@
 import { spawn } from 'node:child_process'
 import fs from 'node:fs/promises'
+import crypto from 'node:crypto'
 import process from 'node:process'
 
 const HOST = '127.0.0.1'
 const PORT = Number(process.env.PORT || 4717 + (process.pid % 500))
 const DATABASE_PATH = `./.tmp-smoke/smoke-owner-setup-${process.pid}.sqlite`
-const JWT_SECRET = 'smoke-owner-setup-secret'
+const JWT_SECRET = crypto.randomBytes(32).toString('hex')
 const BASE_URL = `http://${HOST}:${PORT}`
 
 function sleep(ms) {

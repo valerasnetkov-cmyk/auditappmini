@@ -1,533 +1,218 @@
-﻿# Аудит техники
+# Аудит техники
 
-Система независимой фотофиксации состояния техники с историей осмотров, дефектов, ДТП-фиксации, пробега и подтверждающими материалами.
+Система фотофиксации состояния техники: осмотры, дефекты, ДТП, пробег,
+обязательные фото, история изменений и SaaS-ready администрирование компаний.
 
-Проект развивается как MVP для одной компании с SaaS-ready архитектурой: сначала доводится стабильный рабочий сценарий, но данные и код сразу готовятся к работе с несколькими компаниями через `company_id`.
+Проект сейчас находится в состоянии **MVP / pilot-ready SaaS-ready transition**:
+основной рабочий сценарий доведён до запуска, а backend/web/mobile уже
+разделены по ролям, компаниям и эксплуатационным контурам.
 
----
+## Текущий стек
 
-## Статус проекта
+| Контур | Текущее состояние |
+|---|---|
+| Backend | Node.js, Express, `better-sqlite3`, optional Redis rate limit, PM2-ready |
+| Web | Next.js 16, React 18, Tailwind/PostCSS, Playwright E2E |
+| Mobile | Expo SDK 54, React Native 0.81, Expo Camera/Location/SecureStore |
+| Storage | SQLite в `backend/data/database.sqlite`, uploads в `backend/uploads/` |
+| Backup | `backup:local` + `backup:verify` с read-only SQLite integrity check |
 
-Текущий статус: **MVP / SaaS-ready transition**.
+PostgreSQL/Supabase остаются будущей опцией для более крупного multi-tenant
+SaaS. Для контролируемого пилота используется SQLite через `better-sqlite3`.
 
-Основной фокус:
+## Быстрый старт
 
-- быстрая фиксация состояния техники;
-- плановый и быстрый осмотр;
-- плановый осмотр с внешними и техническими блоками: ходовая часть, тормозная система, электрика и свет;
-- отдельный сценарий осмотра ДТП;
-- обязательная фиксация места и времени ДТП;
-- фото-доказательства по обязательным ракурсам;
-- фото одометра и фиксация километража;
-- распознавание километража по фото как помощник инспектора;
-- ручной ввод номера машины вместо QR-кодов;
-- ручной ввод номера только латинскими буквами и цифрами;
-- распознавание номера по фото как вспомогательная функция;
-- история осмотров и дефектов;
-- подготовка архитектуры к нескольким компаниям;
-- мультиязычность интерфейса: `ru`, `en`, `de`, `fr`, `es`;
-- внешние CSS-файлы для web-интерфейса;
-- светлая и тёмная тема для ПК/web и мобильного приложения;
-- безопасная структура проекта без секретов в репозитории.
-
----
-
-## Основная логика продукта
-
-Главный процесс:
-
-```txt
-Выбор компании -> Ввод номера -> Подтверждение техники -> Выбор типа осмотра -> Фото -> Чек-лист -> Дефекты -> Пробег -> История -> Отчёт
+```powershell
+npm install
+npm --prefix backend install
+npm --prefix web install
+npm --prefix mobile install
 ```
 
-Проект не управляет ремонтом и не учитывает исполнителей ремонта. Ценность MVP — доказательная фиксация состояния техники.
+Создайте локальные `.env` из `.env.example` в нужных контурах. Для backend
+важные значения по умолчанию:
 
----
+```txt
+DATABASE_PATH=./data/database.sqlite
+UPLOAD_DIR=./uploads
+BACKUP_DIR=./backups
+```
 
-## Типы осмотра
+Запуск разработки:
 
-### Быстрый осмотр
+```powershell
+npm run dev
+```
 
-Используется для регулярной быстрой проверки состояния техники.
+Или отдельно:
 
-Обязательные данные:
+```powershell
+npm run dev:backend
+npm run dev:web
+npm --prefix mobile run start
+```
 
-- номер машины, введённый латиницей и подтверждённый инспектором;
-- фото фронтальной части автомобиля;
-- фото левого борта;
-- фото правого борта;
-- фото задней части автомобиля;
-- общий план автомобиля;
-- фото одометра;
-- километраж, подтверждённый инспектором;
-- чек-лист быстрых контрольных пунктов.
+Backend стартует через `backend/src/server.js`, web dev-сервер использует порт
+`3002`.
 
-### Плановый осмотр
+## Проверки
 
-Используется для более полной регулярной проверки.
+Основные команды:
 
-Обязательные данные:
+```powershell
+npm run verify:backend
+npm run verify:web
+npm run verify:mobile
+npm run verify:launch
+```
 
-- все обязательные фото быстрого осмотра;
-- дополнительные общие планы при необходимости;
-- расширенный чек-лист внешних дефектов;
-- технические блоки: ходовая часть, тормозная система, электрика и световые приборы;
-- фото/комментарии по техническим дефектам при необходимости;
-- фото одометра;
-- подтверждённый километраж;
-- комментарии инспектора при отклонениях.
+Backend:
 
-### Осмотр ДТП
+```powershell
+npm --prefix backend run test:unit
+npm --prefix backend run smoke
+npm --prefix backend run doctor:launch
+```
 
-Используется для фиксации повреждений после ДТП или инцидента.
+Backup:
 
-Обязательные данные:
+```powershell
+npm run backup:local
+npm run backup:verify
+```
 
-- фото общего плана автомобиля;
-- фото фронтальной части;
-- фото левого борта;
-- фото правого борта;
-- фото задней части автомобиля;
-- место ДТП, введённое или подтверждённое инспектором;
-- дата и время ДТП, введённые или подтверждённые инспектором;
-- координаты места ДТП, если доступны;
-- фото повреждённого участка крупным планом;
-- при нескольких повреждениях — отдельное фото крупным планом для каждого повреждённого участка;
-- фото одометра, если доступ к салону возможен;
-- километраж, подтверждённый инспектором или помеченный как недоступный с причиной.
+Release/readiness:
 
-Подробные правила: `docs/inspection-types.md`, `docs/inspection-photo-requirements.md`, `docs/accident-inspection.md`, `docs/odometer-recognition.md`.
+```powershell
+npm run release:verify
+npm run release:readiness
+npm run release:evidence
+```
 
----
+## Архитектура backend
+
+Backend декомпозирован после Epic 3.3:
+
+```txt
+backend/src/server.js              # initDatabase, listen, sockets, graceful shutdown
+backend/src/app.js                 # Express app factory and route/middleware wiring
+backend/src/config.js              # env-derived config and production guard
+backend/src/db.js                  # better-sqlite3 wrapper and schema init
+backend/src/middleware/            # auth, security, access log, request id, rate limit
+backend/src/routes/                # auth, health, vehicles, inspections, defects, photos, admin, users
+backend/src/services/              # Redis, rate limiter, company policy, photo upload, users, roles
+backend/src/seed/                  # demo-data seed
+```
+
+`server.js` намеренно остаётся маленьким. Бизнес-логика должна жить в route,
+middleware, service или config modules.
+
+## Основные возможности
+
+- быстрый, плановый и ДТП-осмотр;
+- обязательные фото по типам осмотра;
+- загрузка фото с MIME/format validation через `sharp`;
+- WebP/thumb pipeline для uploads;
+- дефекты, история дефектов, закрытие и переоткрытие;
+- фото одометра и фиксация пробега;
+- распознавание номера и одометра как вспомогательная функция;
+- tenant isolation через `company_id`;
+- роли `admin`, `owner`, `manager`, `inspector`;
+- MFA/TOTP для пользователей;
+- httpOnly web session cookie;
+- SaaS resource-admin панель без Directus;
+- тарифы, лимиты, feature flags и subscription read-only guards;
+- Redis-backed rate limit при `REDIS_URL`, in-memory fallback без Redis;
+- health/readiness endpoints для launch/monitoring.
 
 ## Роли
 
-### Inspector
+| Роль | Назначение |
+|---|---|
+| `admin` | Администратор ресурса: компании, owners, тарифы, лимиты, health-индикаторы. Не получает доступ к tenant-операционным данным. |
+| `owner` | Владелец компании: пользователи, настройки, лимиты/usage, операционные данные своей компании. |
+| `manager` | Просмотр и управление операционным контуром компании в рамках прав. |
+| `inspector` | Проведение осмотров, фотофиксация, дефекты, подтверждение номера и пробега. |
 
-Инспектор проводит осмотры, вводит номер машины, подтверждает распознанный номер, фиксирует фото, заполняет чек-лист, подтверждает пробег и описывает дефекты.
-
-### Manager
-
-Руководитель просматривает технику, историю осмотров, дефекты, фото, пробег, ДТП-фиксации и базовую статистику.
-
-### Admin / Owner
-
-Роль для SaaS-ready модели. Управляет компанией, пользователями, настройками языка и базовыми параметрами компании.
-
----
-
-## Правила MVP
+## Продуктовые правила MVP
 
 - QR-коды не используются.
-- Инспектор вводит номер машины вручную.
-- Ручной ввод номера допускается только латинскими буквами и цифрами.
-- Для российских номеров используются латинские визуальные аналоги кириллицы: `A B E K M H O P C T Y X`.
-- Кириллица в поле ручного ввода номера не принимается.
-- Распознавание номера по фото может использоваться только как помощник.
-- Распознанный номер всегда показывается инспектору для подтверждения или исправления.
-- Осмотр нельзя начать без подтверждённого номера техники.
-- Осмотр нельзя завершить без обязательных фото по выбранному типу осмотра.
-- Фото должны фиксироваться через камеру.
-- Для фото и осмотра сохраняются дата, время и геоданные.
-- Фото одометра обязательно для быстрого и планового осмотра.
-- Километраж после распознавания должен быть подтверждён или исправлен инспектором.
-- Ручной ввод километража должен быть доступен всегда.
-- Информация одометра сохраняется в карточке осмотра.
-- Любой ответ `НЕТ` в чек-листе считается дефектом.
-- Для планового осмотра проверяются внешние дефекты, ходовая часть, тормозная система, электрика и световые приборы.
-- Технический дефект должен иметь категорию: `exterior`, `undercarriage`, `brake_system`, `electrical`, `lighting` или `other`.
-- Дефект должен быть связан с фото, если его можно зафиксировать визуально.
-- При осмотре ДТП общий план повреждения не заменяет крупный план повреждённого участка.
-- Для осмотра ДТП место и время ДТП обязательны.
-- Время создания осмотра не заменяет время ДТП.
-- Геоданные фото не заменяют обязательное поле места ДТП, а только дополняют его.
+- Ручной ввод номера остаётся основным сценарием.
+- Для российских номеров используются латинские визуальные аналоги кириллицы:
+  `A B E K M H O P C T Y X`.
+- OCR/ANPR не начинает осмотр автоматически и требует подтверждения инспектора.
+- Осмотр нельзя завершить без обязательных фото.
+- Фото и осмотр сохраняют дату, время и доступные геоданные.
+- Любой ответ `НЕТ` в чек-листе создаёт дефект.
+- ДТП-осмотр требует место и время ДТП; время создания осмотра их не заменяет.
+- Пробег сохраняется вместе с единицей измерения (`km` / `mi`).
 
----
+## Важные API-группы
 
-## SaaS-ready подход
+| Группа | Примеры endpoints |
+|---|---|
+| Auth | `POST /api/auth/login`, `GET /api/auth/me`, MFA endpoints |
+| Health | `GET /health`, `GET /api/health/live`, `GET /api/health/ready` |
+| Vehicles | `GET/POST /api/vehicles`, `PUT /api/vehicles/:id`, import/archive/history |
+| Inspections | `GET/POST /api/inspections`, `GET /api/inspections/:id`, complete |
+| Defects | defect CRUD, close/reopen/history |
+| Photos/uploads | inspection/defect photos, protected `/uploads/*` |
+| Users/settings | tenant users, settings, company usage |
+| Resource admin | `/api/admin/resource/*` |
+| Analytics | dashboard stats, analytics overview/export |
 
-Сейчас не требуется внедрять полный SaaS сразу: публичная регистрация компаний, биллинг, тарифы, кастомные домены и SaaS-админка могут быть добавлены позже.
-
-Но уже сейчас нужно заложить основу:
-
-- таблица `companies`;
-- таблица `company_users`;
-- поле `company_id` во всех бизнес-сущностях;
-- фильтрация данных по компании на уровне backend;
-- хранение фото в структуре с `company_id`;
-- подготовка интерфейса к мультиязычности;
-- отказ от жёсткой привязки проекта к одной компании.
-
----
-
-## Рекомендуемый целевой стек
-
-### Backend
-
-- Node.js;
-- Express или другой HTTP framework;
-- PostgreSQL / Supabase для SaaS-ready базы.
-
-### Frontend
-
-- Next.js;
-- React;
-- TypeScript;
-- i18n-слой для `ru / en / de / fr / es`;
-- внешние CSS-файлы вместо inline-стилей;
-- поддержка `system / light / dark` темы через CSS-переменные.
-
-### Mobile
-
-Может использоваться Flutter или Expo / React Native.
-
-Ключевое требование для mobile: стабильная работа камеры, геоданных, OCR/распознавания номера и одометра, оффлайн-очереди отправки осмотров, а также поддержка светлой и тёмной темы.
-
----
+Подробности: [`docs/backend.md`](./docs/backend.md).
 
 ## Структура проекта
 
 ```txt
 auditappmini/
-├── backend/
-├── web/
-├── mobile/
-├── scripts/
-├── docs/
-│   ├── product.md
-│   ├── architecture.md
-│   ├── data-model.md
-│   ├── backend.md
-│   ├── web.md
-│   ├── mobile.md
-│   ├── inspection-types.md
-│   ├── inspection-photo-requirements.md
-│   ├── accident-inspection.md
-│   ├── planned-inspection-systems.md
-│   ├── odometer-recognition.md
-│   ├── vehicle-number-format.md
-│   ├── vehicle-number-recognition.md
-│   ├── ocr-provider-architecture.md
-│   ├── i18n.md
-│   ├── frontend-styles.md
-│   ├── theme.md
-│   ├── storage.md
-│   ├── deployment.md
-│   ├── security-github.md
-│   ├── do-not-do.md
-│   ├── implementation-plan.md
-│   ├── checklist.md
-│   └── sql-outline.md
-├── README.md
-└── .gitignore
+├── backend/                 # Express API, SQLite storage, smoke/tests/scripts
+├── web/                     # Next.js 16 web client and Playwright tests
+├── mobile/                  # Expo SDK 54 app
+├── scripts/                 # root verification/release helpers
+├── docs/                    # product, architecture, operations, audit, epics
+├── CODEOWNERS
+├── CHANGELOG.md
+├── plan.md
+└── README.md
 ```
 
----
+## Эксплуатация и безопасность
 
-## Основные сущности
-
-- `companies` — компании-клиенты сервиса;
-- `company_users` — связь пользователей с компаниями и ролями;
-- `vehicles` — техника;
-- `inspections` — осмотры;
-- `inspection_items` — пункты чек-листа осмотра;
-- `defects` — дефекты;
-- `photos` — фото осмотров, дефектов, одометра и ДТП;
-- `photo_requirements` — обязательные фото по типам осмотров;
-- `checklist_templates` и `checklist_template_items` — шаблоны чек-листов, включая технические блоки планового осмотра;
-- `vehicle_number_recognitions` — попытки распознавания номера по фото;
-- `odometer_recognitions` — попытки распознавания километража по фото одометра;
-- `audit_logs` — журнал важных действий;
-- `theme_preference` / `default_theme` — настройки темы интерфейса пользователя и компании.
-
-Все бизнес-таблицы должны содержать `company_id`.
-
----
-
-## API Endpoints
-
-Компания определяется по текущему пользователю и его роли. `company_id` не передаётся в URL публичных endpoint'ов.
-
-### Auth
-
-| Метод | Endpoint | Описание |
-|------|----------|----------|
-| POST | `/api/auth/login` | Вход |
-| GET | `/api/auth/me` | Текущий пользователь |
-
-### Vehicles
-
-| Метод | Endpoint | Описание |
-|------|----------|----------|
-| GET | `/api/vehicles` | Список техники текущей компании |
-| GET | `/api/vehicles/:id` | Карточка техники |
-| GET | `/api/vehicles/by-number/:number` | Поиск техники по нормализованному номеру |
-| POST | `/api/vehicles` | Создать технику |
-| PUT | `/api/vehicles/:id` | Обновить технику |
-
-### Vehicle Number
-
-| Метод | Endpoint | Описание |
-|------|----------|----------|
-| POST | `/api/vehicle-number/recognize` | Распознать номер по фото и вернуть кандидаты |
-| POST | `/api/vehicles/resolve-number` | Нормализовать номер и найти технику текущей компании |
-
-### Odometer
-
-| Метод | Endpoint | Описание |
-|------|----------|----------|
-| POST | `/api/odometer/recognize` | Распознать километраж по фото одометра |
-| POST | `/api/inspections/:id/odometer` | Сохранить подтверждённый километраж в карточку осмотра |
-
-### Inspections
-
-| Метод | Endpoint | Описание |
-|------|----------|----------|
-| GET | `/api/inspections` | Список осмотров текущей компании |
-| GET | `/api/inspections/:id` | Детали осмотра |
-| GET | `/api/vehicles/:id/inspections` | Осмотры конкретной техники |
-| POST | `/api/inspections` | Создать осмотр |
-| POST | `/api/inspections/:id/complete` | Завершить осмотр после проверок |
-
-### Photos
-
-| Метод | Endpoint | Описание |
-|------|----------|----------|
-| POST | `/api/photos` | Загрузить фото осмотра, дефекта, ДТП или одометра |
-| GET | `/api/photos/:id` | Получить данные фото с проверкой доступа |
-
----
-
-## Мультиязычность
-
-Базовые языки интерфейса:
-
-- `ru` — русский;
-- `en` — английский;
-- `de` — немецкий;
-- `fr` — французский;
-- `es` — испанский.
-
-Переводятся системные тексты интерфейса: меню, кнопки, заголовки, ошибки, подсказки, типы осмотров, типы фото, статусы и системные уведомления.
-
-Пользовательские данные не переводятся автоматически: номер машины, название техники, комментарии инспектора, описания дефектов, название компании, имена пользователей и введённый километраж.
-
----
-
-## Стили web-интерфейса
-
-CSS-стили web-интерфейса должны быть вынесены во внешние файлы.
-
-```txt
-TSX / JSX -> разметка, логика и className
-CSS -> отдельный внешний файл
-```
-
-Не допускается писать inline-стили через `style={{ ... }}` в компонентах.
-
----
-
-## Тема интерфейса
-
-Проект должен поддерживать три режима оформления для web/ПК и mobile:
-
-```txt
-system -> как в системе
-light  -> светлая тема
-dark   -> тёмная тема
-```
-
-Тема выбирается по приоритету:
-
-```txt
-user.theme_preference -> company.default_theme -> системная тема устройства -> light
-```
-
-В web тема реализуется через CSS-переменные и `data-theme` на корневом элементе. В mobile тема реализуется через единые theme tokens. Цвета нельзя хардкодить в компонентах и экранах.
-
-Подробно: `docs/theme.md` и `docs/frontend-styles.md`.
-
----
-
-
-## Безопасность GitHub
-
-В публичный репозиторий нельзя добавлять:
-
-```txt
-.env
-.env.local
-.env.production
-*.sqlite
-*.db
-node_modules/
-.next/
-dist/
-build/
-uploads/
-logs/
-*.log
-service keys
-private keys
-access tokens
-real API keys
-real database URLs
-real production domains
-real user passwords
-```
-
-Если секреты уже были опубликованы, их нужно заменить в источнике, даже если файлы потом были удалены из репозитория.
-
----
+- Секреты не коммитятся; используйте `.env` / `.env.production`.
+- Production guard блокирует небезопасные значения `JWT_SECRET`, CORS,
+  public registration, storage paths, rate-limit settings и demo admin password.
+- `REDIS_URL` рекомендуется для multi-replica/blue-green deployments.
+- `backup:local` копирует SQLite и uploads, `backup:verify` проверяет последний
+  backup read-only через `better-sqlite3`.
+- `docs/SECURITY.md` описывает security policy и disclosure process.
+- `CODEOWNERS` назначает reviewers по backend/web/mobile/ops/security контурам.
 
 ## Документация
 
-Основные документы находятся в папке `docs/`.
+Основные точки входа:
 
-Ключевые файлы:
+- [`docs/README.md`](./docs/README.md) — каталог документации;
+- [`CHANGELOG.md`](./CHANGELOG.md) — журнал изменений и audit findings;
+- [`plan.md`](./plan.md) — рабочий roadmap;
+- [`docs/launch-checklist.md`](./docs/launch-checklist.md) — pilot launch checklist;
+- [`docs/production-env.md`](./docs/production-env.md) — production env;
+- [`docs/backup-restore.md`](./docs/backup-restore.md) — backup/restore runbook;
+- [`docs/epics/README.md`](./docs/epics/README.md) — статус Epic 3.1–3.10;
+- [`docs/audit-2026-06-05.md`](./docs/audit-2026-06-05.md) — последние docs-sync изменения.
 
-- `docs/product.md` — продуктовая логика и бизнес-правила;
-- `docs/inspection-types.md` — типы осмотров;
-- `docs/inspection-photo-requirements.md` — обязательные фото по типам осмотра;
-- `docs/accident-inspection.md` — обязательное место и время ДТП;
-- `docs/odometer-recognition.md` — фото одометра и фиксация километража;
-- `docs/data-model.md` — модель данных;
-- `docs/backend.md` — backend API и проверки;
-- `docs/mobile.md` — мобильный сценарий;
-- `docs/web.md` — web-интерфейс.
+## Текущий статус epics
 
----
+Закрыты и синхронизированы:
+
+- Epic 3.1: `sql.js` → `better-sqlite3` Variant A;
+- Epic 3.2: Redis-backed rate limit;
+- Epic 3.3: backend decomposition;
+- Epic 3.4–3.10: mobile/web/test/docs/security cleanup chunks по audit 2026-06-02.
+
+См. [`docs/epics/README.md`](./docs/epics/README.md).
 
 ## Лицензия
 
 Проект находится в разработке. Лицензия будет определена позже.
-
-## Региональное хранение данных
-
-Проект должен быть готов к распределению компаний по регионам хранения данных.
-
-Базовое правило:
-
-```txt
-Российские компании -> RU-контур
-Европейские компании -> EU-контур
-Остальные компании -> INTL-контур
-```
-
-Для MVP можно начать с двух контуров:
-
-```txt
-ru
-intl
-```
-
-Каждая компания закрепляется за регионом при создании. Рабочие данные компании — пользователи, автомобили, фото, номера, одометры, ДТП, геоданные, дефекты и audit logs — хранятся только внутри её регионального контура.
-
-Глобально допускается хранить только минимальный `tenant registry` для маршрутизации:
-
-```txt
-tenant_slug
-public_name
-region_code
-status
-```
-
-Подробности: `docs/data-residency.md`, `docs/regional-deployment.md`, `docs/tenant-routing.md`.
-
-## Дополнительные документы по региональности
-
-```txt
-docs/data-residency.md       # правила хранения данных по регионам
-docs/regional-deployment.md  # региональные окружения и инфраструктура
-docs/tenant-routing.md       # маршрутизация компаний по регионам
-```
-
-## Единицы измерения пробега
-
-В панели владельца компании должна быть настройка единиц измерения пробега:
-
-```txt
-km -> километры
-mi -> мили
-```
-
-Настройка применяется к web, mobile, OCR одометра, карточке техники, карточке осмотра, истории пробега и отчётам.
-
-Основные правила:
-
-- единица измерения задаётся на уровне компании;
-- инспектор не выбирает единицу в каждом осмотре;
-- значение одометра всегда сохраняется вместе с единицей: `odometer_value` + `odometer_unit`;
-- для внутренних проверок можно дополнительно хранить `odometer_value_km`;
-- старые осмотры не должны терять исходную единицу после изменения настройки компании.
-
-Подробнее: `docs/measurement-units.md`.
-
----
-
-## Распознавание номера по фото
-
-Распознавание номера реализуется как вспомогательная функция:
-
-```txt
-Фото номера -> OCR / ANPR -> нормализация в латиницу -> проверка формата -> подтверждение инспектором -> поиск техники
-```
-
-Правила:
-
-- ручной ввод номера остаётся основным сценарием;
-- ручной ввод допускает только латиницу и цифры;
-- OCR может вернуть кириллицу, но backend приводит результат к латинскому формату;
-- распознанный номер нельзя использовать без подтверждения инспектора;
-- OCR не запускает осмотр автоматически;
-- OCR-провайдер выбирается на backend по региону компании: `ru`, `eu`, `intl`;
-- токены OCR/ANPR-провайдеров не хранятся в frontend/mobile и не коммитятся в git.
-
-Подробные файлы:
-
-```txt
-docs/vehicle-number-recognition.md
-docs/ocr-provider-architecture.md
-docs/vehicle-number-format.md
-```
-
----
-
-## Администрирование ресурса
-
-Directus удален из активной архитектуры проекта. Администрирование ресурса реализовано во встроенном backend/web контуре и доступно только роли `admin`.
-
-Администратор ресурса управляет только сервисным уровнем:
-
-- компаниями;
-- владельцами компаний;
-- тарифами;
-- лимитами и feature flags;
-- статусами компаний и health-индикаторами сервиса.
-
-Администратор ресурса не является владельцем или менеджером tenant-компаний. Он не получает доступ к `/api/vehicles`, `/api/inspections`, `/api/defects`, `/api/photos`, `/api/users` и другим пользовательским endpoint конкретной компании. Назначение `manager` и `inspector` выполняет только `owner` внутри своей компании.
-
-Backend endpoints:
-
-- `GET /api/admin/resource/stats` - admin-only сервисная сводка по компаниям, владельцам, тарифам, лимитам и health-индикаторам без операционных данных компаний.
-- `GET /api/admin/resource/companies` - список компаний ресурсного уровня.
-- `POST /api/admin/resource/companies` - создание компании.
-- `PUT /api/admin/resource/companies/:id` - обновление компании.
-- `POST /api/admin/resource/companies/:id/owners` - создание владельца компании и owner setup-ссылки.
-- `PUT /api/admin/resource/companies/:id/limits` - обновление лимитов и feature flags компании.
-- `GET|POST|PUT|DELETE /api/admin/resource/plans` - управление тарифами.
-- `GET /api/company/usage` - тариф, лимиты и доступные модули текущей компании для пользовательской панели.
-
-Web:
-
-- `/saas-admin` - панель "Администрирование ресурса". Пункт меню видит только роль `admin`.
-
-Лимиты применяются backend-ом:
-
-- `max_vehicles` ограничивает `POST /api/vehicles` и `POST /api/vehicles/import`;
-- `max_users` ограничивает `POST /api/users`;
-- `ocr_enabled` ограничивает OCR endpoints распознавания номера и одометра;
-- `accident_module_enabled` ограничивает создание новых ДТП-осмотров;
-- `analytics_enabled` ограничивает пользовательскую аналитику и экспорт аналитики;
-- незаданный лимит считается безлимитным;
-- при превышении ресурсного лимита backend возвращает `409`, при отключенном модуле - `403`.

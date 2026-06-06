@@ -1,6 +1,7 @@
 import { spawn } from 'node:child_process'
 import fs from 'node:fs/promises'
 import http from 'node:http'
+import crypto from 'node:crypto'
 import process from 'node:process'
 
 const HOST = '127.0.0.1'
@@ -79,7 +80,7 @@ async function run() {
       PORT: String(PORT),
       DATABASE_PATH,
       UPLOAD_DIR,
-      JWT_SECRET: 'smoke-shutdown-secret',
+      JWT_SECRET: crypto.randomBytes(32).toString('hex'),
       GRACEFUL_SHUTDOWN_TIMEOUT_MS: '3000',
     },
     stdio: ['ignore', 'pipe', 'pipe', 'ipc'],

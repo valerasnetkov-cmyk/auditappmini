@@ -1,13 +1,15 @@
 import { spawn } from 'node:child_process'
 import fs from 'node:fs/promises'
 import http from 'node:http'
+import os from 'node:os'
 import path from 'node:path'
 import process from 'node:process'
 
 const TMP_ROOT = path.resolve('.tmp-smoke', `smoke-production-guard-${process.pid}`)
-const DATA_DIR = path.join(TMP_ROOT, 'data')
-const UPLOADS_DIR = path.join(TMP_ROOT, 'uploads')
-const BACKUPS_DIR = path.join(TMP_ROOT, 'backups')
+const PERSISTENT_ROOT = path.join(os.tmpdir(), `auditmini-smoke-production-guard-${process.pid}`)
+const DATA_DIR = path.join(PERSISTENT_ROOT, 'data')
+const UPLOADS_DIR = path.join(PERSISTENT_ROOT, 'uploads')
+const BACKUPS_DIR = path.join(PERSISTENT_ROOT, 'backups')
 const ENV_PATH = path.join(TMP_ROOT, 'production.env')
 
 function sleep(ms) {
@@ -58,9 +60,7 @@ function runNode(args, options = {}) {
   })
 }
 
-function buildProductionEnv({ publicRegistrationEnabled, port = 3001 }) {
-  const tmpRelative = `./.tmp-smoke/smoke-production-guard-${process.pid}`
-
+function buildProductionEnv({ publicRegistrationEnabled, port = 3001, relativeStorage = false }) {
   return {
     NODE_ENV: 'production',
     PORT: String(port),
@@ -75,9 +75,9 @@ function buildProductionEnv({ publicRegistrationEnabled, port = 3001 }) {
     JWT_SECRET: 'production-smoke-secret-64-characters-long-and-unique',
     ADMIN_EMAIL: 'admin@auditmini.example',
     ADMIN_PASSWORD: 'VeryStrongAdminPassword123!',
-    DATABASE_PATH: `${tmpRelative}/data/database.sqlite`,
-    UPLOAD_DIR: `${tmpRelative}/uploads`,
-    BACKUP_DIR: `${tmpRelative}/backups`,
+    DATABASE_PATH: relativeStorage ? './data/database.sqlite' : path.join(DATA_DIR, 'database.sqlite'),
+    UPLOAD_DIR: relativeStorage ? './uploads' : UPLOADS_DIR,
+    BACKUP_DIR: relativeStorage ? './backups' : BACKUPS_DIR,
     CORS_ORIGINS: 'https://app.auditmini.example',
     WEB_APP_URL: 'https://app.auditmini.example',
     SENSITIVE_RATE_LIMIT_WINDOW_MS: '900000',
@@ -87,13 +87,14 @@ function buildProductionEnv({ publicRegistrationEnabled, port = 3001 }) {
   }
 }
 
-async function writeProductionEnv({ publicRegistrationEnabled, port = 3001 }) {
+async function writeProductionEnv({ publicRegistrationEnabled, port = 3001, relativeStorage = false }) {
+  await fs.mkdir(TMP_ROOT, { recursive: true })
   await fs.mkdir(DATA_DIR, { recursive: true })
   await fs.mkdir(UPLOADS_DIR, { recursive: true })
   await fs.mkdir(BACKUPS_DIR, { recursive: true })
 
   const content = Object
-    .entries(buildProductionEnv({ publicRegistrationEnabled, port }))
+    .entries(buildProductionEnv({ publicRegistrationEnabled, port, relativeStorage }))
     .map(([name, value]) => `${name}=${value}`)
     .concat('')
     .join('\n')
@@ -101,8 +102,8 @@ async function writeProductionEnv({ publicRegistrationEnabled, port = 3001 }) {
   await fs.writeFile(ENV_PATH, content, 'utf8')
 }
 
-async function runDoctor({ publicRegistrationEnabled, expectedCode }) {
-  await writeProductionEnv({ publicRegistrationEnabled })
+async function runDoctor({ publicRegistrationEnabled, expectedCode, relativeStorage = false, expectedOutput = '' }) {
+  await writeProductionEnv({ publicRegistrationEnabled, relativeStorage })
 
   const result = await runNode([
     'scripts/launch-doctor.mjs',
@@ -124,6 +125,14 @@ async function runDoctor({ publicRegistrationEnabled, expectedCode }) {
   if (publicRegistrationEnabled && !result.stdout.includes('PUBLIC_REGISTRATION_ENABLED must be false in production')) {
     throw new Error([
       'launch-doctor did not report public registration production error',
+      `stdout: ${result.stdout}`,
+      `stderr: ${result.stderr}`,
+    ].join('\n'))
+  }
+
+  if (expectedOutput && !result.stdout.includes(expectedOutput)) {
+    throw new Error([
+      `launch-doctor did not report expected output: ${expectedOutput}`,
       `stdout: ${result.stdout}`,
       `stderr: ${result.stderr}`,
     ].join('\n'))
@@ -195,6 +204,12 @@ async function runProductionBoot() {
 async function run() {
   await runDoctor({ publicRegistrationEnabled: false, expectedCode: 0 })
   await runDoctor({ publicRegistrationEnabled: true, expectedCode: 1 })
+  await runDoctor({
+    publicRegistrationEnabled: false,
+    expectedCode: 1,
+    relativeStorage: true,
+    expectedOutput: 'DATABASE_PATH must be an absolute persistent storage path',
+  })
   await runProductionBoot()
 
   console.log('Production guard smoke passed')
@@ -207,4 +222,5 @@ run()
   })
   .finally(async () => {
     await fs.rm(TMP_ROOT, { recursive: true, force: true }).catch(() => {})
+    await fs.rm(PERSISTENT_ROOT, { recursive: true, force: true }).catch(() => {})
   })

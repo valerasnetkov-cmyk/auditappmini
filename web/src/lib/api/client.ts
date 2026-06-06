@@ -718,10 +718,21 @@ class ApiClient {
     })
   }
 
-  async verifyUserMfa(id: string, token: string) {
-    return this.request<MFAVerifyResponse>(`/users/${id}/mfa/verify`, {
+  async enableUserMfa(id: string, token: string) {
+    return this.request<MFAVerifyResponse>(`/users/${id}/mfa/enable`, {
       method: 'POST',
       body: JSON.stringify({ token }),
+    })
+  }
+
+  async verifyUserMfa(id: string, token: string) {
+    return this.enableUserMfa(id, token)
+  }
+
+  async disableUserMfa(id: string, data: { password: string; token?: string }) {
+    return this.request<{ ok: boolean; mfa_enabled: boolean }>(`/users/${id}/mfa/disable`, {
+      method: 'POST',
+      body: JSON.stringify(data),
     })
   }
 

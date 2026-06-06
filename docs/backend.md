@@ -25,6 +25,33 @@ audit-logs
 
 ---
 
+## Runtime structure
+
+Current backend runtime is split by responsibility:
+
+```txt
+backend/src/server.js              # database init, HTTP listen, socket tracking, graceful shutdown
+backend/src/app.js                 # Express app factory and route/middleware wiring
+backend/src/config.js              # env-derived runtime configuration and production guard
+backend/src/middleware/            # request id, access log, security, auth, rate limits, tenant endpoint predicate
+backend/src/routes/                # auth, health, vehicles, inspections, defects, photos, dashboard, analytics, users, settings, uploads
+backend/src/services/              # photo upload, company policy, role guards, user store and OCR helpers
+backend/src/seed/                  # demo-data and seed endpoints
+```
+
+`server.js` intentionally stays small. Request behavior should be changed in
+route, middleware, service or config modules first; `server.js` should only
+change when boot, listen or shutdown behavior changes.
+
+## Database runtime
+
+`backend/src/db.js` uses `better-sqlite3` against `DATABASE_PATH`. The module
+keeps the existing `getDb()` facade (`run`, `get`, `all`) for route and service
+code, while the underlying SQLite file is updated directly by the native driver.
+`saveDatabase()` is retained only as a compatibility no-op.
+
+---
+
 ## Tenant middleware
 
 Каждый запрос после авторизации должен получить:

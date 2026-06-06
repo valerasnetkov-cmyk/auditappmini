@@ -2,7 +2,7 @@ import fs from 'node:fs/promises'
 import path from 'node:path'
 import process from 'node:process'
 import { spawn } from 'node:child_process'
-import initSqlJs from 'sql.js'
+import Database from 'better-sqlite3'
 
 const backendRoot = process.cwd()
 const tmpRoot = path.join(backendRoot, '.tmp-smoke', `smoke-backup-${process.pid}`)
@@ -54,9 +54,9 @@ function parseJsonOutput(stdout) {
 await fs.mkdir(uploadsDir, { recursive: true })
 await fs.writeFile(path.join(uploadsDir, 'sample-photo.txt'), 'backup-smoke-upload', 'utf8')
 
-const SQL = await initSqlJs()
-const db = new SQL.Database()
-db.run(`
+const db = new Database(databasePath)
+try {
+  db.exec(`
   CREATE TABLE companies (id TEXT PRIMARY KEY, name TEXT);
   CREATE TABLE users (id TEXT PRIMARY KEY, email TEXT);
   CREATE TABLE vehicles (id TEXT PRIMARY KEY, number TEXT);
@@ -69,9 +69,10 @@ db.run(`
   INSERT INTO inspections (id, vehicle_id) VALUES ('inspection-1', 'vehicle-1');
   INSERT INTO defects (id, inspection_id) VALUES ('defect-1', 'inspection-1');
   INSERT INTO photos (id, inspection_id, url) VALUES ('photo-1', 'inspection-1', '/uploads/sample-photo.txt');
-`)
-await fs.writeFile(databasePath, Buffer.from(db.export()))
-db.close()
+  `)
+} finally {
+  db.close()
+}
 
 try {
   const backup = parseJsonOutput(

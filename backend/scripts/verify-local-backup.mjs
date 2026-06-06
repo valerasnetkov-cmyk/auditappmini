@@ -1,7 +1,7 @@
 import fs from 'node:fs/promises'
 import path from 'node:path'
 import process from 'node:process'
-import initSqlJs from 'sql.js'
+import Database from 'better-sqlite3'
 
 const backendRoot = process.cwd()
 const defaultBackupRoot = process.env.BACKUP_DIR
@@ -150,18 +150,20 @@ async function findLatestBackup(backupRoot) {
 }
 
 function queryCount(db, tableName) {
-  const tableExistsResult = db.exec(`
-    SELECT name
-    FROM sqlite_master
-    WHERE type = 'table' AND name = '${tableName.replaceAll("'", "''")}'
-  `)
+  const tableExists = db
+    .prepare(`
+      SELECT name
+      FROM sqlite_master
+      WHERE type = 'table' AND name = ?
+    `)
+    .get(tableName)
 
-  if (!tableExistsResult[0]?.values?.length) {
+  if (!tableExists) {
     return null
   }
 
-  const countResult = db.exec(`SELECT COUNT(*) as count FROM ${tableName}`)
-  return Number(countResult[0]?.values?.[0]?.[0] || 0)
+  const countResult = db.prepare(`SELECT COUNT(*) as count FROM ${tableName}`).get()
+  return Number(countResult?.count || 0)
 }
 
 async function verifyDatabase(databasePath) {
@@ -170,13 +172,12 @@ async function verifyDatabase(databasePath) {
     return null
   }
 
-  const SQL = await initSqlJs()
-  const data = await fs.readFile(databasePath)
-  const db = new SQL.Database(data)
+  const stat = await fs.stat(databasePath)
+  const db = new Database(databasePath, { readonly: true, fileMustExist: true })
 
   try {
-    const integrityResult = db.exec('PRAGMA integrity_check')
-    const integrity = String(integrityResult[0]?.values?.[0]?.[0] || '')
+    const integrityResult = db.prepare('PRAGMA integrity_check').get()
+    const integrity = String(integrityResult?.integrity_check || '')
 
     if (integrity !== 'ok') {
       errors.push(`SQLite integrity_check failed: ${integrity || '(empty result)'}`)
@@ -187,7 +188,7 @@ async function verifyDatabase(databasePath) {
 
     return {
       exists: true,
-      sizeBytes: data.length,
+      sizeBytes: stat.size,
       integrity,
       counts,
     }

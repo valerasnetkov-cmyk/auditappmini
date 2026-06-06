@@ -13,7 +13,7 @@ export default function OwnerSetupPage() {
 
   useEffect(() => {
     if (hasAuthSession()) {
-      window.location.href = '/'
+      window.location.href = '/dashboard'
       return
     }
 

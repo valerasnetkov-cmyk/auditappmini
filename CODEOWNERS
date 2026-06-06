@@ -1,0 +1,53 @@
+# CODEOWNERS
+# Автоматически назначает ревьюеров для изменений в разных контурах.
+# GitHub: https://docs.github.com/en/repositories/creating-and-managing-repositories/about-code-owners
+# GitLab:  https://docs.gitlab.com/ee/user/project/code_owners.html
+
+# Default owners для всего репозитория
+*                           @auditappmini/maintainers
+
+# Backend (Express + better-sqlite3)
+backend/                    @auditappmini/backend-maintainers
+backend/src/db.js           @auditappmini/backend-maintainers
+backend/src/server.js       @auditappmini/backend-maintainers
+backend/src/routes/         @auditappmini/backend-maintainers
+backend/src/services/       @auditappmini/backend-maintainers
+backend/src/utils/          @auditappmini/backend-maintainers
+backend/scripts/            @auditappmini/backend-maintainers
+backend/tests/              @auditappmini/backend-maintainers
+backend/.env.example        @auditappmini/security-maintainers
+backend/ecosystem.config.cjs @auditappmini/ops-maintainers
+backend/package.json        @auditappmini/backend-maintainers
+
+# Web (Next.js 16)
+web/                        @auditappmini/web-maintainers
+web/src/app/                @auditappmini/web-maintainers
+web/src/components/         @auditappmini/web-maintainers
+web/src/lib/                @auditappmini/web-maintainers
+web/.env.example            @auditappmini/security-maintainers
+web/package.json            @auditappmini/web-maintainers
+
+# Mobile (Expo SDK 54)
+mobile/                     @auditappmini/mobile-maintainers
+mobile/app/                 @auditappmini/mobile-maintainers
+mobile/src/                 @auditappmini/mobile-maintainers
+mobile/.env.example         @auditappmini/security-maintainers
+mobile/package.json         @auditappmini/mobile-maintainers
+
+# CI / scripts / release
+scripts/                    @auditappmini/ops-maintainers
+release-evidence/           @auditappmini/ops-maintainers
+package.json                @auditappmini/ops-maintainers
+
+# Документация
+docs/                       @auditappmini/docs-maintainers
+docs/SECURITY.md            @auditappmini/security-maintainers
+docs/audit-*.md             @auditappmini/audit-maintainers
+docs/epics/                 @auditappmini/backend-maintainers @auditappmini/audit-maintainers
+CHANGELOG.md                @auditappmini/docs-maintainers
+README.md                   @auditappmini/docs-maintainers
+plan.md                     @auditappmini/audit-maintainers
+
+# Security
+CODEOWNERS                  @auditappmini/security-maintainers
+.github/                    @auditappmini/security-maintainers @auditappmini/ops-maintainers
