@@ -86,6 +86,41 @@ const benefits = [
   'Прозрачность по технике и сотрудникам',
 ]
 
+const tariffs = [
+  {
+    code: 'pilot',
+    name: 'Пилот',
+    price: '9 900 ₽',
+    period: 'в месяц',
+    description: 'Для тестового внедрения на небольшой группе техники.',
+    features: ['До 10 единиц техники', 'До 3 пользователей', 'До 300 осмотров в месяц', '10 ГБ фото-хранилища', 'OCR и ДТП-осмотры'],
+    action: 'Запросить пилот',
+    href: contactHref,
+  },
+  {
+    code: 'standard',
+    name: 'Стандарт',
+    price: '24 900 ₽',
+    period: 'в месяц',
+    yearly: '249 000 ₽ в год',
+    description: 'Основной тариф для регулярного контроля автопарка.',
+    features: ['До 50 единиц техники', 'До 10 пользователей', 'До 2 000 осмотров в месяц', '50 ГБ фото-хранилища', 'OCR, аналитика и экспорт'],
+    action: 'Выбрать Стандарт',
+    href: 'mailto:info@auditavto.ru?subject=Подключить тариф Стандарт AuditAvto',
+    recommended: true,
+  },
+  {
+    code: 'enterprise',
+    name: 'Enterprise',
+    price: 'от 79 000 ₽',
+    period: 'в месяц',
+    description: 'Для крупных парков, филиалов и индивидуальных требований.',
+    features: ['От 150 единиц техники', 'От 30 пользователей', 'Индивидуальные лимиты', 'От 200 ГБ хранилища', 'API, отдельный контур и SLA'],
+    action: 'Обсудить условия',
+    href: 'mailto:info@auditavto.ru?subject=Обсудить тариф Enterprise AuditAvto',
+  },
+]
+
 const faqs = [
   ['Что такое «Аудит авто»?', '«Аудит авто» — сервис фотофиксации состояния автотехники: осмотры, дефекты, пробег, ДТП и история по каждому автомобилю в одной системе.'],
   ['Какую проблему решает сервис?', 'Он убирает хаос из фото в мессенджерах и устных договорённостей. Компания видит, кто, когда и в каком состоянии зафиксировал автомобиль.'],
@@ -325,6 +360,49 @@ export default function LandingPage() {
             {benefits.map((benefit) => <li key={benefit}><CheckCircleIcon aria-hidden="true" />{benefit}</li>)}
           </ul>
         </div>
+      </section>
+
+      <section id="tariffs" className={styles.section}>
+        <SectionTitle
+          title="Тарифы для автопарков разного масштаба"
+          text="Начните с пилотной группы техники или выберите тариф для регулярной работы. Индивидуальные лимиты можно увеличить без смены системы."
+        />
+        <div className={styles.tariffGrid}>
+          {tariffs.map((tariff) => (
+            <article
+              key={tariff.code}
+              className={`${styles.tariffCard} ${tariff.recommended ? styles.tariffRecommended : ''}`}
+            >
+              <div className={styles.tariffHeader}>
+                <div>
+                  <h3>{tariff.name}</h3>
+                  <p>{tariff.description}</p>
+                </div>
+                {tariff.recommended ? <span>Рекомендуем</span> : null}
+              </div>
+              <div className={styles.tariffPrice}>
+                <strong>{tariff.price}</strong>
+                <span>{tariff.period}</span>
+              </div>
+              {tariff.yearly ? <p className={styles.tariffYearly}>{tariff.yearly}</p> : null}
+              <ul>
+                {tariff.features.map((feature) => (
+                  <li key={feature}><CheckCircleIcon aria-hidden="true" />{feature}</li>
+                ))}
+              </ul>
+              <a
+                href={tariff.href}
+                className={tariff.recommended ? styles.primaryButton : styles.secondaryButton}
+              >
+                {tariff.action}
+                {tariff.recommended ? <ArrowRightIcon aria-hidden="true" /> : null}
+              </a>
+            </article>
+          ))}
+        </div>
+        <p className={styles.tariffFootnote}>
+          Дополнительная техника, хранилище, OCR-запросы и внедрение рассчитываются отдельно.
+        </p>
       </section>
 
       <section className={styles.offer}>

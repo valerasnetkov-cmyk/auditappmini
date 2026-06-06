@@ -3,6 +3,10 @@
 ## Unreleased
 
 ### Changed
+- **Landing tariff section**: added public `pilot`, `standard`, and
+  `enterprise` pricing cards to the landing page with production prices,
+  primary limits, module availability, mail contact actions, and a restrained
+  recommended treatment for the Standard plan.
 - **SaaS tariff and billing policy**: expanded the existing plans/limits layer
   with the production `pilot`, `standard`, and `enterprise` tariff grid,
   company billing statuses, manual payment history, billing events, monthly

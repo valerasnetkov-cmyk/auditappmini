@@ -604,6 +604,124 @@
   padding: 30px;
 }
 
+.tariffGrid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px;
+  margin-top: 30px;
+}
+
+.tariffCard {
+  display: flex;
+  min-height: 100%;
+  flex-direction: column;
+  border: 1px solid #dfe8f4;
+  border-radius: 18px;
+  background: #fff;
+  padding: 24px;
+  box-shadow: 0 12px 28px rgba(15, 23, 42, 0.045);
+}
+
+.tariffRecommended {
+  border-color: #8dbbff;
+  box-shadow: 0 18px 38px rgba(13, 107, 255, 0.11);
+}
+
+.tariffHeader {
+  display: flex;
+  min-height: 88px;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.tariffHeader h3 {
+  margin: 0;
+  color: #071126;
+  font-size: 21px;
+  font-weight: 720;
+  line-height: 1.2;
+}
+
+.tariffHeader p {
+  margin: 8px 0 0;
+  color: #52627a;
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.tariffHeader > span {
+  flex: 0 0 auto;
+  border-radius: 999px;
+  background: #eaf3ff;
+  padding: 6px 9px;
+  color: #075ed8;
+  font-size: 11px;
+  font-weight: 760;
+}
+
+.tariffPrice {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin-top: 22px;
+}
+
+.tariffPrice strong {
+  color: #071126;
+  font-size: 29px;
+  font-weight: 720;
+  line-height: 1;
+}
+
+.tariffPrice span,
+.tariffYearly,
+.tariffFootnote {
+  color: #64748b;
+  font-size: 13px;
+}
+
+.tariffYearly {
+  margin: 8px 0 0;
+  color: #0d6bff;
+  font-weight: 650;
+}
+
+.tariffCard ul {
+  display: grid;
+  gap: 10px;
+  margin: 24px 0;
+  padding: 20px 0 0;
+  border-top: 1px solid #e5ebf3;
+  list-style: none;
+}
+
+.tariffCard li {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  color: #334155;
+  font-size: 14px;
+  line-height: 1.45;
+}
+
+.tariffCard li svg {
+  width: 18px;
+  height: 18px;
+  flex: 0 0 auto;
+  color: #0d6bff;
+}
+
+.tariffCard > a {
+  width: 100%;
+  margin-top: auto;
+}
+
+.tariffFootnote {
+  margin: 16px 0 0;
+  text-align: center;
+}
+
 .offer,
 .finalCta {
   max-width: 1240px;
@@ -710,8 +828,17 @@
   }
 
   .threeGrid,
-  .securityStrip {
+  .securityStrip,
+  .tariffGrid {
     grid-template-columns: 1fr;
+  }
+
+  .tariffCard {
+    min-height: 0;
+  }
+
+  .tariffHeader {
+    min-height: 0;
   }
 }
 
@@ -789,6 +916,14 @@
 
   .imageFrame {
     min-height: 230px;
+  }
+
+  .tariffCard {
+    padding: 20px;
+  }
+
+  .tariffPrice strong {
+    font-size: 27px;
   }
 
   .offer,
