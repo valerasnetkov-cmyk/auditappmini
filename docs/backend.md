@@ -1,5 +1,15 @@
 # Backend Changes
 
+## Billing policy
+
+Тарифные лимиты и feature flags разрешаются сервисом
+`src/services/planLimits.js`, а enforcement подключён к технике,
+пользователям, осмотрам, OCR, ДТП, аналитике и экспорту. Resource-admin API
+реализован в `src/routes/adminBilling.js`. Ежедневная проверка:
+`npm run billing:check`.
+
+Подробнее: [billing-and-tariffs.md](./billing-and-tariffs.md).
+
 ## Цель
 
 Backend должен поддерживать single-company MVP, но быть готовым к multi-company SaaS через `company_id`.

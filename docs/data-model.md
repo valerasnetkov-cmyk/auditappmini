@@ -1,5 +1,12 @@
 # Data Model
 
+## SaaS billing
+
+Тарифный слой использует `plans`, `company_limits`, `company_billing`,
+`company_payments`, `company_billing_events` и `company_ocr_usage`.
+Индивидуальные значения `company_limits` имеют приоритет над базовым тарифом.
+Полное описание: [billing-and-tariffs.md](./billing-and-tariffs.md).
+
 ## Принцип
 
 Модель остаётся простой, но сразу готовится к SaaS. Все бизнес-сущности содержат `company_id`.

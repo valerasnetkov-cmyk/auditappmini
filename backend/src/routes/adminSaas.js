@@ -1782,9 +1782,12 @@ export default function registerSaasAdminRoutes({ app, db, authenticate, ensureA
       normalizeStatus(req.body?.status),
     )
 
-    if (req.body?.limits) {
-      upsertCompanyLimits(db, id, buildLimitPayload(req.body.limits))
-    }
+    upsertCompanyLimits(db, id, buildLimitPayload(req.body?.limits || { planCode: 'pilot' }))
+    db.prepare(`
+      INSERT OR IGNORE INTO company_billing (
+        id, company_id, plan_code, billing_status, trial_until, created_by_user_id, created_at, updated_at
+      ) VALUES (?, ?, ?, 'trial', date('now', '+3 months'), ?, datetime('now'), datetime('now'))
+    `).run(uuidv4(), id, req.body?.limits?.planCode || 'pilot', req.user.id)
 
     writeAuditLog(db, req, {
       companyId: id,
@@ -1854,6 +1857,8 @@ export default function registerSaasAdminRoutes({ app, db, authenticate, ensureA
     }
 
     db.prepare('DELETE FROM company_limits WHERE company_id = ?').run(existing.id)
+    db.prepare('DELETE FROM company_billing_events WHERE company_id = ?').run(existing.id)
+    db.prepare('DELETE FROM company_billing WHERE company_id = ?').run(existing.id)
     writeAuditLog(db, req, {
       companyId: existing.id,
       action: 'company_deleted',

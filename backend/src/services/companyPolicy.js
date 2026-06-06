@@ -1,4 +1,8 @@
+import { createPlanLimitsService } from './planLimits.js'
+
 export function createCompanyPolicy({ db, sendError, API_MESSAGES }) {
+  const planLimits = createPlanLimitsService({ db })
+
   function normalizeCompanyLimit(value) {
     if (value === undefined || value === null || value === '') return null
     const number = Number(value)
@@ -26,33 +30,17 @@ export function createCompanyPolicy({ db, sendError, API_MESSAGES }) {
   }
 
   function getCompanyResourceUsage(companyId, resource) {
-    if (resource === 'vehicles') {
-      return Number(db.prepare('SELECT COUNT(*) as count FROM vehicles WHERE company_id = ?').get(companyId)?.count || 0)
-    }
-
-    if (resource === 'users') {
-      return Number(db.prepare(`
-        SELECT COUNT(*) as count
-        FROM users
-        WHERE company_id = ? AND role != 'admin'
-      `).get(companyId)?.count || 0)
-    }
-
-    return 0
+    return planLimits.getUsage(companyId, resource)
   }
 
   function getCompanyResourceLimitState(companyId, resource) {
-    const limits = getCompanyLimits(companyId)
-    const field = resource === 'vehicles' ? 'max_vehicles' : resource === 'users' ? 'max_users' : null
-    if (!field) return null
-
-    const max = normalizeCompanyLimit(limits?.[field])
-    if (max === null) return null
-
+    const state = planLimits.getLimitState(companyId, resource)
+    if (state.limit === null) return null
     return {
       resource,
-      max,
-      current: getCompanyResourceUsage(companyId, resource),
+      max: state.limit,
+      current: state.used,
+      period: state.period,
     }
   }
 
@@ -70,15 +58,31 @@ export function createCompanyPolicy({ db, sendError, API_MESSAGES }) {
   }
 
   function sendCompanyLimitViolation(res, violation) {
-    return sendError(res, 409, `${violation.message}. Текущее значение: ${violation.current}/${violation.max}.`)
+    const error = violation.resource === 'vehicles'
+      ? 'vehicle_limit_exceeded'
+      : violation.resource === 'users'
+        ? 'user_limit_exceeded'
+        : 'inspection_limit_exceeded'
+    const message = violation.resource === 'vehicles'
+      ? 'Достигнут лимит техники по текущему тарифу.'
+      : violation.resource === 'users'
+        ? 'Достигнут лимит пользователей по текущему тарифу.'
+        : 'Достигнут месячный лимит осмотров по текущему тарифу.'
+
+    return res.status(409).json({
+      error,
+      message,
+      limit: violation.max,
+      used: violation.current,
+      ...(violation.period ? { period: violation.period } : {}),
+      ...(violation.resource === 'vehicles' || violation.resource === 'users'
+        ? { upgrade_cta: 'Свяжитесь с поддержкой для увеличения лимита.' }
+        : {}),
+    })
   }
 
   function isCompanyFeatureEnabled(companyId, featureField) {
-    const limits = getCompanyLimits(companyId)
-    const flag = normalizeCompanyFeatureFlag(limits?.[featureField])
-
-    // Backward-compatible default: missing limits or unset flags mean "enabled".
-    return flag !== false
+    return planLimits.isFeatureEnabled(companyId, featureField)
   }
 
   function getCompanyFeatureDisabledMessage(featureField) {
@@ -93,7 +97,40 @@ export function createCompanyPolicy({ db, sendError, API_MESSAGES }) {
     const companyId = req.user?.company_id || 'default'
     if (isCompanyFeatureEnabled(companyId, featureField)) return true
 
-    sendError(res, 403, message || getCompanyFeatureDisabledMessage(featureField))
+    const errors = {
+      ocr_enabled: 'ocr_disabled_by_plan',
+      analytics_enabled: 'analytics_disabled_by_plan',
+      accident_module_enabled: 'accident_module_disabled_by_plan',
+      export_enabled: 'export_disabled_by_plan',
+    }
+    res.status(403).json({
+      error: errors[featureField] || 'feature_disabled_by_plan',
+      message: message || getCompanyFeatureDisabledMessage(featureField),
+    })
+    return false
+  }
+
+  function ensureCompanyResourceAvailable(req, res, resource, increment = 1) {
+    const companyId = req.user?.company_id || 'default'
+    const violation = getCompanyLimitViolation(companyId, resource, increment)
+    if (!violation) return true
+    sendCompanyLimitViolation(res, violation)
+    return false
+  }
+
+  function ensureOcrAvailable(req, res) {
+    const companyId = req.user?.company_id || 'default'
+    if (!ensureCompanyFeatureEnabled(req, res, 'ocr_enabled', 'OCR недоступен на текущем тарифе.')) return false
+    const violation = planLimits.getLimitViolation(companyId, 'ocr_month')
+    if (!violation) return true
+
+    res.status(409).json({
+      error: 'ocr_limit_exceeded',
+      message: 'Достигнут месячный лимит распознаваний OCR.',
+      limit: violation.limit,
+      used: violation.used,
+      period: violation.period,
+    })
     return false
   }
 
@@ -111,14 +148,14 @@ export function createCompanyPolicy({ db, sendError, API_MESSAGES }) {
       }
     }
 
-    const subscription = db.prepare(`
-      SELECT status
-      FROM company_subscriptions
-      WHERE company_id = ?
-    `).get(companyId)
-    const status = subscription?.status
+    const policy = planLimits.getResolvedPolicy(companyId)
+    const billingStatus = policy.billing?.billing_status
+    const legacyStatus = policy.subscription?.status
+    const status = legacyStatus === 'suspended' || legacyStatus === 'expired'
+      ? legacyStatus
+      : billingStatus || legacyStatus
 
-    if (status === 'suspended') {
+    if (status === 'suspended' || status === 'archived') {
       return {
         status,
         message: API_MESSAGES.subscriptionSuspended,
@@ -153,6 +190,9 @@ export function createCompanyPolicy({ db, sendError, API_MESSAGES }) {
     getCompanyLimitViolation,
     sendCompanyLimitViolation,
     ensureCompanyFeatureEnabled,
+    ensureCompanyResourceAvailable,
+    ensureOcrAvailable,
     ensureCompanyOperationalWriteAllowed,
+    planLimits,
   }
 }

@@ -67,6 +67,7 @@ export default function registerInspectionRoutes({
   getVehicleById,
   getInspectionById,
   ensureCompanyFeatureEnabled,
+  ensureCompanyResourceAvailable,
   ensureCompanyOperationalWriteAllowed,
   removePhotoFilesForRows,
 }) {
@@ -165,6 +166,7 @@ export default function registerInspectionRoutes({
 
   app.post('/api/inspections', authenticate, (req, res) => {
     if (!ensureCompanyOperationalWriteAllowed(req, res, { mode: 'create' })) return
+    if (!ensureCompanyResourceAvailable(req, res, 'inspections_month')) return
 
     const { vehicle_id, type = 'quick', checklist = [], accident_occurred_at = null, accident_location = null } = req.body
     const companyId = req.user.company_id || 'default'

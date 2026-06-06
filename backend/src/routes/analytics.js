@@ -136,6 +136,9 @@ export default function registerAnalyticsRoutes({
     if (!ensureCompanyFeatureEnabled(req, res, 'analytics_enabled', API_MESSAGES.analyticsFeatureDisabled)) {
       return
     }
+    if (!ensureCompanyFeatureEnabled(req, res, 'export_enabled', 'Экспорт отчётов недоступен на текущем тарифе.')) {
+      return
+    }
 
     let data
     let filename

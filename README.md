@@ -199,6 +199,8 @@ auditappmini/
 - [`docs/launch-checklist.md`](./docs/launch-checklist.md) — pilot launch checklist;
 - [`docs/production-env.md`](./docs/production-env.md) — production env;
 - [`docs/backup-restore.md`](./docs/backup-restore.md) — backup/restore runbook;
+- [`docs/billing-and-tariffs.md`](./docs/billing-and-tariffs.md) — тарифы,
+  лимиты, ручные оплаты и billing statuses;
 - [`docs/epics/README.md`](./docs/epics/README.md) — статус Epic 3.1–3.10;
 - [`docs/audit-2026-06-05.md`](./docs/audit-2026-06-05.md) — последние docs-sync изменения.
 

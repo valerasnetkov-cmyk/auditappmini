@@ -9,6 +9,9 @@ Legacy mobile-app removal record: `docs/mobile-app-retirement.md`.
 
 ## Required Before Pilot
 
+- Run `npm --prefix backend run smoke:billing-policy`.
+- Schedule `npm --prefix backend run billing:check` daily.
+- Review `BILLING_GRACE_DAYS` and `BILLING_SUSPEND_AFTER_DAYS`.
 - Set production environment variables outside the repository.
 - Copy `backend/.env.production.example`, `web/.env.production.example` and `mobile/.env.production.example` to private env files or secret manager values and follow `docs/production-env.md`.
 - Use a strong `JWT_SECRET`; never use the development fallback.

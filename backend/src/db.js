@@ -414,25 +414,82 @@ function seedDefaultPlans() {
     INSERT OR IGNORE INTO plans (
       code,
       name,
+      description,
+      position,
+      is_active,
+      is_public,
+      yearly_price_rub,
+      trial_months,
+      recommended,
       max_vehicles,
       max_users,
+      max_inspections_per_month,
       max_storage_mb,
+      storage_limit_gb,
       ocr_enabled,
+      ocr_monthly_limit,
       accident_module_enabled,
       analytics_enabled,
+      export_enabled,
       api_access_enabled,
+      custom_branding_enabled,
+      regional_storage_enabled,
+      support_level,
       monthly_price_rub,
       status,
       created_at,
       updated_at
     )
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active', datetime('now'), datetime('now'))
+    VALUES (?, ?, ?, ?, 1, 1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active', datetime('now'), datetime('now'))
   `)
 
-  insertPlan.run(['pilot', 'Pilot', 25, 10, 10240, 1, 1, 1, 0, 0])
-  insertPlan.run(['standard', 'Standard', 250, 50, 102400, 1, 1, 1, 0, 9900])
-  insertPlan.run(['enterprise', 'Enterprise', null, null, null, 1, 1, 1, 1, 0])
+  insertPlan.run(['pilot', 'Пилот', 'Пилотное внедрение для небольшой группы техники', 10, null, 3, 0, 10, 3, 300, 10240, 10, 1, 300, 1, 0, 1, 0, 0, 0, 'basic', 9900])
+  insertPlan.run(['standard', 'Стандарт', 'Основной тариф для регулярного контроля автопарка', 20, 249000, 0, 1, 50, 10, 2000, 51200, 50, 1, 2000, 1, 1, 1, 0, 0, 0, 'priority', 24900])
+  insertPlan.run(['enterprise', 'Enterprise', 'Индивидуальные условия для крупных парков', 30, null, 0, 0, 150, 30, null, 204800, 200, 1, null, 1, 1, 1, 1, 1, 1, 'personal', 79000])
   insertPlan.free?.()
+
+  const updatePlan = db.prepare(`
+    UPDATE plans
+    SET name = ?, description = ?, position = ?, is_active = 1, is_public = 1,
+        monthly_price_rub = ?, yearly_price_rub = ?, trial_months = ?, recommended = ?,
+        max_vehicles = ?, max_users = ?, max_inspections_per_month = ?,
+        max_storage_mb = ?, storage_limit_gb = ?, ocr_enabled = ?, ocr_monthly_limit = ?,
+        accident_module_enabled = ?, analytics_enabled = ?, export_enabled = ?,
+        api_access_enabled = ?, custom_branding_enabled = ?, regional_storage_enabled = ?,
+        support_level = ?, status = 'active', updated_at = datetime('now')
+    WHERE code = ?
+  `)
+  updatePlan.run(['Пилот', 'Пилотное внедрение для небольшой группы техники', 10, 9900, null, 3, 0, 10, 3, 300, 10240, 10, 1, 300, 1, 0, 1, 0, 0, 0, 'basic', 'pilot'])
+  updatePlan.run(['Стандарт', 'Основной тариф для регулярного контроля автопарка', 20, 24900, 249000, 0, 1, 50, 10, 2000, 51200, 50, 1, 2000, 1, 1, 1, 0, 0, 0, 'priority', 'standard'])
+  updatePlan.run(['Enterprise', 'Индивидуальные условия для крупных парков', 30, 79000, null, 0, 0, 150, 30, null, 204800, 200, 1, null, 1, 1, 1, 1, 1, 1, 'personal', 'enterprise'])
+  updatePlan.free?.()
+
+  db.run(`
+    INSERT OR IGNORE INTO company_limits (id, company_id, plan_code, created_at, updated_at)
+    SELECT lower(hex(randomblob(16))), id, CASE WHEN id = 'default' THEN 'standard' ELSE 'pilot' END, datetime('now'), datetime('now')
+    FROM companies
+  `)
+  db.run("UPDATE company_limits SET plan_code = 'standard' WHERE company_id = 'default' AND (plan_code IS NULL OR plan_code = 'pilot')")
+
+  db.run(`
+    INSERT OR IGNORE INTO company_billing (
+      id, company_id, plan_code, billing_status, trial_until, created_at, updated_at
+    )
+    SELECT
+      lower(hex(randomblob(16))),
+      c.id,
+      COALESCE(l.plan_code, 'pilot'),
+      CASE WHEN s.status = 'suspended' THEN 'suspended' ELSE 'trial' END,
+      CASE
+        WHEN s.current_period_end IS NOT NULL THEN s.current_period_end
+        ELSE date('now', '+3 months')
+      END,
+      datetime('now'),
+      datetime('now')
+    FROM companies c
+    LEFT JOIN company_limits l ON l.company_id = c.id
+    LEFT JOIN company_subscriptions s ON s.company_id = c.id
+  `)
 }
 
 function applySchemaMigrations() {
@@ -508,11 +565,20 @@ function applySchemaMigrations() {
   ensureColumn('company_limits', 'plan_code', 'TEXT')
   ensureColumn('company_limits', 'max_vehicles', 'INTEGER')
   ensureColumn('company_limits', 'max_users', 'INTEGER')
+  ensureColumn('company_limits', 'max_inspections_per_month', 'INTEGER')
   ensureColumn('company_limits', 'max_storage_mb', 'INTEGER')
+  ensureColumn('company_limits', 'storage_limit_gb', 'REAL')
   ensureColumn('company_limits', 'ocr_enabled', 'INTEGER')
+  ensureColumn('company_limits', 'ocr_monthly_limit', 'INTEGER')
   ensureColumn('company_limits', 'accident_module_enabled', 'INTEGER')
   ensureColumn('company_limits', 'analytics_enabled', 'INTEGER')
+  ensureColumn('company_limits', 'export_enabled', 'INTEGER')
   ensureColumn('company_limits', 'api_access_enabled', 'INTEGER')
+  ensureColumn('company_limits', 'custom_branding_enabled', 'INTEGER')
+  ensureColumn('company_limits', 'regional_storage_enabled', 'INTEGER')
+  ensureColumn('company_limits', 'support_level', 'TEXT')
+  ensureColumn('company_limits', 'limits_comment', 'TEXT')
+  ensureColumn('company_limits', 'created_at', 'TEXT')
   ensureColumn('company_limits', 'updated_at', 'TEXT')
 
   db.run(`
@@ -534,11 +600,25 @@ function applySchemaMigrations() {
   `)
   ensureColumn('plans', 'max_vehicles', 'INTEGER')
   ensureColumn('plans', 'max_users', 'INTEGER')
+  ensureColumn('plans', 'description', 'TEXT')
+  ensureColumn('plans', 'position', 'INTEGER NOT NULL DEFAULT 0')
+  ensureColumn('plans', 'is_active', 'INTEGER NOT NULL DEFAULT 1')
+  ensureColumn('plans', 'is_public', 'INTEGER NOT NULL DEFAULT 1')
+  ensureColumn('plans', 'yearly_price_rub', 'INTEGER')
+  ensureColumn('plans', 'trial_months', 'INTEGER NOT NULL DEFAULT 0')
+  ensureColumn('plans', 'recommended', 'INTEGER NOT NULL DEFAULT 0')
+  ensureColumn('plans', 'max_inspections_per_month', 'INTEGER')
   ensureColumn('plans', 'max_storage_mb', 'INTEGER')
+  ensureColumn('plans', 'storage_limit_gb', 'REAL')
   ensureColumn('plans', 'ocr_enabled', 'INTEGER')
+  ensureColumn('plans', 'ocr_monthly_limit', 'INTEGER')
   ensureColumn('plans', 'accident_module_enabled', 'INTEGER')
   ensureColumn('plans', 'analytics_enabled', 'INTEGER')
+  ensureColumn('plans', 'export_enabled', 'INTEGER')
   ensureColumn('plans', 'api_access_enabled', 'INTEGER')
+  ensureColumn('plans', 'custom_branding_enabled', 'INTEGER')
+  ensureColumn('plans', 'regional_storage_enabled', 'INTEGER')
+  ensureColumn('plans', 'support_level', "TEXT NOT NULL DEFAULT 'basic'")
   ensureColumn('plans', 'monthly_price_rub', 'INTEGER')
   ensureColumn('plans', 'status', "TEXT NOT NULL DEFAULT 'active'")
   ensureColumn('plans', 'created_at', 'TEXT')
@@ -603,6 +683,51 @@ function applySchemaMigrations() {
   ensureColumn('company_payments', 'created_by', 'TEXT')
   ensureColumn('company_payments', 'created_at', 'TEXT')
   ensureColumn('company_payments', 'updated_at', 'TEXT')
+
+  db.run(`
+    CREATE TABLE IF NOT EXISTS company_billing (
+      id TEXT PRIMARY KEY,
+      company_id TEXT UNIQUE NOT NULL,
+      plan_code TEXT NOT NULL DEFAULT 'pilot',
+      billing_status TEXT NOT NULL DEFAULT 'trial',
+      paid_until TEXT,
+      trial_until TEXT,
+      last_payment_date TEXT,
+      last_payment_amount_rub INTEGER,
+      last_payment_period_start TEXT,
+      last_payment_period_end TEXT,
+      payment_method TEXT,
+      payment_comment TEXT,
+      invoice_number TEXT,
+      contract_number TEXT,
+      created_by_user_id TEXT,
+      created_at TEXT DEFAULT (datetime('now')),
+      updated_at TEXT DEFAULT (datetime('now'))
+    )
+  `)
+
+  db.run(`
+    CREATE TABLE IF NOT EXISTS company_billing_events (
+      id TEXT PRIMARY KEY,
+      company_id TEXT NOT NULL,
+      event_type TEXT NOT NULL,
+      old_value TEXT,
+      new_value TEXT,
+      comment TEXT,
+      created_by_user_id TEXT,
+      created_at TEXT DEFAULT (datetime('now'))
+    )
+  `)
+
+  db.run(`
+    CREATE TABLE IF NOT EXISTS company_ocr_usage (
+      id TEXT PRIMARY KEY,
+      company_id TEXT NOT NULL,
+      recognition_type TEXT NOT NULL,
+      created_at TEXT DEFAULT (datetime('now'))
+    )
+  `)
+  db.run('CREATE INDEX IF NOT EXISTS idx_company_ocr_usage_company_created ON company_ocr_usage(company_id, created_at)')
 
   db.run(`
     CREATE TABLE IF NOT EXISTS company_notifications (

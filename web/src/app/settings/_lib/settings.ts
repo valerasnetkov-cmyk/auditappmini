@@ -50,6 +50,28 @@ export function formatPlanCode(code?: string | null) {
   return code.toUpperCase()
 }
 
+export function formatMoney(value?: number | null) {
+  if (!value) return 'Индивидуальная стоимость'
+  return `${new Intl.NumberFormat('ru-RU').format(value)} ₽ / месяц`
+}
+
+export function formatDate(value?: string | null) {
+  if (!value) return 'не указано'
+  const date = new Date(value)
+  return Number.isNaN(date.getTime()) ? value : date.toLocaleDateString('ru-RU')
+}
+
+export function formatBillingStatus(status?: string | null) {
+  const labels: Record<string, string> = {
+    trial: 'Пилотный период',
+    active: 'Оплачен',
+    payment_due: 'Ожидается оплата',
+    suspended: 'Приостановлен',
+    archived: 'Архив',
+  }
+  return labels[status || ''] || status || 'Статус не указан'
+}
+
 export function formatUsageValue(usage: CompanyResourceUsage) {
   if (usage.unlimited || usage.max === null) {
     return `${formatNumber(usage.current)} / без лимита`

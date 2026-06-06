@@ -387,9 +387,21 @@ export type CompanyUsageResponse = {
     region_code?: string | null
     data_residency?: string | null
   }
-  plan: {
-    code?: string | null
-  }
+    plan: {
+      code?: string | null
+      name?: string | null
+      monthlyPriceRub?: number
+      yearlyPriceRub?: number | null
+      recommended?: boolean
+    }
+    billing?: {
+      status: 'trial' | 'active' | 'payment_due' | 'suspended' | 'archived' | string
+      paidUntil?: string | null
+      trialUntil?: string | null
+      daysLeft?: number | null
+      lastPaymentDate?: string | null
+      lastPaymentAmountRub?: number | null
+    } | null
   subscription?: {
     id?: string | null
     planCode?: string | null
@@ -404,8 +416,11 @@ export type CompanyUsageResponse = {
   serviceWarnings?: CompanyServiceWarning[]
   alerts?: CompanyServiceAlert[]
   usage: {
-    vehicles: CompanyResourceUsage
-    users: CompanyResourceUsage
+      vehicles: CompanyResourceUsage
+      users: CompanyResourceUsage
+      inspectionsMonth?: CompanyResourceUsage & { period?: string | null }
+      storageGb?: CompanyResourceUsage
+      ocrMonth?: CompanyResourceUsage & { period?: string | null }
   }
   limits: {
     maxStorageMb?: number | null
@@ -413,9 +428,13 @@ export type CompanyUsageResponse = {
   features: {
     ocr: CompanyFeatureAccess
     accidentModule: CompanyFeatureAccess
-    analytics: CompanyFeatureAccess
-    apiAccess: CompanyFeatureAccess
-  }
+      analytics: CompanyFeatureAccess
+      export?: CompanyFeatureAccess
+      apiAccess: CompanyFeatureAccess
+      customBranding?: CompanyFeatureAccess
+      regionalStorage?: CompanyFeatureAccess
+    }
+    supportLevel?: 'basic' | 'priority' | 'personal' | string
   updatedAt?: string | null
 }
 

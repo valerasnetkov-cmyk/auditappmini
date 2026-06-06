@@ -3,6 +3,9 @@
 import SubscriptionStatusBanner from '@/components/SubscriptionStatusBanner'
 import type { CompanyFeatureAccess, CompanyResourceUsage, CompanyUsageResponse } from '@/lib/types'
 import {
+  formatBillingStatus,
+  formatDate,
+  formatMoney,
   formatPlanCode,
   formatUsageValue,
   getFeatureClassName,
@@ -77,7 +80,11 @@ export function CompanyUsagePanel({
           <p className="mt-1 text-sm text-foreground-secondary">
             Компания: <span className="font-semibold text-foreground">{usage.company.name}</span>
             <span className="mx-2 text-foreground-muted">·</span>
-            Тариф: <span className="font-semibold text-foreground">{formatPlanCode(usage.plan.code)}</span>
+            Тариф: <span className="font-semibold text-foreground">{usage.plan.name || formatPlanCode(usage.plan.code)}</span>
+          </p>
+          <p className="mt-1 text-xs text-foreground-muted">
+            {formatMoney(usage.plan.monthlyPriceRub)}
+            {usage.billing ? ` · ${formatBillingStatus(usage.billing.status)} · до ${formatDate(usage.billing.paidUntil || usage.billing.trialUntil)}` : ''}
           </p>
         </div>
         <button
@@ -95,16 +102,23 @@ export function CompanyUsagePanel({
       <div className="grid gap-3 sm:grid-cols-2">
         <ResourceUsageCard title="Техника" usage={usage.usage.vehicles} unit="ед." />
         <ResourceUsageCard title="Пользователи" usage={usage.usage.users} unit="чел." />
+        {usage.usage.inspectionsMonth ? <ResourceUsageCard title="Осмотры за месяц" usage={usage.usage.inspectionsMonth} unit="осм." /> : null}
+        {usage.usage.storageGb ? <ResourceUsageCard title="Фото-хранилище" usage={usage.usage.storageGb} unit="ГБ" /> : null}
+        {usage.usage.ocrMonth ? <ResourceUsageCard title="OCR за месяц" usage={usage.usage.ocrMonth} unit="запр." /> : null}
       </div>
 
       <div className="mt-4 grid gap-2 lg:grid-cols-3">
         <FeatureStatusCard title="OCR номера и одометра" feature={usage.features.ocr} />
         <FeatureStatusCard title="ДТП-осмотры" feature={usage.features.accidentModule} />
         <FeatureStatusCard title="Аналитика" feature={usage.features.analytics} />
+        {usage.features.export ? <FeatureStatusCard title="Экспорт отчётов" feature={usage.features.export} /> : null}
+        {usage.features.apiAccess ? <FeatureStatusCard title="API-доступ" feature={usage.features.apiAccess} /> : null}
+        {usage.features.regionalStorage ? <FeatureStatusCard title="Региональное хранение" feature={usage.features.regionalStorage} /> : null}
       </div>
 
       <p className="mt-3 text-xs text-foreground-muted">
-        Если нужен больший лимит или модуль отключен тарифом, обратитесь к администратору сервиса.
+        История осмотров и фото сохраняется даже при окончании оплаты. Если лимит почти исчерпан,
+        его можно увеличить без смены всей системы.
       </p>
     </div>
   )

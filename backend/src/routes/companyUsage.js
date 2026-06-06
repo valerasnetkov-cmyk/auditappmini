@@ -4,11 +4,14 @@ function buildCompanyResourceUsage({
   getCompanyLimits,
   getCompanyResourceUsage,
   normalizeCompanyLimit,
+  planLimits,
 }, companyId, resource) {
   const limits = getCompanyLimits(companyId)
   const field = resource === 'vehicles' ? 'max_vehicles' : resource === 'users' ? 'max_users' : null
   const current = getCompanyResourceUsage(companyId, resource)
-  const max = field ? normalizeCompanyLimit(limits?.[field]) : null
+  const max = planLimits
+    ? planLimits.getLimitState(companyId, resource).limit
+    : field ? normalizeCompanyLimit(limits?.[field]) : null
   const remaining = max === null ? null : Math.max(max - current, 0)
   const percent = max === null || max <= 0 ? null : Math.min(100, Math.round((current / max) * 100))
 
@@ -66,7 +69,7 @@ function getCompanySubscriptionSummary(db, companyId) {
   }
 }
 
-function buildCompanyServiceWarnings(API_MESSAGES, company, subscription) {
+function buildCompanyServiceWarnings(API_MESSAGES, company, subscription, billing = null) {
   const warnings = []
 
   if (company?.status === 'inactive') {
@@ -75,6 +78,32 @@ function buildCompanyServiceWarnings(API_MESSAGES, company, subscription) {
       severity: 'danger',
       title: 'Компания отключена',
       message: API_MESSAGES.companyInactive,
+    })
+  }
+
+  if (billing?.status === 'suspended' || billing?.status === 'archived') {
+    warnings.push({
+      type: 'subscription_suspended',
+      severity: 'danger',
+      title: 'Компания временно ограничена',
+      message: 'Просмотр истории доступен, создание новых осмотров, техники и пользователей отключено.',
+    })
+    return warnings
+  }
+
+  if (billing?.status === 'payment_due') {
+    warnings.push({
+      type: 'billing_payment_due',
+      severity: 'warning',
+      title: 'Срок действия тарифа закончился',
+      message: 'История осмотров доступна. Свяжитесь с поддержкой для продления тарифа.',
+    })
+  } else if (billing?.daysLeft !== null && billing?.daysLeft !== undefined && billing.daysLeft <= 14) {
+    warnings.push({
+      type: 'billing_expiring',
+      severity: billing.daysLeft <= 3 ? 'warning' : 'info',
+      title: 'Тариф скоро закончится',
+      message: `До окончания тарифа осталось ${Math.max(billing.daysLeft, 0)} дн.`,
     })
   }
 
@@ -210,11 +239,13 @@ export default function registerCompanyUsageRoutes({
   normalizeCompanyLimit,
   normalizeCompanyFeatureFlag,
   ensureCompanyOwner,
+  planLimits,
 }) {
   const usageHelpers = {
     getCompanyLimits,
     getCompanyResourceUsage,
     normalizeCompanyLimit,
+    planLimits,
   }
 
   app.get('/api/company/usage', authenticate, (req, res) => {
@@ -231,18 +262,68 @@ export default function registerCompanyUsageRoutes({
     }
     const limits = getCompanyLimits(companyId)
     const subscription = getCompanySubscriptionSummary(db, companyId)
+    const policy = planLimits.getResolvedPolicy(companyId)
+    const plan = policy.plan
+    const billingRow = policy.billing
+    const billingDate = billingRow?.billing_status === 'trial'
+      ? billingRow?.trial_until
+      : billingRow?.paid_until
+    const billing = billingRow ? {
+      status: billingRow.billing_status || 'trial',
+      paidUntil: billingRow.paid_until || null,
+      trialUntil: billingRow.trial_until || null,
+      daysLeft: getDaysUntilDate(billingDate),
+      lastPaymentDate: billingRow.last_payment_date || null,
+      lastPaymentAmountRub: billingRow.last_payment_amount_rub === null
+        ? null
+        : Number(billingRow.last_payment_amount_rub || 0),
+    } : null
+    const inspectionState = planLimits.getLimitState(companyId, 'inspections_month')
+    const storageState = planLimits.getLimitState(companyId, 'storage_gb')
+    const ocrState = planLimits.getLimitState(companyId, 'ocr_month')
 
     res.json({
       company,
       plan: {
-        code: limits?.plan_code || subscription?.planCode || null,
+        code: policy.planCode,
+        name: plan?.name || policy.planCode,
+        monthlyPriceRub: Number(plan?.monthly_price_rub || 0),
+        yearlyPriceRub: plan?.yearly_price_rub === null ? null : Number(plan?.yearly_price_rub || 0),
+        recommended: Boolean(plan?.recommended),
       },
+      billing,
       subscription,
-      serviceWarnings: buildCompanyServiceWarnings(API_MESSAGES, company, subscription),
+      serviceWarnings: buildCompanyServiceWarnings(API_MESSAGES, company, subscription, billing),
       alerts: getCompanyServiceNotifications(db, companyId, req.user),
       usage: {
         vehicles: buildCompanyResourceUsage(usageHelpers, companyId, 'vehicles'),
         users: buildCompanyResourceUsage(usageHelpers, companyId, 'users'),
+        inspectionsMonth: {
+          current: inspectionState.used,
+          max: inspectionState.limit,
+          remaining: inspectionState.limit === null ? null : Math.max(inspectionState.limit - inspectionState.used, 0),
+          percent: inspectionState.limit ? Math.min(100, Math.round((inspectionState.used / inspectionState.limit) * 100)) : null,
+          unlimited: inspectionState.limit === null,
+          exceeded: inspectionState.limit !== null && inspectionState.used > inspectionState.limit,
+          period: inspectionState.period,
+        },
+        storageGb: {
+          current: storageState.used,
+          max: storageState.limit,
+          remaining: storageState.limit === null ? null : Math.max(storageState.limit - storageState.used, 0),
+          percent: storageState.limit ? Math.min(100, Math.round((storageState.used / storageState.limit) * 100)) : null,
+          unlimited: storageState.limit === null,
+          exceeded: storageState.limit !== null && storageState.used > storageState.limit,
+        },
+        ocrMonth: {
+          current: ocrState.used,
+          max: ocrState.limit,
+          remaining: ocrState.limit === null ? null : Math.max(ocrState.limit - ocrState.used, 0),
+          percent: ocrState.limit ? Math.min(100, Math.round((ocrState.used / ocrState.limit) * 100)) : null,
+          unlimited: ocrState.limit === null,
+          exceeded: ocrState.limit !== null && ocrState.used > ocrState.limit,
+          period: ocrState.period,
+        },
       },
       limits: {
         maxStorageMb: normalizeCompanyLimit(limits?.max_storage_mb),
@@ -251,8 +332,12 @@ export default function registerCompanyUsageRoutes({
         ocr: buildCompanyFeatureAccess(normalizeCompanyFeatureFlag, limits, 'ocr_enabled'),
         accidentModule: buildCompanyFeatureAccess(normalizeCompanyFeatureFlag, limits, 'accident_module_enabled'),
         analytics: buildCompanyFeatureAccess(normalizeCompanyFeatureFlag, limits, 'analytics_enabled'),
+        export: { enabled: policy.features.export_enabled, configured: normalizeCompanyFeatureFlag(limits?.export_enabled) },
         apiAccess: buildCompanyFeatureAccess(normalizeCompanyFeatureFlag, limits, 'api_access_enabled'),
+        customBranding: { enabled: policy.features.custom_branding_enabled, configured: normalizeCompanyFeatureFlag(limits?.custom_branding_enabled) },
+        regionalStorage: { enabled: policy.features.regional_storage_enabled, configured: normalizeCompanyFeatureFlag(limits?.regional_storage_enabled) },
       },
+      supportLevel: policy.supportLevel,
       updatedAt: limits?.updated_at || null,
     })
   })

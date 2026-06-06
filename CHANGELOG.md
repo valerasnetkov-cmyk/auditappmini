@@ -3,6 +3,13 @@
 ## Unreleased
 
 ### Changed
+- **SaaS tariff and billing policy**: expanded the existing plans/limits layer
+  with the production `pilot`, `standard`, and `enterprise` tariff grid,
+  company billing statuses, manual payment history, billing events, monthly
+  inspection/OCR limits, storage usage, plan feature enforcement, resource
+  admin billing endpoints, tenant usage visibility, expiry warnings, and the
+  repeat-safe daily billing status job. Existing subscription/payment APIs
+  remain compatible.
 - **AuditAvto landing design refinement**: the landing hero was visually
   tightened with a lighter headline weight, softer card elevation, calmer
   spacing, and adaptive hero ordering so the real login panel appears earlier

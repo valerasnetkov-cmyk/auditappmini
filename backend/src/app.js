@@ -7,6 +7,7 @@ import registerCompanyRoutes from './routes/companies.js'
 import registerCompanyUsageRoutes from './routes/companyUsage.js'
 import registerAuthRoutes, { createOwnerSetupInvitationFactory } from './routes/auth.js'
 import registerSaasAdminRoutes from './routes/adminSaas.js'
+import registerAdminBillingRoutes from './routes/adminBilling.js'
 import registerRegionRoutes from './routes/regions.js'
 import registerVehicleRoutes from './routes/vehicles.js'
 import registerInspectionRoutes from './routes/inspections.js'
@@ -250,7 +251,10 @@ const {
   getCompanyLimitViolation,
   sendCompanyLimitViolation,
   ensureCompanyFeatureEnabled,
+  ensureCompanyResourceAvailable,
+  ensureOcrAvailable,
   ensureCompanyOperationalWriteAllowed,
+  planLimits,
 } = companyPolicy
 
 // Register the complete-inspection route after API_MESSAGES is defined
@@ -260,8 +264,26 @@ registerCompleteInspectionRoutes({ app, db, API_MESSAGES, getInspectionById, aut
 registerCompanyRoutes({ app, db, authenticate, isAdmin })
 
 // Register odometer and vehicle number recognition routes
-registerOdometerRoutes({ app, db, authenticate, API_MESSAGES, upload, ensureFeatureEnabled: ensureCompanyFeatureEnabled, ensureOperationalWriteAllowed: ensureCompanyOperationalWriteAllowed })
-registerVehicleNumberRecognitionRoutes({ app, db, authenticate, API_MESSAGES, upload, ensureFeatureEnabled: ensureCompanyFeatureEnabled, ensureOperationalWriteAllowed: ensureCompanyOperationalWriteAllowed })
+registerOdometerRoutes({
+  app,
+  db,
+  authenticate,
+  API_MESSAGES,
+  upload,
+  ensureOcrAvailable,
+  recordOcrUsage: planLimits.recordOcrUsage,
+  ensureOperationalWriteAllowed: ensureCompanyOperationalWriteAllowed,
+})
+registerVehicleNumberRecognitionRoutes({
+  app,
+  db,
+  authenticate,
+  API_MESSAGES,
+  upload,
+  ensureOcrAvailable,
+  recordOcrUsage: planLimits.recordOcrUsage,
+  ensureOperationalWriteAllowed: ensureCompanyOperationalWriteAllowed,
+})
 
 function sendInternalError(res, scope, err) {
   console.error(`${scope}:`, err)
@@ -270,6 +292,7 @@ function sendInternalError(res, scope, err) {
 
 const createOwnerSetupInvitation = createOwnerSetupInvitationFactory({ db })
 registerSaasAdminRoutes({ app, db, authenticate, ensureAdmin, sendError, API_MESSAGES, createOwnerSetupInvitation })
+registerAdminBillingRoutes({ app, db, authenticate, ensureAdmin, planLimits })
 
 // ============ AUTH ============
 
@@ -302,6 +325,7 @@ registerCompanyUsageRoutes({
   normalizeCompanyLimit,
   normalizeCompanyFeatureFlag,
   ensureCompanyOwner,
+  planLimits,
 })
 
 // ============ USERS ============
@@ -369,6 +393,7 @@ registerInspectionRoutes({
   getVehicleById,
   getInspectionById,
   ensureCompanyFeatureEnabled,
+  ensureCompanyResourceAvailable,
   ensureCompanyOperationalWriteAllowed,
   removePhotoFilesForRows,
 })

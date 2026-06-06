@@ -20,6 +20,8 @@
 
 - [`product.md`](./product.md) — продуктовая логика, роли, типы осмотров, правила.
 - [`data-model.md`](./data-model.md) — модель данных (сокращённая).
+- [`billing-and-tariffs.md`](./billing-and-tariffs.md) — тарифы, лимиты,
+  ручные оплаты и billing statuses.
 - [`architecture.md`](./architecture.md) — общая архитектура backend/web/mobile.
 - [`inspection-types.md`](./inspection-types.md) — типы осмотров (быстрый / плановый / ДТП).
 - [`inspection-photo-requirements.md`](./inspection-photo-requirements.md) — обязательные фото по типам осмотра.

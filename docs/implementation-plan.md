@@ -1,5 +1,12 @@
 # Implementation Plan
 
+## Реализовано: tariff policy
+
+Добавлены базовые тарифы, индивидуальные лимиты, ручной billing, события,
+месячные quotas, backend enforcement, tenant usage UI и daily billing job.
+Дальнейшие изменения должны сохранять совместимость
+`company_subscriptions` / `company_payments`.
+
 ## Цель
 
 Пошагово обновить проект без ухода в лишнюю сложность.

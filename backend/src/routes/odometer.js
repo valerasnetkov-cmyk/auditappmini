@@ -1,13 +1,13 @@
 import { normalizeVehicleNumberToCyrillic } from '../utils/transliteration.js'
 
-function featureGate(ensureFeatureEnabled, featureField, message) {
+function ocrGate(ensureOcrAvailable) {
   return (req, res, next) => {
-    if (!ensureFeatureEnabled) {
+    if (!ensureOcrAvailable) {
       next()
       return
     }
 
-    if (ensureFeatureEnabled(req, res, featureField, message)) {
+    if (ensureOcrAvailable(req, res)) {
       next()
     }
   }
@@ -28,17 +28,27 @@ function subscriptionGate(ensureOperationalWriteAllowed, mode = 'create') {
 
 // Odometer recognition routes.
 // MVP returns manual-confirmation placeholders until a real OCR provider is wired.
-export function registerOdometerRoutes({ app, db, authenticate, API_MESSAGES, upload, ensureFeatureEnabled = null, ensureOperationalWriteAllowed = null }) {
+export function registerOdometerRoutes({
+  app,
+  db,
+  authenticate,
+  API_MESSAGES,
+  upload,
+  ensureOcrAvailable = null,
+  recordOcrUsage = null,
+  ensureOperationalWriteAllowed = null,
+}) {
   app.post(
     '/api/odometer/recognize',
     authenticate,
     subscriptionGate(ensureOperationalWriteAllowed, 'create'),
-    featureGate(ensureFeatureEnabled, 'ocr_enabled', API_MESSAGES?.ocrFeatureDisabled),
+    ocrGate(ensureOcrAvailable),
     upload.single('photo'),
     (req, res) => {
       if (!req.file) {
         return res.status(400).json({ error: API_MESSAGES?.odometerPhotoRequired || 'Фото одометра обязательно' })
       }
+      recordOcrUsage?.(req.user.company_id || 'default', 'odometer')
 
       res.json({
         raw_value: null,
@@ -86,17 +96,27 @@ export function registerOdometerRoutes({ app, db, authenticate, API_MESSAGES, up
 
 // Vehicle number recognition routes.
 // MVP returns manual-confirmation placeholders until a real ANPR provider is wired.
-export function registerVehicleNumberRecognitionRoutes({ app, db, authenticate, API_MESSAGES, upload, ensureFeatureEnabled = null, ensureOperationalWriteAllowed = null }) {
+export function registerVehicleNumberRecognitionRoutes({
+  app,
+  db,
+  authenticate,
+  API_MESSAGES,
+  upload,
+  ensureOcrAvailable = null,
+  recordOcrUsage = null,
+  ensureOperationalWriteAllowed = null,
+}) {
   app.post(
     '/api/vehicle-number/recognize',
     authenticate,
     subscriptionGate(ensureOperationalWriteAllowed, 'create'),
-    featureGate(ensureFeatureEnabled, 'ocr_enabled', API_MESSAGES?.ocrFeatureDisabled),
+    ocrGate(ensureOcrAvailable),
     upload.single('photo'),
     (req, res) => {
       if (!req.file) {
         return res.status(400).json({ error: API_MESSAGES?.vehicleNumberPhotoRequired || 'Фото номера обязательно' })
       }
+      recordOcrUsage?.(req.user.company_id || 'default', 'vehicle_number')
 
       res.json({
         raw_value: null,
