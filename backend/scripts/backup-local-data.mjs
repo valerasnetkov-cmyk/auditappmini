@@ -7,7 +7,7 @@ const timestamp = new Date().toISOString().replace(/[:.]/g, '-')
 const backendRoot = process.cwd()
 const databasePath = process.env.DATABASE_PATH
   ? path.resolve(backendRoot, process.env.DATABASE_PATH)
-  : path.join(backendRoot, 'src', 'database.sqlite')
+  : path.join(backendRoot, 'data', 'database.sqlite')
 const uploadsDir = process.env.UPLOAD_DIR
   ? path.resolve(backendRoot, process.env.UPLOAD_DIR)
   : path.join(backendRoot, 'uploads')

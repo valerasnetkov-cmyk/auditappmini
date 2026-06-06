@@ -1,0 +1,799 @@
+.page {
+  min-height: 100vh;
+  overflow-x: hidden;
+  background: #f7faff;
+  color: #081225;
+}
+
+.shell {
+  max-width: 1560px;
+  margin: 0 auto;
+  padding: 14px;
+}
+
+.panel {
+  overflow: hidden;
+  border: 1px solid #dbe5f2;
+  border-radius: 22px;
+  background: #fff;
+  box-shadow: 0 22px 58px rgba(15, 23, 42, 0.065);
+}
+
+.topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 28px;
+  border-bottom: 1px solid #e1e8f2;
+  padding: 16px clamp(22px, 4vw, 64px);
+}
+
+.brand {
+  display: inline-flex;
+  align-items: center;
+}
+
+.brand img {
+  width: 190px;
+  height: auto;
+}
+
+.topMeta {
+  display: flex;
+  align-items: center;
+  gap: 28px;
+  color: #50627c;
+  font-size: 13px;
+  font-weight: 620;
+}
+
+.topMeta span,
+.loginNote,
+.productSection li,
+.benefitPanel li,
+.checkCard li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.topMeta svg,
+.loginNote svg,
+.productSection li svg,
+.benefitPanel li svg,
+.checkCard li svg {
+  width: 18px;
+  height: 18px;
+  flex: 0 0 auto;
+  color: #0d6bff;
+}
+
+.hero {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 460px;
+  column-gap: clamp(34px, 5vw, 72px);
+  row-gap: 22px;
+  align-items: start;
+  padding: clamp(32px, 4.6vw, 54px) clamp(22px, 4vw, 64px) 32px;
+}
+
+.heroCopy h1 {
+  max-width: 730px;
+  margin: 0;
+  color: #061025;
+  font-size: clamp(33px, 3.35vw, 48px);
+  font-weight: 680;
+  letter-spacing: 0;
+  line-height: 1.14;
+}
+
+.heroCopy > p {
+  max-width: 690px;
+  margin: 18px 0 0;
+  color: #44546b;
+  font-size: 18px;
+  line-height: 1.58;
+}
+
+.heroActions,
+.offerActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 24px;
+}
+
+.primaryButton,
+.secondaryButton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 46px;
+  border-radius: 12px;
+  padding: 0 20px;
+  font-size: 15px;
+  font-weight: 760;
+  line-height: 1;
+  text-decoration: none;
+  transition: transform 0.16s ease, box-shadow 0.16s ease, border-color 0.16s ease, background 0.16s ease;
+}
+
+.primaryButton {
+  border: 1px solid #0d6bff;
+  background: #0d6bff;
+  color: #fff;
+  box-shadow: 0 12px 26px rgba(13, 107, 255, 0.2);
+}
+
+.primaryButton:hover,
+.secondaryButton:hover {
+  transform: translateY(-1px);
+}
+
+.primaryButton svg {
+  width: 17px;
+  height: 17px;
+  margin-left: 8px;
+}
+
+.secondaryButton {
+  border: 1px solid #d8e2ef;
+  background: #fff;
+  color: #0f1e35;
+}
+
+.audience {
+  margin-top: 12px !important;
+  color: #64748b !important;
+  font-size: 14px !important;
+}
+
+.heroFeatureGrid,
+.cardGrid,
+.fourGrid,
+.threeGrid,
+.steps {
+  display: grid;
+  gap: 14px;
+}
+
+.heroFeatureGrid {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  margin-top: 22px;
+}
+
+.mobileHeroFeatures {
+  display: none;
+}
+
+.smallCard,
+.vehicleCard,
+.checkCard,
+.metricCard,
+.defectStrip,
+.loginPanel,
+.benefitPanel,
+.faq details {
+  border: 1px solid #dfe8f4;
+  border-radius: 18px;
+  background: #fff;
+  box-shadow: 0 12px 28px rgba(15, 23, 42, 0.045);
+}
+
+.smallCard {
+  padding: 16px;
+}
+
+.cardIcon {
+  width: 29px;
+  height: 29px;
+  color: #0d6bff;
+}
+
+.smallCard h3,
+.vehicleCard h3,
+.checkCard h3,
+.defectStrip h3,
+.productSection h2,
+.benefitPanel h2,
+.offer h2,
+.finalCta h2,
+.sectionTitle h2 {
+  margin: 0;
+  color: #071126;
+  font-weight: 720;
+  letter-spacing: 0;
+  line-height: 1.12;
+}
+
+.smallCard h3 {
+  margin-top: 13px;
+  font-size: 16px;
+  line-height: 1.18;
+}
+
+.smallCard p,
+.productSection p,
+.benefitPanel p,
+.offer p,
+.finalCta p,
+.sectionTitle p,
+.faq p {
+  margin: 9px 0 0;
+  color: #52627a;
+  font-size: 14px;
+  line-height: 1.52;
+}
+
+.productPreview {
+  display: grid;
+  grid-column: 1;
+  grid-template-columns: 250px 1fr;
+  gap: 13px;
+  margin-top: 0;
+}
+
+.vehicleCard,
+.checkCard,
+.metricCard,
+.defectStrip {
+  padding: 15px;
+}
+
+.vehicleHeader,
+.checkHeader,
+.defectStrip > div:first-child {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.vehicleHeader span {
+  display: block;
+  margin-top: 3px;
+  color: #64748b;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.vehicleHeader strong {
+  align-self: flex-start;
+  border-radius: 999px;
+  background: #dcfce7;
+  padding: 6px 10px;
+  color: #15803d;
+  font-size: 11px;
+}
+
+.vehiclePhoto {
+  position: relative;
+  height: 138px;
+  overflow: hidden;
+  margin-top: 12px;
+  border-radius: 14px;
+  background: #eef5ff;
+}
+
+.vehiclePhoto img,
+.imageFrame img,
+.defectPhotos img {
+  object-fit: cover;
+}
+
+.vehicleCard dl {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 9px 14px;
+  margin: 12px 0 0;
+  font-size: 12px;
+}
+
+.vehicleCard dt {
+  color: #64748b;
+}
+
+.vehicleCard dd {
+  margin: 0;
+  color: #1f2a44;
+  font-weight: 750;
+}
+
+.checkCard ul {
+  display: grid;
+  gap: 9px;
+  margin: 12px 0 0;
+  padding: 0;
+  list-style: none;
+  color: #52627a;
+  font-size: 13px;
+}
+
+.checkHeader span {
+  color: #0d6bff;
+  font-weight: 760;
+}
+
+.progress {
+  height: 7px;
+  overflow: hidden;
+  margin-top: 12px;
+  border-radius: 999px;
+  background: #e8eef7;
+}
+
+.progress span {
+  display: block;
+  width: 72%;
+  height: 100%;
+  border-radius: inherit;
+  background: #0d6bff;
+}
+
+.metricCard span,
+.metricCard small {
+  display: block;
+  color: #64748b;
+  font-size: 13px;
+}
+
+.metricCard strong {
+  display: block;
+  margin-top: 7px;
+  color: #071126;
+  font-size: 28px;
+  line-height: 1;
+}
+
+.metricCard small {
+  margin-top: 8px;
+  color: #16a34a;
+  font-weight: 750;
+}
+
+.defectStrip {
+  grid-column: 2;
+}
+
+.defectStrip span {
+  border-radius: 999px;
+  background: #fee2e2;
+  padding: 5px 9px;
+  color: #dc2626;
+  font-size: 12px;
+  font-weight: 760;
+}
+
+.defectPhotos {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 9px;
+  margin-top: 12px;
+}
+
+.defectPhotos img {
+  width: 100%;
+  height: 68px;
+  border-radius: 12px;
+}
+
+.loginPanel {
+  position: sticky;
+  grid-column: 2;
+  grid-row: 1 / span 2;
+  top: 24px;
+  border-radius: 22px;
+  padding: 32px;
+}
+
+.loginPanel h2 {
+  margin: 0;
+  color: #071126;
+  font-size: 27px;
+  font-weight: 720;
+  line-height: 1.18;
+}
+
+.loginPanel > p {
+  margin: 12px 0 0;
+  color: #52627a;
+  font-size: 16px;
+}
+
+.loginNote {
+  margin-top: 24px;
+  color: #64748b;
+  font-size: 14px;
+  font-weight: 650;
+}
+
+.securityStrip {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 16px;
+  margin: 0 clamp(22px, 4vw, 64px) 32px;
+  border: 1px solid #dfe8f4;
+  border-radius: 18px;
+  padding: 18px 20px;
+  background: #fff;
+  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.04);
+}
+
+.securityStrip div {
+  display: grid;
+  grid-template-columns: 42px 1fr;
+  column-gap: 14px;
+  align-items: center;
+}
+
+.securityStrip svg {
+  grid-row: span 2;
+  width: 34px;
+  height: 34px;
+  color: #0d6bff;
+}
+
+.securityStrip strong {
+  color: #071126;
+}
+
+.securityStrip span {
+  color: #64748b;
+  font-size: 14px;
+}
+
+.section {
+  max-width: 1240px;
+  margin: 0 auto;
+  padding: 66px clamp(18px, 4vw, 56px);
+}
+
+.sectionTitle {
+  max-width: 760px;
+}
+
+.sectionTitle h2,
+.productSection h2,
+.benefitPanel h2,
+.offer h2,
+.finalCta h2 {
+  font-size: clamp(26px, 2.45vw, 34px);
+  font-weight: 720;
+  line-height: 1.18;
+}
+
+.sectionTitle p {
+  margin-top: 14px;
+  font-size: 16px;
+}
+
+.twoColumn {
+  display: grid;
+  grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr);
+  gap: 28px;
+  align-items: center;
+  margin-top: 30px;
+}
+
+.imageFrame {
+  position: relative;
+  min-height: 340px;
+  overflow: hidden;
+  border: 1px solid #dfe8f4;
+  border-radius: 20px;
+  background: #fff;
+  box-shadow: 0 14px 34px rgba(15, 23, 42, 0.06);
+}
+
+.cardGrid,
+.fourGrid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.fourGrid {
+  margin-top: 30px;
+}
+
+.threeGrid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  margin-top: 30px;
+}
+
+.steps {
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  margin-top: 30px;
+}
+
+.steps article {
+  border: 1px solid #dfe8f4;
+  border-radius: 18px;
+  background: #fff;
+  padding: 18px;
+  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.04);
+}
+
+.steps span {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 12px;
+  background: #0d6bff;
+  color: #fff;
+  font-weight: 760;
+}
+
+.steps h3 {
+  margin: 14px 0 0;
+  color: #071126;
+  font-size: 16px;
+  font-weight: 760;
+}
+
+.steps p {
+  margin: 8px 0 0;
+  color: #52627a;
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.productSections {
+  display: grid;
+  gap: 26px;
+}
+
+.productSection {
+  display: grid;
+  grid-template-columns: minmax(0, 0.95fr) minmax(0, 1.05fr);
+  gap: 30px;
+  align-items: center;
+}
+
+.productSection:nth-child(even) .imageFrame {
+  order: 2;
+}
+
+.productSection ul,
+.benefitPanel ul {
+  display: grid;
+  gap: 10px;
+  margin: 20px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.productSection li,
+.benefitPanel li {
+  color: #334155;
+  font-weight: 650;
+}
+
+.accentNote {
+  display: grid;
+  grid-template-columns: 34px 1fr;
+  column-gap: 12px;
+  margin-top: 20px;
+  border: 1px solid #c7ddff;
+  border-radius: 16px;
+  background: #eef6ff;
+  padding: 16px;
+}
+
+.accentNote svg {
+  grid-row: span 2;
+  width: 30px;
+  height: 30px;
+  color: #0d6bff;
+}
+
+.accentNote strong {
+  color: #071126;
+}
+
+.accentNote span {
+  margin-top: 4px;
+  color: #52627a;
+  font-size: 14px;
+}
+
+.benefitPanel {
+  display: grid;
+  grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr);
+  gap: 28px;
+  align-items: center;
+  padding: 30px;
+}
+
+.offer,
+.finalCta {
+  max-width: 1240px;
+  margin: 0 auto;
+  border-radius: 24px;
+  padding: 42px clamp(22px, 4vw, 56px);
+}
+
+.offer {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 28px;
+  align-items: center;
+  border: 1px solid #cfe1ff;
+  background: #fff;
+  box-shadow: 0 20px 48px rgba(15, 23, 42, 0.065);
+}
+
+.offerActions {
+  margin-top: 0;
+}
+
+.faq {
+  display: grid;
+  gap: 12px;
+  margin-top: 28px;
+}
+
+.faq details {
+  padding: 18px 20px;
+}
+
+.faq summary {
+  cursor: pointer;
+  color: #071126;
+  font-size: 16px;
+  font-weight: 760;
+}
+
+.finalCta {
+  margin-bottom: 48px;
+  background: #071126;
+  color: #fff;
+  text-align: center;
+}
+
+.finalCta h2,
+.finalCta p {
+  max-width: 760px;
+  margin-left: auto;
+  margin-right: auto;
+  color: #fff;
+}
+
+.finalCta p {
+  margin-bottom: 24px;
+  color: #d3deed;
+}
+
+@media (max-width: 1180px) {
+  .hero {
+    grid-template-columns: 1fr;
+  }
+
+  .desktopHeroFeatures {
+    display: none;
+  }
+
+  .mobileHeroFeatures {
+    display: grid;
+  }
+
+  .loginPanel {
+    position: static;
+    grid-column: auto;
+    grid-row: auto;
+  }
+
+  .heroFeatureGrid,
+  .steps {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 920px) {
+  .topMeta {
+    display: none;
+  }
+
+  .productPreview,
+  .twoColumn,
+  .productSection,
+  .benefitPanel,
+  .offer {
+    grid-template-columns: 1fr;
+  }
+
+  .defectStrip {
+    grid-column: auto;
+  }
+
+  .productSection:nth-child(even) .imageFrame {
+    order: 0;
+  }
+
+  .threeGrid,
+  .securityStrip {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 640px) {
+  .shell {
+    padding: 8px;
+  }
+
+  .topbar,
+  .hero {
+    padding-left: 16px;
+    padding-right: 16px;
+  }
+
+  .topbar {
+    padding-top: 12px;
+    padding-bottom: 12px;
+  }
+
+  .brand img {
+    width: 138px;
+  }
+
+  .hero {
+    padding-top: 28px;
+  }
+
+  .heroCopy h1 {
+    font-size: 30px;
+    line-height: 1.16;
+  }
+
+  .heroCopy > p,
+  .sectionTitle p {
+    font-size: 16px;
+  }
+
+  .heroActions,
+  .offerActions {
+    flex-direction: column;
+  }
+
+  .primaryButton,
+  .secondaryButton {
+    width: 100%;
+  }
+
+  .heroFeatureGrid,
+  .cardGrid,
+  .fourGrid,
+  .steps {
+    grid-template-columns: 1fr;
+  }
+
+  .loginPanel {
+    padding: 22px;
+  }
+
+  .securityStrip {
+    margin: 0 16px 24px;
+    padding: 16px;
+  }
+
+  .section {
+    padding: 54px 16px;
+  }
+
+  .sectionTitle h2,
+  .productSection h2,
+  .benefitPanel h2,
+  .offer h2,
+  .finalCta h2 {
+    font-size: 28px;
+  }
+
+  .imageFrame {
+    min-height: 230px;
+  }
+
+  .offer,
+  .finalCta {
+    border-radius: 0;
+    padding: 36px 16px;
+  }
+}

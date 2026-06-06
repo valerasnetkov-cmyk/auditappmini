@@ -1,5 +1,6 @@
 import { spawn } from 'node:child_process'
 import fs from 'node:fs/promises'
+import crypto from 'node:crypto'
 import process from 'node:process'
 import jwt from 'jsonwebtoken'
 import bcrypt from 'bcryptjs'
@@ -7,7 +8,7 @@ import bcrypt from 'bcryptjs'
 const HOST = '127.0.0.1'
 const PORT = Number(process.env.PORT || 3917 + (process.pid % 500))
 const DATABASE_PATH = `./.tmp-smoke/smoke-isolation-${process.pid}.sqlite`
-const JWT_SECRET = 'smoke-isolation-secret'
+const JWT_SECRET = crypto.randomBytes(32).toString('hex')
 const BASE_URL = `http://${HOST}:${PORT}`
 const VALID_PNG_BYTES = Uint8Array.from(Buffer.from(
   'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/p9sAAAAASUVORK5CYII=',
@@ -78,30 +79,34 @@ function makeToken(payload) {
 }
 
 async function seedIsolationPrincipals() {
-  const { initDatabase, getDb } = await import('../src/db.js')
+  const { initDatabase, getDb, closeDatabase } = await import('../src/db.js')
   await initDatabase()
-  const db = getDb()
-  const passwordHash = bcrypt.hashSync('smoke123', 10)
+  try {
+    const db = getDb()
+    const passwordHash = bcrypt.hashSync('smoke123', 10)
 
-  db.prepare(`
-    INSERT OR IGNORE INTO companies (id, slug, name, region_code, data_residency, status)
-    VALUES (?, ?, ?, ?, ?, 'active')
-  `).run('other-company', 'other-company', 'Other Company', 'RU-SAK', 'RU')
+    db.prepare(`
+      INSERT OR IGNORE INTO companies (id, slug, name, region_code, data_residency, status)
+      VALUES (?, ?, ?, ?, ?, 'active')
+    `).run('other-company', 'other-company', 'Other Company', 'RU-SAK', 'RU')
 
-  db.prepare(`
-    INSERT INTO users (id, email, password, name, role, status, company_id)
-    VALUES (?, ?, ?, ?, ?, 'active', ?)
-  `).run('other-company-owner', 'owner@other.example', passwordHash, 'Other Company Owner', 'owner', 'other-company')
+    db.prepare(`
+      INSERT INTO users (id, email, password, name, role, status, company_id)
+      VALUES (?, ?, ?, ?, ?, 'active', ?)
+    `).run('other-company-owner', 'owner@other.example', passwordHash, 'Other Company Owner', 'owner', 'other-company')
 
-  db.prepare(`
-    INSERT INTO users (id, email, password, name, role, status, company_id)
-    VALUES (?, ?, ?, ?, ?, 'active', ?)
-  `).run('default-company-owner', 'owner@default.example', passwordHash, 'Default Company Owner', 'owner', 'default')
+    db.prepare(`
+      INSERT INTO users (id, email, password, name, role, status, company_id)
+      VALUES (?, ?, ?, ?, ?, 'active', ?)
+    `).run('default-company-owner', 'owner@default.example', passwordHash, 'Default Company Owner', 'owner', 'default')
 
-  db.prepare(`
-    INSERT INTO users (id, email, password, name, role, status, company_id)
-    VALUES (?, ?, ?, ?, ?, 'active', ?)
-  `).run('default-inspector', 'inspector@default.example', passwordHash, 'Default Inspector', 'inspector', 'default')
+    db.prepare(`
+      INSERT INTO users (id, email, password, name, role, status, company_id)
+      VALUES (?, ?, ?, ?, ?, 'active', ?)
+    `).run('default-inspector', 'inspector@default.example', passwordHash, 'Default Inspector', 'inspector', 'default')
+  } finally {
+    closeDatabase()
+  }
 }
 
 async function run() {

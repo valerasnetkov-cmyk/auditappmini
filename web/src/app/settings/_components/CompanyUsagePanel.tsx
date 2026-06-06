@@ -1,0 +1,111 @@
+'use client'
+
+import SubscriptionStatusBanner from '@/components/SubscriptionStatusBanner'
+import type { CompanyFeatureAccess, CompanyResourceUsage, CompanyUsageResponse } from '@/lib/types'
+import {
+  formatPlanCode,
+  formatUsageValue,
+  getFeatureClassName,
+  getFeatureLabel,
+  getUsageBarWidth,
+  getUsageHint,
+  getUsageTone,
+} from '../_lib/settings'
+
+function ResourceUsageCard({ title, usage, unit }: { title: string; usage: CompanyResourceUsage; unit: string }) {
+  return (
+    <div className="rounded-card border border-line bg-muted-surface p-4">
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-wide text-foreground-muted">{title}</p>
+          <p className="mt-2 text-xl font-bold text-foreground">{formatUsageValue(usage)}</p>
+        </div>
+        <span className={usage.exceeded ? 'badge badge-danger' : 'badge badge-info'}>
+          {usage.unlimited ? '∞' : `${usage.percent || 0}%`}
+        </span>
+      </div>
+      <div className="mt-3 h-2 overflow-hidden rounded-full bg-soft-surface">
+        <div
+          className={`h-full rounded-full ${getUsageTone(usage)}`}
+          style={{ width: usage.unlimited ? '100%' : getUsageBarWidth(usage) }}
+        />
+      </div>
+      <p className="mt-2 text-xs text-foreground-muted">{getUsageHint(usage, unit)}</p>
+    </div>
+  )
+}
+
+function FeatureStatusCard({ title, feature }: { title: string; feature: CompanyFeatureAccess }) {
+  return (
+    <div className={`rounded-card border px-3 py-2 text-sm font-semibold ${getFeatureClassName(feature)}`}>
+      <div className="flex items-center justify-between gap-2">
+        <span>{title}</span>
+        <span>{getFeatureLabel(feature)}</span>
+      </div>
+    </div>
+  )
+}
+
+export function CompanyUsagePanel({
+  usage,
+  loading,
+  onRefresh,
+}: {
+  usage: CompanyUsageResponse | null
+  loading: boolean
+  onRefresh: () => void
+}) {
+  if (loading && !usage) {
+    return (
+      <div className="card mb-4 p-4">
+        <div className="h-5 w-48 animate-pulse rounded bg-soft-surface" />
+        <div className="mt-4 grid gap-3 sm:grid-cols-2">
+          <div className="h-28 animate-pulse rounded-card bg-soft-surface" />
+          <div className="h-28 animate-pulse rounded-card bg-soft-surface" />
+        </div>
+      </div>
+    )
+  }
+
+  if (!usage) return null
+
+  return (
+    <div className="card mb-4 p-4">
+      <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <h2 className="text-lg font-semibold text-foreground">Тариф и доступные модули</h2>
+          <p className="mt-1 text-sm text-foreground-secondary">
+            Компания: <span className="font-semibold text-foreground">{usage.company.name}</span>
+            <span className="mx-2 text-foreground-muted">·</span>
+            Тариф: <span className="font-semibold text-foreground">{formatPlanCode(usage.plan.code)}</span>
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={onRefresh}
+          disabled={loading}
+          className="btn btn-secondary btn-sm disabled:opacity-50"
+        >
+          {loading ? 'Обновление...' : 'Обновить'}
+        </button>
+      </div>
+
+      <SubscriptionStatusBanner usage={usage} compact />
+
+      <div className="grid gap-3 sm:grid-cols-2">
+        <ResourceUsageCard title="Техника" usage={usage.usage.vehicles} unit="ед." />
+        <ResourceUsageCard title="Пользователи" usage={usage.usage.users} unit="чел." />
+      </div>
+
+      <div className="mt-4 grid gap-2 lg:grid-cols-3">
+        <FeatureStatusCard title="OCR номера и одометра" feature={usage.features.ocr} />
+        <FeatureStatusCard title="ДТП-осмотры" feature={usage.features.accidentModule} />
+        <FeatureStatusCard title="Аналитика" feature={usage.features.analytics} />
+      </div>
+
+      <p className="mt-3 text-xs text-foreground-muted">
+        Если нужен больший лимит или модуль отключен тарифом, обратитесь к администратору сервиса.
+      </p>
+    </div>
+  )
+}

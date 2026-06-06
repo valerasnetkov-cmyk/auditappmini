@@ -58,20 +58,20 @@
       [
         "expo-camera",
         {
-          "cameraPermission": "Разрешите Audit Tech использовать камеру для фотофиксации осмотров, дефектов и госномера."
+          "cameraPermission": "Разрешите Аудит авто использовать камеру для фотофиксации осмотров, дефектов и госномера."
         }
       ],
       [
         "expo-location",
         {
-          "locationWhenInUsePermission": "Разрешите Audit Tech использовать геолокацию для фиксации места ДТП."
+          "locationWhenInUsePermission": "Разрешите Аудит авто использовать геолокацию для фиксации места ДТП."
         }
       ],
       [
         "expo-media-library",
         {
-          "photosPermission": "Разрешите Audit Tech выбирать фото из медиатеки.",
-          "savePhotosPermission": "Разрешите Audit Tech сохранять фото материалов осмотра."
+          "photosPermission": "Разрешите Аудит авто выбирать фото из медиатеки.",
+          "savePhotosPermission": "Разрешите Аудит авто сохранять фото материалов осмотра."
         }
       ]
     ],

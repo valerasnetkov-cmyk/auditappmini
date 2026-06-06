@@ -26,11 +26,14 @@ npm run backup:local
 npm run backup:verify
 ```
 
+Current implementation note: backup verification opens SQLite read-only through
+`better-sqlite3` and runs `PRAGMA integrity_check`.
+
 Проверка выполняет read-only операции:
 
 - ищет последний backup с `manifest.json`;
 - проверяет наличие `database.sqlite`;
-- открывает SQLite через `sql.js`;
+- открывает SQLite read-only через `better-sqlite3`;
 - запускает `PRAGMA integrity_check`;
 - считает ключевые таблицы `companies`, `users`, `vehicles`, `inspections`, `defects`, `photos`, `company_limits`;
 - проверяет каталог uploads, если manifest говорит, что uploads были скопированы.

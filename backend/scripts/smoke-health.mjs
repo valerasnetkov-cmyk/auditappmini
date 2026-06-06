@@ -2,6 +2,7 @@ import fs from 'node:fs/promises'
 import path from 'node:path'
 import process from 'node:process'
 import { spawn } from 'node:child_process'
+import crypto from 'node:crypto'
 
 const HOST = '127.0.0.1'
 const PORT = Number(process.env.PORT || 5317 + (process.pid % 500))
@@ -51,6 +52,7 @@ const server = spawn(process.execPath, ['src/server.js'], {
     PORT: String(PORT),
     DATABASE_PATH,
     UPLOAD_DIR,
+    JWT_SECRET: crypto.randomBytes(32).toString('hex'),
   },
   stdio: ['ignore', 'pipe', 'pipe'],
 })

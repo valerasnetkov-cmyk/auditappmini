@@ -90,7 +90,7 @@ export default function AdminMfaUserPage() {
     setSuccess('')
 
     try {
-      const result = await api.verifyUserMfa(id, code.trim())
+      const result = await api.enableUserMfa(id, code.trim())
       if (result.error) {
         setError(result.error)
         return

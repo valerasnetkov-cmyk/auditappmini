@@ -9,6 +9,11 @@ export const dynamic = 'force-dynamic'
 export const metadata: Metadata = {
   title: "Аудит Техники",
   description: "Система независимой фотофиксации состояния техники",
+  icons: {
+    icon: "/auditavto/icon.png",
+    shortcut: "/auditavto/icon.png",
+    apple: "/auditavto/icon.png",
+  },
 };
 
 export default function RootLayout({

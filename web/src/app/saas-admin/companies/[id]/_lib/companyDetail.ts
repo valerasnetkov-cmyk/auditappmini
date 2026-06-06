@@ -72,7 +72,7 @@ export function setupStatusClass(owner: SaasOwner) {
 }
 
 export function ownerInviteMailto(owner: SaasOwner, url: string) {
-  const subject = encodeURIComponent('Доступ к Audit Tech')
+  const subject = encodeURIComponent('Доступ к Аудит авто')
   const body = encodeURIComponent([
     `${owner.name}, здравствуйте.`,
     '',

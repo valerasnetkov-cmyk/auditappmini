@@ -1,10 +1,12 @@
 import { spawn } from 'node:child_process'
 import fs from 'node:fs/promises'
+import crypto from 'node:crypto'
 import process from 'node:process'
 
 const HOST = '127.0.0.1'
 const PORT = Number(process.env.PORT || 4917 + (process.pid % 500))
 const DATABASE_PATH = `./.tmp-smoke/smoke-company-limits-${process.pid}.sqlite`
+const JWT_SECRET = crypto.randomBytes(32).toString('hex')
 const BASE_URL = `http://${HOST}:${PORT}`
 
 function sleep(ms) {
@@ -41,7 +43,7 @@ async function request(path, options = {}, expectedStatus = 200) {
 async function run() {
   const server = spawn(process.execPath, ['src/server.js'], {
     cwd: process.cwd(),
-    env: { ...process.env, PORT: String(PORT), DATABASE_PATH },
+    env: { ...process.env, PORT: String(PORT), DATABASE_PATH, JWT_SECRET },
     stdio: ['ignore', 'pipe', 'pipe'],
   })
 

@@ -1,11 +1,13 @@
 import { spawn } from 'node:child_process'
 import fs from 'node:fs/promises'
+import crypto from 'node:crypto'
 import process from 'node:process'
 import { seedSmokeTenantOwner } from './smoke-helpers.mjs'
 
 const HOST = '127.0.0.1'
 const PORT = Number(process.env.PORT || 5317 + (process.pid % 500))
 const DATABASE_PATH = `./.tmp-smoke/smoke-subscription-guard-${process.pid}.sqlite`
+const JWT_SECRET = crypto.randomBytes(32).toString('hex')
 const BASE_URL = `http://${HOST}:${PORT}`
 
 function sleep(ms) {
@@ -69,6 +71,7 @@ async function seedSubscriptionState() {
     password: expired.password,
     companyId: expired.companyId,
     name: 'Expired Owner',
+    keepOpen: true,
   })
   await seedSmokeTenantOwner({
     databasePath: DATABASE_PATH,
@@ -76,39 +79,44 @@ async function seedSubscriptionState() {
     password: suspended.password,
     companyId: suspended.companyId,
     name: 'Suspended Owner',
+    keepOpen: true,
   })
 
-  const { getDb } = await import('../src/db.js')
+  const { getDb, closeDatabase } = await import('../src/db.js')
   const bcrypt = await import('bcryptjs')
-  const db = getDb()
-  const managerPasswordHash = bcrypt.default.hashSync(expired.managerPassword, 10)
-  db.prepare(`
-    INSERT INTO vehicles (id, number, name, status, region, company_id, created_at)
-    VALUES (?, ?, ?, 'active', '', ?, datetime('now'))
-  `).run(expired.vehicleId, 'A501BC177', 'Expired visible vehicle', expired.companyId)
-  db.prepare(`
-    INSERT INTO users (id, email, password, name, role, status, company_id, service_notifications_enabled)
-    VALUES (?, ?, ?, 'Expired Manager', 'manager', 'active', ?, 0)
-  `).run(`manager-${expired.companyId}`, expired.managerEmail, managerPasswordHash, expired.companyId)
-  db.prepare(`
-    INSERT INTO vehicles (id, number, name, status, region, company_id, created_at)
-    VALUES (?, ?, ?, 'active', '', ?, datetime('now'))
-  `).run(suspended.vehicleId, 'A601BC177', 'Suspended visible vehicle', suspended.companyId)
+  try {
+    const db = getDb()
+    const managerPasswordHash = bcrypt.default.hashSync(expired.managerPassword, 10)
+    db.prepare(`
+      INSERT INTO vehicles (id, number, name, status, region, company_id, created_at)
+      VALUES (?, ?, ?, 'active', '', ?, datetime('now'))
+    `).run(expired.vehicleId, 'A501BC177', 'Expired visible vehicle', expired.companyId)
+    db.prepare(`
+      INSERT INTO users (id, email, password, name, role, status, company_id, service_notifications_enabled)
+      VALUES (?, ?, ?, 'Expired Manager', 'manager', 'active', ?, 0)
+    `).run(`manager-${expired.companyId}`, expired.managerEmail, managerPasswordHash, expired.companyId)
+    db.prepare(`
+      INSERT INTO vehicles (id, number, name, status, region, company_id, created_at)
+      VALUES (?, ?, ?, 'active', '', ?, datetime('now'))
+    `).run(suspended.vehicleId, 'A601BC177', 'Suspended visible vehicle', suspended.companyId)
 
-  db.prepare(`
-    INSERT INTO company_subscriptions (
-      id, company_id, plan_code, status, current_period_start, current_period_end,
-      grace_until, last_payment_id, mrr_rub, auto_suspend_enabled, created_at, updated_at
-    )
-    VALUES (?, ?, 'pilot', 'expired', ?, ?, ?, NULL, 10000, 0, datetime('now'), datetime('now'))
-  `).run(`subscription-${expired.companyId}`, expired.companyId, addDaysIso(-60), addDaysIso(-8), addDaysIso(-1))
-  db.prepare(`
-    INSERT INTO company_subscriptions (
-      id, company_id, plan_code, status, current_period_start, current_period_end,
-      grace_until, last_payment_id, mrr_rub, auto_suspend_enabled, created_at, updated_at
-    )
-    VALUES (?, ?, 'pilot', 'suspended', ?, ?, ?, NULL, 10000, 1, datetime('now'), datetime('now'))
-  `).run(`subscription-${suspended.companyId}`, suspended.companyId, addDaysIso(-60), addDaysIso(-20), addDaysIso(-13))
+    db.prepare(`
+      INSERT INTO company_subscriptions (
+        id, company_id, plan_code, status, current_period_start, current_period_end,
+        grace_until, last_payment_id, mrr_rub, auto_suspend_enabled, created_at, updated_at
+      )
+      VALUES (?, ?, 'pilot', 'expired', ?, ?, ?, NULL, 10000, 0, datetime('now'), datetime('now'))
+    `).run(`subscription-${expired.companyId}`, expired.companyId, addDaysIso(-60), addDaysIso(-8), addDaysIso(-1))
+    db.prepare(`
+      INSERT INTO company_subscriptions (
+        id, company_id, plan_code, status, current_period_start, current_period_end,
+        grace_until, last_payment_id, mrr_rub, auto_suspend_enabled, created_at, updated_at
+      )
+      VALUES (?, ?, 'pilot', 'suspended', ?, ?, ?, NULL, 10000, 1, datetime('now'), datetime('now'))
+    `).run(`subscription-${suspended.companyId}`, suspended.companyId, addDaysIso(-60), addDaysIso(-20), addDaysIso(-13))
+  } finally {
+    closeDatabase()
+  }
 
   return { expired, suspended }
 }
@@ -117,7 +125,7 @@ async function run() {
   const seeded = await seedSubscriptionState()
   const server = spawn(process.execPath, ['src/server.js'], {
     cwd: process.cwd(),
-    env: { ...process.env, PORT: String(PORT), DATABASE_PATH },
+    env: { ...process.env, PORT: String(PORT), DATABASE_PATH, JWT_SECRET },
     stdio: ['ignore', 'pipe', 'pipe'],
   })
 
