@@ -2,6 +2,7 @@ import { createContext, useContext, useState, useEffect, ReactNode } from 'react
 import { useColorScheme, Platform } from 'react-native'
 import * as SecureStore from 'expo-secure-store'
 import AsyncStorage from '@react-native-async-storage/async-storage'
+import { auditAvtoDarkTheme, auditAvtoLightTheme } from './theme/auditavtoTheme'
 
 const isWeb = Platform.OS === 'web'
 
@@ -23,33 +24,33 @@ type ThemeColors = {
 }
 
 const light: ThemeColors = {
-  background: '#f8fafc',
-  surface: '#ffffff',
-  card: '#ffffff',
-  text: '#0f172a',
-  mutedText: '#64748b',
-  border: '#e2e8f0',
-  primary: '#2563eb',
-  danger: '#dc2626',
-  warning: '#f59e0b',
-  success: '#16a34a',
-  inputBackground: '#f1f5f9',
-  buttonText: '#ffffff',
+  background: auditAvtoLightTheme.colors.background,
+  surface: auditAvtoLightTheme.colors.surface,
+  card: auditAvtoLightTheme.colors.surface,
+  text: auditAvtoLightTheme.colors.textPrimary,
+  mutedText: auditAvtoLightTheme.colors.textMuted,
+  border: auditAvtoLightTheme.colors.border,
+  primary: auditAvtoLightTheme.colors.orange,
+  danger: auditAvtoLightTheme.colors.danger,
+  warning: auditAvtoLightTheme.colors.warning,
+  success: auditAvtoLightTheme.colors.success,
+  inputBackground: auditAvtoLightTheme.colors.mutedSurface,
+  buttonText: auditAvtoLightTheme.colors.inverseText,
 }
 
 const dark: ThemeColors = {
-  background: '#020617',
-  surface: '#0f172a',
-  card: '#1e293b',
-  text: '#f1f5f9',
-  mutedText: '#94a3b8',
-  border: '#334155',
-  primary: '#3b82f6',
-  danger: '#ef4444',
-  warning: '#fbbf24',
-  success: '#22c55e',
-  inputBackground: '#1e293b',
-  buttonText: '#ffffff',
+  background: auditAvtoDarkTheme.colors.background,
+  surface: auditAvtoDarkTheme.colors.surface,
+  card: auditAvtoDarkTheme.colors.surface,
+  text: auditAvtoDarkTheme.colors.textPrimary,
+  mutedText: auditAvtoDarkTheme.colors.textMuted,
+  border: auditAvtoDarkTheme.colors.border,
+  primary: auditAvtoDarkTheme.colors.orange,
+  danger: auditAvtoDarkTheme.colors.danger,
+  warning: auditAvtoDarkTheme.colors.warning,
+  success: auditAvtoDarkTheme.colors.success,
+  inputBackground: auditAvtoDarkTheme.colors.mutedSurface,
+  buttonText: auditAvtoDarkTheme.colors.inverseText,
 }
 
 interface ThemeContextType {

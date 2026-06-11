@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import Layout from '@/components/Layout'
+import { Badge, EmptyState, NoticeCard, Skeleton, StatusButton, type UiTone } from '@/components/ui'
 import api from '@/lib/api/client'
 import type { SaasAlert, SaasAlertsResponse } from '@/lib/types'
 
@@ -30,11 +31,11 @@ function alertTypeLabel(type: string) {
   return type
 }
 
-function alertTone(type: string, status: string) {
-  if (status !== 'new') return 'bg-gray-50 text-gray-600 ring-gray-200'
-  if (type === 'subscription_expired' || type === 'subscription_suspended') return 'bg-red-50 text-red-700 ring-red-100'
-  if (type === 'subscription_grace_started') return 'bg-amber-50 text-amber-700 ring-amber-100'
-  return 'bg-blue-50 text-blue-700 ring-blue-100'
+function alertTone(type: string, status: string): UiTone {
+  if (status !== 'new') return 'neutral'
+  if (type === 'subscription_expired' || type === 'subscription_suspended') return 'danger'
+  if (type === 'subscription_grace_started') return 'warning'
+  return 'info'
 }
 
 function MetricCard({ label, value, hint }: { label: string; value: string; hint?: string }) {
@@ -43,15 +44,6 @@ function MetricCard({ label, value, hint }: { label: string; value: string; hint
       <div className="text-xs font-medium text-gray-500">{label}</div>
       <div className="mt-2 text-2xl font-semibold text-gray-950">{value}</div>
       {hint ? <div className="mt-2 text-xs leading-5 text-gray-500">{hint}</div> : null}
-    </div>
-  )
-}
-
-function EmptyState() {
-  return (
-    <div className="rounded-lg border border-dashed border-gray-300 bg-white p-8 text-center">
-      <div className="text-base font-semibold text-gray-950">Активных уведомлений нет</div>
-      <div className="mt-2 text-sm text-gray-500">Сканер подписок не нашел просрочек или ближайших окончаний периода.</div>
     </div>
   )
 }
@@ -132,21 +124,23 @@ export default function ResourceAlertsPage() {
               Контроль окончаний оплаченных периодов, grace period и просрочек для ручного сопровождения оффлайн-платежей.
             </p>
           </div>
-          <button
+          <StatusButton
             type="button"
             onClick={handleScan}
-            disabled={saving}
-            className="inline-flex items-center justify-center rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
+            status={saving ? 'loading' : 'idle'}
+            loadingLabel="Проверяем подписки…"
           >
-            {saving ? 'Проверка...' : 'Сканировать подписки'}
-          </button>
+            Сканировать подписки
+          </StatusButton>
         </div>
 
-        {error ? <div className="rounded-lg bg-red-50 px-4 py-3 text-sm text-red-700">{error}</div> : null}
-        {message ? <div className="rounded-lg bg-emerald-50 px-4 py-3 text-sm text-emerald-700">{message}</div> : null}
+        {error ? <NoticeCard title="Сканирование не выполнено" tone="danger" compact>{error}</NoticeCard> : null}
+        {message ? <NoticeCard title="Проверка завершена" tone="success" compact>{message}</NoticeCard> : null}
 
         {loading ? (
-          <div className="rounded-lg border border-gray-200 bg-white p-6 text-sm text-gray-600">Загрузка уведомлений...</div>
+          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4" aria-label="Загрузка уведомлений">
+            {Array.from({ length: 4 }, (_, index) => <Skeleton key={index} className="h-28" />)}
+          </div>
         ) : data ? (
           <>
             <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
@@ -199,9 +193,9 @@ export default function ResourceAlertsPage() {
                       {filteredAlerts.map((alert) => (
                         <tr key={alert.id} className="align-top transition hover:bg-gray-50">
                           <td className="px-4 py-3">
-                            <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ring-1 ${alertTone(alert.type, alert.status)}`}>
+                            <Badge tone={alertTone(alert.type, alert.status)}>
                               {alert.status === 'new' ? 'новое' : 'прочитано'}
-                            </span>
+                            </Badge>
                           </td>
                           <td className="px-4 py-3 font-medium text-gray-950">{alert.companyName || alert.companyId || 'без компании'}</td>
                           <td className="px-4 py-3">
@@ -231,7 +225,10 @@ export default function ResourceAlertsPage() {
                 </div>
               </section>
             ) : (
-              <EmptyState />
+              <EmptyState
+                title="Активных уведомлений нет"
+                description="Сканер подписок не нашёл просрочек или ближайших окончаний периода."
+              />
             )}
           </>
         ) : null}

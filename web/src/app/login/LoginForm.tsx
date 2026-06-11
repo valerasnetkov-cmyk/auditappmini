@@ -117,14 +117,14 @@ export default function LoginForm({
 
   const formClassName = isLanding ? 'mt-8 space-y-6' : 'mt-6 space-y-4'
   const inputClassName = isLanding
-    ? 'h-[52px] w-full rounded-2xl border border-slate-200 bg-white px-4 text-[15px] text-slate-950 shadow-sm outline-none placeholder:text-slate-400 focus:border-blue-500 focus:ring-4 focus:ring-blue-100'
+    ? 'h-[52px] w-full rounded-2xl border border-line bg-white px-4 text-[15px] text-slate-950 shadow-sm outline-none placeholder:text-slate-400 focus:border-primary focus:ring-4 focus:ring-primary/15'
     : 'w-full rounded-lg border px-3 py-2'
   const labelClassName = isLanding
     ? 'mb-3 block text-sm font-semibold text-slate-950'
     : 'mb-1 block text-sm font-medium text-gray-700'
   const buttonClassName = isLanding
-    ? 'group flex h-14 w-full items-center justify-center gap-3 rounded-2xl bg-blue-600 px-5 text-base font-semibold text-white shadow-[0_18px_35px_rgba(37,99,235,0.28)] hover:bg-blue-700 disabled:opacity-60'
-    : 'w-full rounded-lg bg-blue-600 px-4 py-2 text-white hover:bg-blue-700 disabled:opacity-50'
+    ? 'group flex h-14 w-full items-center justify-center gap-3 rounded-2xl bg-primary px-5 text-base font-semibold text-foreground-inverse shadow-[var(--shadow-orange)] hover:bg-primary-hover disabled:opacity-60'
+    : 'w-full rounded-lg bg-primary px-4 py-2 text-foreground-inverse hover:bg-primary-hover disabled:opacity-50'
 
   return (
     <form onSubmit={mfaToken ? handleMfaSubmit : handleSubmit} className={formClassName}>
@@ -163,7 +163,7 @@ export default function LoginForm({
             <div className="mb-3 flex items-center justify-between gap-4">
               <label className="block text-sm font-semibold text-slate-950">Пароль</label>
               {isLanding ? (
-                <a className="text-sm font-medium text-blue-600 hover:text-blue-700" href={`mailto:${ACCESS_EMAIL}?subject=Восстановление доступа AuditAvto`}>
+                <a className="text-sm font-medium text-primary hover:text-primary-hover" href={`mailto:${ACCESS_EMAIL}?subject=Восстановление доступа AuditAvto`}>
                   Забыли пароль?
                 </a>
               ) : null}
@@ -192,7 +192,7 @@ export default function LoginForm({
       {isLanding && !mfaToken ? (
         <div className="flex items-center justify-between gap-4 text-sm">
           <label className="flex items-center gap-3 text-slate-600">
-            <input type="checkbox" defaultChecked className="h-5 w-5 rounded border-slate-300 text-blue-600" />
+            <input type="checkbox" defaultChecked className="h-5 w-5 rounded border-slate-300 text-primary" />
             Запомнить меня
           </label>
         </div>
@@ -206,14 +206,14 @@ export default function LoginForm({
       {showAccessAction ? (
         isLanding ? (
           <div className="space-y-6">
-            <div className="flex items-center gap-4 text-sm font-semibold uppercase tracking-[0.18em] text-slate-400">
+            <div className="flex items-center gap-4 text-sm font-semibold uppercase tracking-[0.18em] text-foreground-muted">
               <span className="h-px flex-1 bg-slate-200" />
               или
               <span className="h-px flex-1 bg-slate-200" />
             </div>
             <a
               href={`mailto:${ACCESS_EMAIL}?subject=Получить доступ к AuditAvto`}
-              className="flex h-14 w-full items-center justify-center rounded-2xl border border-slate-200 bg-white px-5 text-base font-semibold text-blue-600 hover:border-blue-200 hover:bg-blue-50"
+              className="flex h-14 w-full items-center justify-center rounded-2xl border border-line bg-white px-5 text-base font-semibold text-primary hover:border-primary/40 hover:bg-primary/5"
             >
               Получить доступ
             </a>
@@ -221,7 +221,7 @@ export default function LoginForm({
         ) : (
           <p className="text-center text-sm text-gray-600">
             Нет доступа?{' '}
-            <a className="font-semibold text-blue-600 hover:text-blue-700" href={`mailto:${ACCESS_EMAIL}?subject=Получить доступ к AuditAvto`}>
+            <a className="font-semibold text-primary hover:text-primary-hover" href={`mailto:${ACCESS_EMAIL}?subject=Получить доступ к AuditAvto`}>
               Напишите нам
             </a>
           </p>

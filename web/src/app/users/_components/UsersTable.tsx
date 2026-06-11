@@ -1,11 +1,12 @@
 'use client'
 
 import type { UserRecord } from '@/lib/types'
-import { canManagePanelUser, getRoleBadgeClass, getRoleLabel, type SortConfig, type SortableUserKey } from '../_lib/users'
+import { Badge } from '@/components/ui'
+import { canManagePanelUser, getRoleLabel, type SortConfig, type SortableUserKey } from '../_lib/users'
 
 function renderSortIcon(sortConfig: SortConfig, key: SortableUserKey) {
-  if (sortConfig.key !== key) return <span className="ml-1 text-slate-300">↕</span>
-  return <span className="ml-1 text-blue-600">{sortConfig.direction === 'asc' ? '↑' : '↓'}</span>
+  if (sortConfig.key !== key) return <span className="ml-1 text-foreground-disabled">↕</span>
+  return <span className="ml-1 text-primary">{sortConfig.direction === 'asc' ? '↑' : '↓'}</span>
 }
 
 function SortableHeader({
@@ -20,7 +21,7 @@ function SortableHeader({
   onSort: (key: SortableUserKey) => void
 }) {
   return (
-    <th className="cursor-pointer px-6 py-3 text-left text-xs font-semibold text-slate-600" onClick={() => onSort(columnKey)}>
+    <th className="cursor-pointer px-6 py-3 text-left text-xs font-semibold text-foreground-muted" onClick={() => onSort(columnKey)}>
       {label} {renderSortIcon(sortConfig, columnKey)}
     </th>
   )
@@ -53,39 +54,39 @@ export function UsersTable({
               {!hiddenColumns.includes('email') ? <SortableHeader columnKey="email" label="Email" sortConfig={sortConfig} onSort={onSort} /> : null}
               {!hiddenColumns.includes('role') ? <SortableHeader columnKey="role" label="Роль" sortConfig={sortConfig} onSort={onSort} /> : null}
               {!hiddenColumns.includes('created_at') ? <SortableHeader columnKey="created_at" label="Дата создания" sortConfig={sortConfig} onSort={onSort} /> : null}
-              <th className="px-6 py-3 text-right text-xs font-semibold text-slate-600">Действия</th>
+              <th className="px-6 py-3 text-right text-xs font-semibold text-foreground-muted">Действия</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-slate-200">
+          <tbody className="divide-y divide-line">
             {users.length === 0 ? (
               <tr>
-                <td colSpan={5} className="px-6 py-12 text-center text-slate-500">Пользователи не найдены</td>
+                <td colSpan={5} className="px-6 py-12 text-center text-foreground-muted">Пользователи не найдены</td>
               </tr>
             ) : (
               users.map((user) => (
-                <tr key={user.id} className="hover:bg-slate-50">
-                  {!hiddenColumns.includes('name') ? <td className="px-6 py-4 font-medium text-slate-900">{user.name}</td> : null}
-                  {!hiddenColumns.includes('email') ? <td className="px-6 py-4 text-slate-600">{user.email}</td> : null}
+                <tr key={user.id} className="hover:bg-surface-hover">
+                  {!hiddenColumns.includes('name') ? <td className="px-6 py-4 font-medium text-foreground">{user.name}</td> : null}
+                  {!hiddenColumns.includes('email') ? <td className="px-6 py-4 text-foreground-secondary">{user.email}</td> : null}
                   {!hiddenColumns.includes('role') ? (
                     <td className="px-6 py-4">
-                      <span className={`rounded px-2 py-1 text-xs ${getRoleBadgeClass(user.role)}`}>{getRoleLabel(user.role)}</span>
+                      <Badge tone={user.role === 'manager' ? 'info' : 'neutral'}>{getRoleLabel(user.role)}</Badge>
                     </td>
                   ) : null}
                   {!hiddenColumns.includes('created_at') ? (
-                    <td className="px-6 py-4 text-sm text-slate-500">{new Date(user.created_at).toLocaleDateString('ru-RU')}</td>
+                    <td className="px-6 py-4 text-sm text-foreground-muted">{new Date(user.created_at).toLocaleDateString('ru-RU')}</td>
                   ) : null}
                   <td className="px-6 py-4 text-right">
                     {canManagePanelUser(user) ? (
                       <>
-                        <button onClick={() => onEdit(user)} disabled={Boolean(writeRestrictionMessage)} className="mr-3 text-blue-600 hover:underline disabled:cursor-not-allowed disabled:opacity-50">
+                        <button onClick={() => onEdit(user)} disabled={Boolean(writeRestrictionMessage)} className="mr-3 text-primary hover:underline disabled:cursor-not-allowed disabled:opacity-50">
                           Изменить
                         </button>
-                        <button onClick={() => onDelete(user.id)} disabled={Boolean(writeRestrictionMessage)} className="text-red-600 hover:underline disabled:cursor-not-allowed disabled:opacity-50">
+                        <button onClick={() => onDelete(user.id)} disabled={Boolean(writeRestrictionMessage)} className="text-status-danger hover:underline disabled:cursor-not-allowed disabled:opacity-50">
                           Удалить
                         </button>
                       </>
                     ) : (
-                      <span className="text-sm text-slate-400">Системная роль</span>
+                      <span className="text-sm text-foreground-disabled">Системная роль</span>
                     )}
                   </td>
                 </tr>

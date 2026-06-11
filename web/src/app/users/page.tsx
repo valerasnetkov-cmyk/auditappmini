@@ -5,6 +5,7 @@ import type { FormEvent } from 'react'
 import Layout from '@/components/Layout'
 import ManagerAccessDenied from '@/components/ManagerAccessDenied'
 import SubscriptionStatusBanner from '@/components/SubscriptionStatusBanner'
+import { NoticeCard, Skeleton, StatusButton } from '@/components/ui'
 import { getCompanyOperationRestriction } from '@/lib/companyAccess'
 import { useCompanyOwnerAccess } from '@/lib/useCompanyOwnerAccess'
 import { useCompanyUsage } from '@/lib/useCompanyUsage'
@@ -103,8 +104,12 @@ export default function UsersPage() {
 
   if (ownerAccess.loading) {
     return (
-      <div className="flex min-h-screen items-center justify-center">
-        <div className="h-8 w-8 animate-spin rounded-full border-b-2 border-blue-600"></div>
+      <div className="mx-auto flex min-h-screen w-full max-w-5xl items-center px-6">
+        <div className="w-full space-y-4">
+          <Skeleton className="h-8 w-48" />
+          <Skeleton className="h-24 w-full" />
+          <Skeleton className="h-72 w-full" />
+        </div>
       </div>
     )
   }
@@ -122,26 +127,35 @@ export default function UsersPage() {
   return (
     <Layout currentPage="users">
       <div className="p-6">
-        <div className="mb-6 flex items-center justify-between">
-          <h1 className="text-2xl font-bold text-slate-900">Пользователи</h1>
-          <button onClick={() => form.actions.openCreateModal(writeRestrictionMessage)}
+        <div className="mb-6 flex items-center justify-between gap-4">
+          <div>
+            <h1 className="page-title text-2xl">Пользователи</h1>
+            <p className="mt-1 text-sm text-foreground-muted">Сотрудники, роли и доступ к рабочему кабинету компании.</p>
+          </div>
+          <StatusButton onClick={() => form.actions.openCreateModal(writeRestrictionMessage)}
             disabled={Boolean(writeRestrictionMessage)}
-            className="rounded-xl bg-blue-600 px-5 py-2.5 font-medium text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50">
+            className="btn btn-primary disabled:opacity-50">
             + Добавить
-          </button>
+          </StatusButton>
         </div>
 
         <SubscriptionStatusBanner usage={companyUsage} compact />
 
         {writeRestrictionMessage ? (
-          <div className="mb-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-            {writeRestrictionMessage}
+          <div className="mb-4">
+            <NoticeCard title="Управление временно недоступно" tone="warning" compact>{writeRestrictionMessage}</NoticeCard>
           </div>
         ) : null}
 
         {list.statusMessage ? (
-          <div className={`mb-4 rounded-lg px-4 py-3 text-sm ${list.statusTone === 'success' ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-700'}`}>
-            {list.statusMessage}
+          <div className="mb-4">
+            <NoticeCard
+              title={list.statusTone === 'success' ? 'Готово' : 'Не удалось выполнить действие'}
+              tone={list.statusTone === 'success' ? 'success' : 'danger'}
+              compact
+            >
+              {list.statusMessage}
+            </NoticeCard>
           </div>
         ) : null}
 
@@ -153,8 +167,11 @@ export default function UsersPage() {
         <div className="mb-4 text-sm text-slate-500">Найдено: {filteredUsers.length}</div>
 
         {list.loading ? (
-          <div className="py-12 text-center">
-            <div className="mx-auto h-8 w-8 animate-spin rounded-full border-b-2 border-blue-600"></div>
+          <div className="table-card space-y-3 p-6">
+            <Skeleton className="h-10 w-full" />
+            <Skeleton className="h-14 w-full" />
+            <Skeleton className="h-14 w-full" />
+            <Skeleton className="h-14 w-full" />
           </div>
         ) : (
           <UsersTable

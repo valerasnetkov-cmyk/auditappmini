@@ -3,6 +3,7 @@
 import type { Dispatch, FormEvent, SetStateAction } from 'react'
 import type { SaasCompanyStats } from '@/lib/types'
 import type { OwnerForm } from '../_lib/companies'
+import { StatusButton } from '@/components/ui'
 
 type Props = {
   form: OwnerForm
@@ -44,9 +45,9 @@ export default function CreateOwnerForm({ form, setForm, companies, onSubmit, sa
           required
         />
       </div>
-      <button className="mt-4 rounded-lg bg-blue-600 px-4 py-2 text-white disabled:opacity-50" disabled={saving}>
+      <StatusButton className="mt-4" status={saving ? 'loading' : 'idle'} loadingLabel="Создаём владельца…">
         Создать владельца
-      </button>
+      </StatusButton>
     </form>
   )
 }

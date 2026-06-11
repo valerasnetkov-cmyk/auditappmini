@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import { useSearchParams } from 'next/navigation'
 import Layout from '@/components/Layout'
+import { Toast } from '@/components/ui'
 import SubscriptionStatusBanner from '@/components/SubscriptionStatusBanner'
 import api from '@/lib/api/client'
 import { requireAuthToken } from '@/lib/auth'
@@ -225,11 +226,7 @@ export default function InspectionsPage() {
   return (
     <Layout currentPage="inspections">
       <div className="p-6">
-        {toast ? (
-          <div className={toast.tone === 'success' ? 'toast toast-success' : 'toast toast-error'}>
-            {toast.text}
-          </div>
-        ) : null}
+        {toast ? <Toast text={toast.text} tone={toast.tone === 'danger' ? 'danger' : toast.tone} /> : null}
 
         <header className="mb-6 flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
           <div>

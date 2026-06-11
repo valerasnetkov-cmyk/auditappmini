@@ -13,6 +13,8 @@ const TENANT_USER_ENDPOINT_PREFIXES = [
   '/api/regions',
   '/api/photo-requirements',
   '/api/defect-categories',
+  '/api/odometer',
+  '/api/vehicle-number',
   '/api/seed',
   '/uploads',
 ]

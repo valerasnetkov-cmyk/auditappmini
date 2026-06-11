@@ -3,6 +3,69 @@
 ## Unreleased
 
 ### Changed
+- **Публичный демо-контур**: добавлена тестовая компания в режиме только для
+  чтения с 12 единицами техники, 36 осмотрами, 16 дефектами, чек-листами,
+  пробегом, ДТП-сценариями и демонстрационными фотографиями. Демо открывается
+  без регистрации и не предоставляет доступ к данным реальных компаний.
+- **Динамика осмотров в демо**: осмотры распределены по актуальным датам.
+  За последние семь дней формируется 21 осмотр с дневной динамикой
+  `2, 3, 4, 3, 5, 3, 1`, поэтому недельный график содержит последовательные
+  и различимые значения.
+- **Регионы демо-парка**: обобщённое наименование «Сахалинская область»
+  заменено на «Невельск» для трёх единиц тестовой техники.
+- **Карточка осмотра на лендинге**: дата осмотра, дата следующего осмотра,
+  пробег и месячная динамика пробега рассчитываются ежедневно по часовому
+  поясу Сахалина. Следующий осмотр показывается через семь дней, пробег
+  увеличивается на 42 км в сутки.
+- **Заголовок лендинга**: восстановлена формулировка «Контроль автопарка без
+  спорных фото и ручного хаоса».
+- **Public trust contour**: added privacy, terms, security and cookie
+  information pages, linked them from the landing footer, documented the
+  actual authentication cookie and local browser settings, and replaced
+  unsupported landing security claims with verifiable wording.
+- **Web response hardening**: disabled the Next.js powered-by header and added
+  HSTS, MIME-sniffing, framing and referrer headers without changing the
+  existing Permissions Policy or introducing CSP.
+- **Calm functional UI foundation**: added reusable token-based `Badge`,
+  `NoticeCard`, `ProgressBar`, `Skeleton`, `EmptyState`, `StatusButton` and
+  `Toast` components without adding Animata or another motion dependency.
+  Components support light/dark themes, keyboard focus and reduced motion.
+- **Operational UI feedback**: migrated inspection warnings and save state,
+  required-photo statuses, company usage limits, dashboard loading/empty
+  states, and dashboard/inspection notifications to the shared UI layer.
+  Removed the inline-styled global toast and inline-width tariff progress bar
+  while preserving existing actions and API contracts.
+- **Calm process UI**: added reusable `Stepper`, `Accordion` and `Tooltip`
+  components. Inspection details now show a seven-stage readiness path and
+  required-photo completion progress derived from existing form state; landing
+  FAQ uses the shared accessible disclosure pattern, and company OCR access has
+  a keyboard-focusable explanation.
+- **Calm SaaS operations UI**: migrated subscription scanning, resource
+  dashboard loading/errors, health-center events, upsell values and empty
+  states to the shared status components. Owner-facing subscription status and
+  planned-inspection counters now use the same semantic notice and badge
+  system without changing billing or notification behavior.
+- **Calm administration forms**: migrated plan creation, offline payments,
+  company/owner creation, company limits and MFA management to shared loading,
+  status, notice, badge, tooltip and empty-state components. Removed remaining
+  inline MFA layout styles and legacy blue spinners/buttons from these flows
+  while preserving submit, permission and security behavior.
+- **AuditAvto visual rebrand**: cautiously merged the supplied graphite and
+  orange brand system without replacing the established landing structure or
+  authentication flow. Added production SVG marks and favicon, semantic web
+  tokens, evidence-oriented UI primitives, branded login/sidebar surfaces,
+  updated hero messaging and CTAs, and matching light/dark mobile theme values.
+  Existing tariff, dashboard, routing and business behavior remain unchanged.
+- **Application navigation polish**: replaced prototype letter abbreviations in
+  the authenticated sidebar and search/logout controls with consistent outline
+  icons, refined active and hover states, and improved vehicle preview image
+  framing on the public landing.
+- **Landing vehicle preview**: changed the hero vehicle image to fit within its
+  frame without cropping the truck body.
+- **Landing vehicle summary**: removed the visual frame around the truck image,
+  fitted the full vehicle vertically on white, and filled the adjacent
+  inspection card with four information blocks for mileage, defects, technical
+  condition and the next inspection.
 - **Landing tariff section**: added public `pilot`, `standard`, and
   `enterprise` pricing cards to the landing page with production prices,
   primary limits, module availability, mail contact actions, and a restrained
@@ -113,6 +176,9 @@
 - **Smoke-gate**: backend smoke больше не содержит Directus service/mock проверки и включает MFA login flow, resource-admin CRUD, tenant isolation и лимиты компаний.
 
 ### Added
+- **Проверка публичного демо**: добавлен smoke-сценарий, подтверждающий создание
+  тестовой компании и данных, доступ к демо, защиту фотографий и блокировку
+  операций изменения в режиме только для чтения.
 - **Рабочий roadmap**: добавлен `plan.md` с целями, архитектурным решением, границами ролей, этапами реализации и проверками перед пилотом.
 - **Статус roadmap**: `plan.md` дополнен статусом выполненных этапов и оставшимися release-actions перед пилотом.
 - **Resource-admin контур**: добавлен встроенный API/UI для компаний, владельцев компаний, тарифов, лимитов, статусов и сервисных health-индикаторов без операционных данных компаний.
@@ -764,8 +830,13 @@ Read-only обследование ресурса. Полный отчёт — `
 - **Карточка техники web**: страница `web/src/app/vehicles/[id]/page.tsx` приведена к единому русскому UI на токенах. Сохранены сводные метрики, история осмотров, одометр, дефекты с фото, история статуса и модальное изменение статуса техники.
 - **Раздел дефектов web**: список дефектов и карточка дефекта переведены на общие semantic-токены. Сохранены фильтры по региону, типу осмотра, фото/описанию, связи с осмотром и техникой, ДТП-контекст, фото и история статуса.
 - **Создание техники web**: форма `web/src/app/vehicles/new/page.tsx` переведена на общие токены, добавлена явная подсказка по разрешенным буквам российских госномеров, предпросмотр кириллической нормализации и выбор региона только ��з справочника.
+- **Рабочие списки calm UI**: страницы пользователей, техники и дефектов переведены на общие `Skeleton`, `NoticeCard`, `StatusButton` и `Badge`. Унифицированы состояния загрузки, тарифные ограничения, ошибки, роли, типы осмотров и статусы дефектов.
+- **Формы пользователей и техники**: модальные формы используют единые поля, спокойные семантические уведомления и кнопки с состоянием сохранения без изменения существующей CRUD-логики.
+- **Карточка дефекта calm UI**: загрузка карточки, изменение статуса, тарифное предупреждение и badges приведены к общей системе компонентов.
 
 ### Fixed
+- **Public accessibility and disclosure**: increased the login separator text
+  contrast and added an RFC 9116-compatible `security.txt` contact.
 - **Проваливание в дефекты из осмотра**: для выявленных дефектов добавлены ссылки на карточку дефекта, отображение времени фиксации, фото и контекст ДТП.
 - **Данные ДТП в осмотре**: для ДТП-осмотров явно отображаются и сохраняются время ДТП, место ДТП и время самого осмотра; добавлена печатная карточка ДТП.
 - **API регионов**: `/api/regions` возвращает только используемые регионы по умолчанию и поддерживает `includeEmpty=1` для выпадающих списков выбора региона в карточках техники.

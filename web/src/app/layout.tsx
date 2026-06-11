@@ -7,11 +7,12 @@ import { initLocale } from '@/lib/i18n'
 export const dynamic = 'force-dynamic'
 
 export const metadata: Metadata = {
+  metadataBase: new URL('https://auditavto.ru'),
   title: "Аудит Техники",
   description: "Система независимой фотофиксации состояния техники",
   icons: {
-    icon: "/auditavto/icon.png",
-    shortcut: "/auditavto/icon.png",
+    icon: "/brand/favicon.svg",
+    shortcut: "/brand/favicon.svg",
     apple: "/auditavto/icon.png",
   },
 };

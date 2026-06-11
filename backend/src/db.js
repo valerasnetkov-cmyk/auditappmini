@@ -493,6 +493,7 @@ function seedDefaultPlans() {
 }
 
 function applySchemaMigrations() {
+  ensureColumn('companies', 'access_mode', "TEXT NOT NULL DEFAULT 'standard'")
   ensureColumn('users', 'company_id', "TEXT DEFAULT 'default'")
   ensureColumn('users', 'status', "TEXT NOT NULL DEFAULT 'active'")
   ensureColumn('users', 'mfa_enabled', 'INTEGER NOT NULL DEFAULT 0')
@@ -866,6 +867,7 @@ export async function initDatabase() {
       id TEXT PRIMARY KEY,
       slug TEXT UNIQUE NOT NULL,
       name TEXT NOT NULL,
+      access_mode TEXT NOT NULL DEFAULT 'standard',
       region_code TEXT,
       data_residency TEXT,
       api_cluster_key TEXT,

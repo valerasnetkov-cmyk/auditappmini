@@ -1201,7 +1201,9 @@ function buildResourceCompanyDetails(db, companyId) {
 
 function getCompany(db, id) {
   return db.prepare(`
-    SELECT id, slug, name, region_code, data_residency, COALESCE(status, 'active') as status, created_at
+    SELECT id, slug, name, region_code, data_residency,
+           COALESCE(access_mode, 'standard') AS access_mode,
+           COALESCE(status, 'active') as status, created_at
     FROM companies
     WHERE id = ?
   `).get(id)
@@ -1805,6 +1807,16 @@ export default function registerSaasAdminRoutes({ app, db, authenticate, ensureA
 
     const existing = getCompany(db, req.params.id)
     if (!existing) return sendCompanyNotFound(res, sendError)
+    if (
+      existing.access_mode === 'demo_readonly'
+      && (
+        (req.body?.slug !== undefined && normalizeIdentifier(req.body.slug) !== existing.slug)
+        || (req.body?.name !== undefined && normalizeText(req.body.name) !== existing.name)
+        || (req.body?.status !== undefined && normalizeStatus(req.body.status) !== existing.status)
+      )
+    ) {
+      return sendError(res, 409, 'Public demo identity and status are managed by provisioning')
+    }
 
     const slug = req.body?.slug === undefined ? existing.slug : normalizeIdentifier(req.body.slug)
     const name = req.body?.name === undefined ? existing.name : normalizeText(req.body.name)
@@ -1851,6 +1863,9 @@ export default function registerSaasAdminRoutes({ app, db, authenticate, ensureA
 
     const existing = getCompany(db, req.params.id)
     if (!existing) return sendCompanyNotFound(res, sendError)
+    if (existing.access_mode === 'demo_readonly') {
+      return sendError(res, 409, 'Public demo company cannot be deleted')
+    }
 
     if (hasCompanyOperationalData(db, existing.id)) {
       return sendError(res, 409, 'Company contains tenant data; set status inactive instead of deleting')

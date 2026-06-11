@@ -154,7 +154,10 @@ class ApiClient {
 
   private shouldHandleSessionFailure(endpoint: string, token: string | null) {
     if (!token && !hasAuthSession()) return false
-    return !endpoint.startsWith('/auth/login') && !endpoint.startsWith('/auth/mfa/verify') && !endpoint.startsWith('/auth/owner-setup')
+    return !endpoint.startsWith('/auth/login')
+      && !endpoint.startsWith('/auth/demo')
+      && !endpoint.startsWith('/auth/mfa/verify')
+      && !endpoint.startsWith('/auth/owner-setup')
   }
 
   private handleSessionFailure(status: number, endpoint: string, token: string | null, error?: string) {
@@ -199,7 +202,11 @@ class ApiClient {
           return { error: sessionError }
         }
 
-        return { error: errorData.error || `HTTP ${response.status}` }
+        return {
+          error: errorData.error === 'demo_read_only'
+            ? (errorData.message || 'Это демо-режим. Изменение данных ограничено.')
+            : (errorData.error || `HTTP ${response.status}`),
+        }
       }
 
       if (response.status === 204) {
@@ -228,6 +235,19 @@ class ApiClient {
     const result = await this.request<LoginResponse>('/auth/login', {
       method: 'POST',
       body: JSON.stringify({ email, password }),
+    })
+
+    if (result.data?.token) {
+      this.setToken(result.data.token)
+    }
+
+    return result
+  }
+
+  async loginDemo() {
+    const result = await this.request<LoginResponse>('/auth/demo', {
+      method: 'POST',
+      body: JSON.stringify({}),
     })
 
     if (result.data?.token) {

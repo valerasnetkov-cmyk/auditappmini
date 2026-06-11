@@ -1,0 +1,4 @@
+Contact: mailto:info@auditavto.ru
+Expires: 2027-06-10T00:00:00Z
+Preferred-Languages: ru, en
+Canonical: https://auditavto.ru/.well-known/security.txt

@@ -7,6 +7,7 @@ import ManagerAccessDenied from '@/components/ManagerAccessDenied'
 import api from '@/lib/api/client'
 import { useCompanyOwnerAccess } from '@/lib/useCompanyOwnerAccess'
 import type { UserRecord } from '@/lib/types'
+import { Badge, EmptyState, NoticeCard, Skeleton, StatusButton } from '@/components/ui'
 
 function getRoleLabel(role: string) {
   if (role === 'manager') return 'Менеджер'
@@ -48,8 +49,9 @@ export default function AdminMfaListPage() {
 
   if (ownerAccess.loading) {
     return (
-      <div className="flex min-h-screen items-center justify-center">
-        <div className="h-8 w-8 animate-spin rounded-full border-b-2 border-blue-600"></div>
+      <div className="mx-auto grid min-h-screen max-w-5xl content-center gap-3 p-6">
+        <Skeleton className="h-8 w-48" />
+        <Skeleton className="h-64" />
       </div>
     )
   }
@@ -72,21 +74,17 @@ export default function AdminMfaListPage() {
             <h1 className="text-2xl font-bold text-slate-900">Управление MFA</h1>
             <p className="mt-1 text-sm text-slate-500">Подключение двухфакторной аутентификации для пользователей системы.</p>
           </div>
-          <button onClick={() => void loadUsers()} className="rounded-xl border border-slate-200 px-4 py-2 text-sm text-slate-600 hover:bg-slate-50">
+          <StatusButton onClick={() => void loadUsers()} status={loading ? 'loading' : 'idle'} loadingLabel="Обновляем…">
             Обновить
-          </button>
+          </StatusButton>
         </div>
 
         {error ? (
-          <div className="mb-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-            {error}
-          </div>
+          <div className="mb-4"><NoticeCard title="Не удалось загрузить пользователей" tone="danger" compact>{error}</NoticeCard></div>
         ) : null}
 
         {loading ? (
-          <div className="py-12 text-center">
-            <div className="mx-auto h-8 w-8 animate-spin rounded-full border-b-2 border-blue-600"></div>
-          </div>
+          <div className="grid gap-3 py-4"><Skeleton className="h-14" /><Skeleton className="h-14" /><Skeleton className="h-14" /></div>
         ) : (
           <div className="table-card">
             <div className="table-scroll">
@@ -104,7 +102,7 @@ export default function AdminMfaListPage() {
                 {users.length === 0 ? (
                   <tr>
                     <td colSpan={5} className="px-6 py-12 text-center text-slate-500">
-                      Пользователи не найдены
+                      <EmptyState title="Пользователи не найдены" description="Добавьте пользователя, чтобы настроить для него MFA." />
                     </td>
                   </tr>
                 ) : (
@@ -114,13 +112,9 @@ export default function AdminMfaListPage() {
                       <td className="px-6 py-4 text-slate-600">{user.email}</td>
                       <td className="px-6 py-4 text-slate-600">{getRoleLabel(user.role)}</td>
                       <td className="px-6 py-4">
-                        <span
-                          className={`inline-flex rounded-full px-2.5 py-1 text-xs font-medium ${
-                            user.mfa_enabled ? 'bg-green-100 text-green-700' : 'bg-slate-100 text-slate-600'
-                          }`}
-                        >
+                        <Badge tone={user.mfa_enabled ? 'success' : 'neutral'}>
                           {user.mfa_enabled ? 'Включено' : 'Выключено'}
-                        </span>
+                        </Badge>
                       </td>
                       <td className="px-6 py-4 text-right">
                         <Link href={`/admin/mfa/${user.id}`} className="text-blue-600 hover:underline">

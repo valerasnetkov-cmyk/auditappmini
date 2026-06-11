@@ -4,6 +4,7 @@ import { FormEvent, useEffect, useMemo, useState } from 'react'
 import Layout from '@/components/Layout'
 import api from '@/lib/api/client'
 import type { ResourcePlanPayload, SaasAdminStats } from '@/lib/types'
+import { Badge, NoticeCard, Skeleton, StatusButton } from '@/components/ui'
 
 type PlanForm = ResourcePlanPayload & {
   code: string
@@ -130,11 +131,11 @@ export default function ResourcePlansPage() {
           </p>
         </div>
 
-        {error ? <div className="rounded-lg bg-red-50 px-4 py-3 text-sm text-red-700">{error}</div> : null}
-        {message ? <div className="rounded-lg bg-green-50 px-4 py-3 text-sm text-green-700">{message}</div> : null}
+        {error ? <NoticeCard title="Не удалось изменить тарифы" tone="danger" compact>{error}</NoticeCard> : null}
+        {message ? <NoticeCard title="Изменения сохранены" tone="success" compact>{message}</NoticeCard> : null}
 
         {loading ? (
-          <div className="rounded-lg border bg-white p-6 text-sm text-gray-600">Загрузка тарифов...</div>
+          <Skeleton className="h-44" />
         ) : stats ? (
           <>
             <form onSubmit={handleCreatePlan} className="rounded-lg border bg-white p-4">
@@ -153,7 +154,7 @@ export default function ResourcePlansPage() {
                 <label className="flex items-center gap-2"><input type="checkbox" checked={Boolean(planForm.analyticsEnabled)} onChange={(event) => setPlanForm({ ...planForm, analyticsEnabled: event.target.checked })} /> Аналитика</label>
                 <label className="flex items-center gap-2"><input type="checkbox" checked={Boolean(planForm.apiAccessEnabled)} onChange={(event) => setPlanForm({ ...planForm, apiAccessEnabled: event.target.checked })} /> API-доступ</label>
               </div>
-              <button className="mt-4 rounded-lg bg-blue-600 px-4 py-2 text-white disabled:opacity-50" disabled={saving}>Создать тариф</button>
+              <StatusButton className="mt-4" status={saving ? 'loading' : 'idle'} loadingLabel="Создаём тариф…">Создать тариф</StatusButton>
             </form>
 
             <section className="overflow-hidden rounded-lg border bg-white">
@@ -179,7 +180,7 @@ export default function ResourcePlansPage() {
                           <div className="font-medium">{plan.name}</div>
                           <div className="text-xs text-gray-500">{plan.code}</div>
                         </td>
-                        <td className="px-4 py-3">{plan.status}</td>
+                        <td className="px-4 py-3"><Badge tone={plan.status === 'archived' ? 'neutral' : 'success'}>{plan.status}</Badge></td>
                         <td className="px-4 py-3">{formatCurrency(plan.monthlyPriceRub)}</td>
                         <td className="px-4 py-3">
                           Техника: {displayLimit(plan.limits.maxVehicles)}<br />

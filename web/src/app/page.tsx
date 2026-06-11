@@ -17,15 +17,48 @@ import {
   UserGroupIcon,
 } from '@heroicons/react/24/outline'
 import LoginForm from './login/LoginForm'
+import { Accordion } from '@/components/ui'
 import styles from './landing.module.css'
 
 export const metadata: Metadata = {
   title: 'AuditAvto — цифровой контроль автопарка и фотофиксация осмотров',
   description:
     'Сервис для владельцев автопарков: осмотры техники, фотофиксация дефектов, пробег, ДТП и история состояния автомобилей в одной системе.',
+  alternates: {
+    canonical: '/',
+  },
 }
 
-const contactHref = 'mailto:info@auditavto.ru?subject=Запросить пилот AuditAvto'
+export const dynamic = 'force-dynamic'
+
+const contactHref = 'mailto:info@auditavto.ru?subject=Запустить пилот AuditAvto'
+const dateFormatter = new Intl.DateTimeFormat('ru-RU', {
+  day: '2-digit',
+  month: '2-digit',
+  year: 'numeric',
+  timeZone: 'Asia/Sakhalin',
+})
+const numberFormatter = new Intl.NumberFormat('ru-RU')
+
+function getLandingInspectionPreview() {
+  const now = new Date()
+  const sakhalinDate = new Date(now.toLocaleString('en-US', { timeZone: 'Asia/Sakhalin' }))
+  sakhalinDate.setHours(0, 0, 0, 0)
+
+  const nextInspection = new Date(sakhalinDate)
+  nextInspection.setDate(nextInspection.getDate() + 7)
+
+  const mileageEpoch = new Date(2026, 0, 1)
+  const daysSinceEpoch = Math.max(0, Math.floor((sakhalinDate.getTime() - mileageEpoch.getTime()) / 86_400_000))
+  const mileage = 121_500 + daysSinceEpoch * 42
+
+  return {
+    inspectionDate: dateFormatter.format(now),
+    nextInspectionDate: dateFormatter.format(nextInspection),
+    mileage: numberFormatter.format(mileage),
+    monthlyMileage: numberFormatter.format(42 * 30),
+  }
+}
 
 const heroFeatures = [
   ['Осмотр по регламенту', 'Чек-листы и обязательные пункты проверки.', ClipboardDocumentCheckIcon],
@@ -151,13 +184,15 @@ function SectionTitle({ title, text }: { title: string; text: string }) {
 }
 
 export default function LandingPage() {
+  const inspectionPreview = getLandingInspectionPreview()
+
   return (
     <main className={styles.page}>
       <section className={styles.shell}>
         <div className={styles.panel}>
           <header className={styles.topbar}>
             <Link href="/" aria-label="AuditAvto" className={styles.brand}>
-              <Image src="/auditavto/logo3.png" alt="AuditAvto" width={300} height={60} priority />
+              <Image src="/brand/auditavto-logo-horizontal.svg" alt="AuditAvto" width={244} height={48} priority />
             </Link>
             <div className={styles.topMeta}>
               <span><ShieldCheckIcon aria-hidden="true" /> Безопасно и надёжно</span>
@@ -169,14 +204,14 @@ export default function LandingPage() {
             <div className={styles.heroCopy}>
               <h1>Контроль автопарка без спорных фото и ручного хаоса</h1>
               <p>
-                AuditAvto помогает фиксировать состояние техники: фото, дефекты, пробег, ДТП, время и историю осмотров — в одной системе.
+                Фотоосмотр автомобиля до и после поездки. Фиксируйте дефекты, пробег, ДТП и историю состояния в одном отчёте.
               </p>
               <div className={styles.heroActions}>
                 <a href={contactHref} className={styles.primaryButton}>
-                  Запросить пилот
+                  Запустить пилот
                   <ArrowRightIcon aria-hidden="true" />
                 </a>
-                <a href="#how" className={styles.secondaryButton}>Посмотреть демо</a>
+                <Link href="/demo" className={styles.secondaryButton}>Посмотреть демо</Link>
               </div>
               <p className={styles.audience}>
                 Для автопарков, доставки, аренды, строительной техники, сервисных и транспортных компаний.
@@ -227,7 +262,7 @@ export default function LandingPage() {
 
               <article className={styles.checkCard}>
                 <div className={styles.checkHeader}>
-                  <h3>Осмотр от 24.05.2026</h3>
+                  <h3>Осмотр от {inspectionPreview.inspectionDate}</h3>
                   <span>72%</span>
                 </div>
                 <div className={styles.progress}><span /></div>
@@ -237,12 +272,12 @@ export default function LandingPage() {
                   <li><ExclamationTriangleIcon aria-hidden="true" /> Шины и диски</li>
                   <li><CheckCircleIcon aria-hidden="true" /> Документы</li>
                 </ul>
-              </article>
-
-              <article className={styles.metricCard}>
-                <span>Пробег, км</span>
-                <strong>128 450</strong>
-                <small>+1 250 относительно 23.05.2026</small>
+                <div className={styles.vehicleFacts}>
+                  <div><span>Пробег</span><strong>{inspectionPreview.mileage} км</strong><small>+{inspectionPreview.monthlyMileage} км за месяц</small></div>
+                  <div><span>Дефекты</span><strong>3 замечания</strong><small>1 требует внимания</small></div>
+                  <div><span>Тех. состояние</span><strong>Хорошее</strong><small>Готов к эксплуатации</small></div>
+                  <div><span>Следующий осмотр</span><strong>{inspectionPreview.nextInspectionDate}</strong><small>Через 7 дней</small></div>
+                </div>
               </article>
 
               <article className={styles.defectStrip}>
@@ -260,8 +295,8 @@ export default function LandingPage() {
           </div>
 
           <div className={styles.securityStrip}>
-            <div><LockClosedIcon aria-hidden="true" /><strong>Шифрование данных</strong><span>Защита информации на всех уровнях</span></div>
-            <div><CloudArrowUpIcon aria-hidden="true" /><strong>Резервное копирование</strong><span>Ежедневное хранение и восстановление</span></div>
+            <div><LockClosedIcon aria-hidden="true" /><strong>Защищённая передача</strong><span>Публичный сайт и API работают по HTTPS</span></div>
+            <div><CloudArrowUpIcon aria-hidden="true" /><strong>Резервные копии</strong><span>Предусмотрены процедуры создания и проверки копий</span></div>
             <div><KeyIcon aria-hidden="true" /><strong>Контроль доступа</strong><span>Роли и права для вашей команды</span></div>
           </div>
         </div>
@@ -362,6 +397,29 @@ export default function LandingPage() {
         </div>
       </section>
 
+      <section className={`${styles.section} ${styles.demoSection}`}>
+        <div>
+          <h2>Посмотрите демо с тестовым автопарком</h2>
+          <p>
+            Откройте демо-кабинет и посмотрите, как руководитель видит технику, осмотры, дефекты, фотофиксацию, пробег и отчёты.
+          </p>
+          <div className={styles.heroActions}>
+            <Link href="/demo" className={styles.primaryButton}>
+              Открыть демо
+              <ArrowRightIcon aria-hidden="true" />
+            </Link>
+            <a href={contactHref} className={styles.secondaryButton}>Запросить пилот</a>
+          </div>
+          <small>Демо содержит только тестовые данные. Реальные компании и фото недоступны.</small>
+        </div>
+        <div className={styles.demoChecklist}>
+          <span><CheckCircleIcon aria-hidden="true" /> 12 единиц техники</span>
+          <span><CheckCircleIcon aria-hidden="true" /> 36 осмотров</span>
+          <span><CheckCircleIcon aria-hidden="true" /> Активные и закрытые дефекты</span>
+          <span><CheckCircleIcon aria-hidden="true" /> Пробег, фото и ДТП-сценарии</span>
+        </div>
+      </section>
+
       <section id="tariffs" className={styles.section}>
         <SectionTitle
           title="Тарифы для автопарков разного масштаба"
@@ -420,10 +478,9 @@ export default function LandingPage() {
         <SectionTitle title="FAQ" text="Короткие ответы на вопросы перед пилотным запуском." />
         <div className={styles.faq}>
           {faqs.map(([question, answer]) => (
-            <details key={question}>
-              <summary>{question}</summary>
+            <Accordion key={question} title={question}>
               <p>{answer}</p>
-            </details>
+            </Accordion>
           ))}
         </div>
       </section>
@@ -433,6 +490,17 @@ export default function LandingPage() {
         <p>Запустите AuditAvto на части автопарка и проверьте, насколько проще становится контроль техники, дефектов, пробега и ДТП.</p>
         <a href={contactHref} className={styles.primaryButton}>Запросить пилот <ArrowRightIcon aria-hidden="true" /></a>
       </section>
+
+      <footer className={styles.footer}>
+        <Link href="/" className={styles.footerBrand}>AuditAvto</Link>
+        <nav aria-label="Правовая информация">
+          <Link href="/privacy">Конфиденциальность</Link>
+          <Link href="/terms">Условия использования</Link>
+          <Link href="/security">Безопасность</Link>
+          <Link href="/cookie-policy">Cookies</Link>
+        </nav>
+        <a href="mailto:info@auditavto.ru">info@auditavto.ru</a>
+      </footer>
     </main>
   )
 }

@@ -24,6 +24,7 @@ import { StorageMetrics } from './_components/StorageMetrics'
 import { UpsellList } from './_components/UpsellList'
 import { useCompaniesFilter, useResourceAdminStats } from './_hooks/useResourceAdminStats'
 import { formatBytes, formatCurrency, formatNumber, formatPercent } from './_lib/resourceDashboard'
+import { Badge, NoticeCard, Skeleton } from '@/components/ui'
 
 export default function ResourceAdminDashboardPage() {
   const { stats, loading, error } = useResourceAdminStats()
@@ -46,17 +47,17 @@ export default function ResourceAdminDashboardPage() {
               </p>
             </div>
             {stats ? (
-              <div className="rounded-lg bg-blue-50 px-4 py-3 text-sm text-blue-800">
-                Активация: <span className="font-semibold">{formatPercent(stats.activation?.activationRate)}</span>
-              </div>
+              <Badge tone="info">Активация: {formatPercent(stats.activation?.activationRate)}</Badge>
             ) : null}
           </div>
         </div>
 
-        {error ? <div className="rounded-lg bg-red-50 px-4 py-3 text-sm text-red-700">{error}</div> : null}
+        {error ? <NoticeCard title="Не удалось загрузить дашборд ресурса" tone="danger">{error}</NoticeCard> : null}
 
         {loading ? (
-          <div className="rounded-lg border bg-white p-6 text-sm text-gray-600">Загрузка дашборда...</div>
+          <div className="grid gap-3 md:grid-cols-3 xl:grid-cols-6" aria-label="Загрузка дашборда ресурса">
+            {Array.from({ length: 6 }, (_, index) => <Skeleton key={index} className="h-28" />)}
+          </div>
         ) : stats ? (
           <>
             <div className="grid gap-3 md:grid-cols-3 xl:grid-cols-6">

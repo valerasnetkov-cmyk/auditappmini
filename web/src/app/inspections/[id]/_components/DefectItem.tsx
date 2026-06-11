@@ -120,7 +120,7 @@ export default function DefectItem({
 
               <label className="flex h-20 w-20 cursor-pointer items-center justify-center rounded border-2 border-dashed border-slate-300 transition-colors hover:border-blue-400 hover:bg-blue-50">
                 {uploading ? (
-                  <div className="h-6 w-6 animate-spin rounded-full border-b-2 border-blue-600"></div>
+                  <span className="ui-inline-spinner" aria-label="Загрузка фото" />
                 ) : (
                   <span className="text-2xl text-slate-400">+</span>
                 )}

@@ -251,7 +251,7 @@ export default function registerCompanyUsageRoutes({
   app.get('/api/company/usage', authenticate, (req, res) => {
     const companyId = req.user.company_id || 'default'
     const company = db.prepare(`
-      SELECT id, slug, name, status
+      SELECT id, slug, name, status, COALESCE(access_mode, 'standard') AS access_mode
       FROM companies
       WHERE id = ?
     `).get(companyId) || {
@@ -259,6 +259,7 @@ export default function registerCompanyUsageRoutes({
       slug: companyId,
       name: 'Компания',
       status: 'active',
+      access_mode: 'standard',
     }
     const limits = getCompanyLimits(companyId)
     const subscription = getCompanySubscriptionSummary(db, companyId)

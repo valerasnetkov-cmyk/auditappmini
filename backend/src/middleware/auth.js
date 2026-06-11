@@ -91,6 +91,10 @@ function rejectInvalidCookieOrigin(req, res, { sendError, apiMessages }) {
   return true
 }
 
+const DEMO_ALLOWED_UNSAFE_PATHS = new Set([
+  '/api/vehicles/resolve-number',
+])
+
 export function createAuthenticateMiddleware({ getDb, getApiMessages, sendError, isTenantUserEndpoint }) {
   return (req, res, next) => {
     const apiMessages = getApiMessages()
@@ -112,9 +116,11 @@ export function createAuthenticateMiddleware({ getDb, getApiMessages, sendError,
       }
 
       const user = db.prepare(`
-        SELECT id, email, name, role, status, company_id
-        FROM users
-        WHERE id = ?
+        SELECT u.id, u.email, u.name, u.role, u.status, u.company_id,
+               COALESCE(c.access_mode, 'standard') AS access_mode
+        FROM users u
+        LEFT JOIN companies c ON c.id = u.company_id
+        WHERE u.id = ?
       `).get(decoded.id)
 
       if (!user) {
@@ -135,6 +141,7 @@ export function createAuthenticateMiddleware({ getDb, getApiMessages, sendError,
         name: user.name,
         role: user.role,
         company_id: user.company_id || 'default',
+        access_mode: user.access_mode || 'standard',
       }
 
       if (req.user.role === 'admin' && isTenantUserEndpoint(req.path)) {
@@ -143,6 +150,17 @@ export function createAuthenticateMiddleware({ getDb, getApiMessages, sendError,
 
       if (rejectInvalidCookieOrigin(req, res, { sendError, apiMessages })) {
         return
+      }
+
+      if (
+        req.user.access_mode === 'demo_readonly'
+        && isUnsafeMethod(req.method)
+        && !DEMO_ALLOWED_UNSAFE_PATHS.has(req.path)
+      ) {
+        return res.status(403).json({
+          error: 'demo_read_only',
+          message: 'Это демо-режим. Изменение данных ограничено.',
+        })
       }
 
       if (bearerToken && !cookieToken) {

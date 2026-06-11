@@ -1,5 +1,6 @@
 @import "tailwindcss";
 @import "../styles/tokens.css";
+@import "../components/ui/ui.css";
 
 @theme inline {
   --color-primary: var(--color-brand-primary);
@@ -52,6 +53,89 @@
 html,
 body {
   min-height: 100%;
+}
+
+::selection {
+  background: var(--color-brand-primary-soft);
+  color: var(--color-text-primary);
+}
+
+.brand-mark-dark {
+  display: none;
+}
+
+[data-theme="dark"] .brand-mark-light {
+  display: none;
+}
+
+[data-theme="dark"] .brand-mark-dark {
+  display: block;
+}
+
+.evidence-card {
+  position: relative;
+  overflow: hidden;
+  border: 1px solid var(--color-border-default);
+  border-radius: var(--radius-card);
+  background: var(--color-bg-card);
+  box-shadow: var(--shadow-card);
+}
+
+.inspection-route {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.inspection-step {
+  border-left: 3px solid var(--color-border-strong);
+  padding: 0.75rem 1rem;
+  color: var(--color-text-secondary);
+}
+
+.inspection-step-active {
+  border-left-color: var(--color-evidence-marker);
+  background: var(--color-evidence-marker-soft);
+  color: var(--color-text-primary);
+}
+
+.inspection-step-complete {
+  border-left-color: var(--color-success);
+}
+
+.defect-marker {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 2px solid #fff;
+  border-radius: 999px;
+  background: var(--color-defect-marker);
+  color: var(--color-text-on-orange);
+  box-shadow: var(--shadow-card);
+}
+
+.odometer-display {
+  border-radius: var(--radius-control);
+  background: var(--color-odometer-surface);
+  padding: 0.75rem 1rem;
+  color: var(--color-odometer-text);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0;
+}
+
+.report-shell {
+  border: 1px solid var(--color-border-default);
+  background: var(--color-bg-elevated);
+}
+
+.vehicle-number-plate {
+  display: inline-flex;
+  border: 1px solid var(--color-border-strong);
+  border-radius: 4px;
+  background: #fff;
+  padding: 0.2rem 0.45rem;
+  color: #202020;
+  font-weight: 700;
+  letter-spacing: 0;
 }
 
 body {

@@ -2,6 +2,7 @@
 
 import type { FormEvent } from 'react'
 import type { RegionRecord } from '@/lib/types'
+import { NoticeCard, StatusButton } from '@/components/ui'
 import { normalizeVehicleNumber, VEHICLE_NUMBER_HELP } from '@/lib/vehicleNumber'
 import type { VehicleFormData } from '../_lib/vehicles'
 
@@ -29,8 +30,10 @@ export function VehicleForm({
   return (
     <form onSubmit={onSubmit}>
       <div className="space-y-4">
-        {formError ? <div className="alert-danger rounded-card px-4 py-3 text-sm">{formError}</div> : null}
-        {restrictionMessage ? <div className="alert-danger rounded-card px-4 py-3 text-sm">{restrictionMessage}</div> : null}
+        {formError ? <NoticeCard title="Проверьте данные" tone="danger" compact>{formError}</NoticeCard> : null}
+        {restrictionMessage && restrictionMessage !== formError ? (
+          <NoticeCard title="Изменения временно недоступны" tone="warning" compact>{restrictionMessage}</NoticeCard>
+        ) : null}
 
         <div>
           <label className="label">Госномер</label>
@@ -87,9 +90,15 @@ export function VehicleForm({
         <button type="button" onClick={onCancel} className="btn btn-secondary">
           Отмена
         </button>
-        <button type="submit" disabled={saving || Boolean(restrictionMessage)} className="btn btn-primary disabled:opacity-50">
-          {saving ? 'Сохранение...' : mode === 'create' ? 'Добавить' : 'Сохранить'}
-        </button>
+        <StatusButton
+          type="submit"
+          status={saving ? 'loading' : 'idle'}
+          loadingLabel="Сохраняем…"
+          disabled={Boolean(restrictionMessage)}
+          className="btn btn-primary disabled:opacity-50"
+        >
+          {mode === 'create' ? 'Добавить' : 'Сохранить'}
+        </StatusButton>
       </div>
     </form>
   )

@@ -17,7 +17,8 @@ import { NotificationsCard } from '@/app/_components/NotificationsCard'
 import { StatCard } from '@/app/_components/StatCard'
 import { useDashboard, useDashboardExport } from '@/app/_hooks/useDashboard'
 import { useToast } from '@/app/_hooks/useToast'
-import { getRangeStart, TOAST_CLASS_NAME, type DateRange } from '@/app/_lib/dashboard'
+import { getRangeStart, type DateRange } from '@/app/_lib/dashboard'
+import { Toast } from '@/components/ui'
 
 export const dynamic = 'force-dynamic'
 
@@ -225,7 +226,7 @@ export default function DashboardPage() {
         )}
       </div>
 
-      {toast ? <div className={TOAST_CLASS_NAME[toast.tone]}>{toast.text}</div> : null}
+      {toast ? <Toast text={toast.text} tone={toast.tone === 'danger' ? 'danger' : toast.tone} /> : null}
     </Layout>
   )
 }

@@ -1,6 +1,8 @@
 'use client'
 
+import type { ReactNode } from 'react'
 import SubscriptionStatusBanner from '@/components/SubscriptionStatusBanner'
+import { Badge, ProgressBar, Skeleton, StatusButton, Tooltip, type UiTone } from '@/components/ui'
 import type { CompanyFeatureAccess, CompanyResourceUsage, CompanyUsageResponse } from '@/lib/types'
 import {
   formatBillingStatus,
@@ -10,12 +12,18 @@ import {
   formatUsageValue,
   getFeatureClassName,
   getFeatureLabel,
-  getUsageBarWidth,
   getUsageHint,
-  getUsageTone,
 } from '../_lib/settings'
 
+function usageTone(usage: CompanyResourceUsage): UiTone {
+  if (usage.exceeded) return 'danger'
+  if (usage.percent !== null && usage.percent >= 90) return 'warning'
+  return 'success'
+}
+
 function ResourceUsageCard({ title, usage, unit }: { title: string; usage: CompanyResourceUsage; unit: string }) {
+  const percent = usage.unlimited ? 100 : Number(usage.percent || 0)
+  const tone = usageTone(usage)
   return (
     <div className="rounded-card border border-line bg-muted-surface p-4">
       <div className="flex items-start justify-between gap-3">
@@ -23,27 +31,22 @@ function ResourceUsageCard({ title, usage, unit }: { title: string; usage: Compa
           <p className="text-xs font-semibold uppercase tracking-wide text-foreground-muted">{title}</p>
           <p className="mt-2 text-xl font-bold text-foreground">{formatUsageValue(usage)}</p>
         </div>
-        <span className={usage.exceeded ? 'badge badge-danger' : 'badge badge-info'}>
+        <Badge tone={tone}>
           {usage.unlimited ? '∞' : `${usage.percent || 0}%`}
-        </span>
+        </Badge>
       </div>
-      <div className="mt-3 h-2 overflow-hidden rounded-full bg-soft-surface">
-        <div
-          className={`h-full rounded-full ${getUsageTone(usage)}`}
-          style={{ width: usage.unlimited ? '100%' : getUsageBarWidth(usage) }}
-        />
-      </div>
+      <div className="mt-3"><ProgressBar value={percent} tone={tone} label={title} detail={usage.unlimited ? 'Без лимита' : `${percent}%`} /></div>
       <p className="mt-2 text-xs text-foreground-muted">{getUsageHint(usage, unit)}</p>
     </div>
   )
 }
 
-function FeatureStatusCard({ title, feature }: { title: string; feature: CompanyFeatureAccess }) {
+function FeatureStatusCard({ title, feature }: { title: ReactNode; feature: CompanyFeatureAccess }) {
   return (
     <div className={`rounded-card border px-3 py-2 text-sm font-semibold ${getFeatureClassName(feature)}`}>
       <div className="flex items-center justify-between gap-2">
         <span>{title}</span>
-        <span>{getFeatureLabel(feature)}</span>
+        <Badge tone={feature.enabled ? 'success' : 'danger'}>{getFeatureLabel(feature)}</Badge>
       </div>
     </div>
   )
@@ -61,10 +64,10 @@ export function CompanyUsagePanel({
   if (loading && !usage) {
     return (
       <div className="card mb-4 p-4">
-        <div className="h-5 w-48 animate-pulse rounded bg-soft-surface" />
+        <Skeleton className="h-5 w-48" />
         <div className="mt-4 grid gap-3 sm:grid-cols-2">
-          <div className="h-28 animate-pulse rounded-card bg-soft-surface" />
-          <div className="h-28 animate-pulse rounded-card bg-soft-surface" />
+          <Skeleton className="h-28" />
+          <Skeleton className="h-28" />
         </div>
       </div>
     )
@@ -87,14 +90,14 @@ export function CompanyUsagePanel({
             {usage.billing ? ` · ${formatBillingStatus(usage.billing.status)} · до ${formatDate(usage.billing.paidUntil || usage.billing.trialUntil)}` : ''}
           </p>
         </div>
-        <button
+        <StatusButton
           type="button"
           onClick={onRefresh}
-          disabled={loading}
-          className="btn btn-secondary btn-sm disabled:opacity-50"
+          status={loading ? 'loading' : 'idle'}
+          loadingLabel="Обновляем…"
         >
-          {loading ? 'Обновление...' : 'Обновить'}
-        </button>
+          Обновить
+        </StatusButton>
       </div>
 
       <SubscriptionStatusBanner usage={usage} compact />
@@ -108,7 +111,10 @@ export function CompanyUsagePanel({
       </div>
 
       <div className="mt-4 grid gap-2 lg:grid-cols-3">
-        <FeatureStatusCard title="OCR номера и одометра" feature={usage.features.ocr} />
+        <FeatureStatusCard
+          title={<Tooltip content="Распознавание государственного номера и показаний одометра по фотографии">OCR номера и одометра</Tooltip>}
+          feature={usage.features.ocr}
+        />
         <FeatureStatusCard title="ДТП-осмотры" feature={usage.features.accidentModule} />
         <FeatureStatusCard title="Аналитика" feature={usage.features.analytics} />
         {usage.features.export ? <FeatureStatusCard title="Экспорт отчётов" feature={usage.features.export} /> : null}

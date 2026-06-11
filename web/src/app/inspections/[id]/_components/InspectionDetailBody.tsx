@@ -16,6 +16,7 @@ import PhotoRequirementsSection from './PhotoRequirementsSection'
 import StatusBanner from './StatusBanner'
 import WarningsBanner from './WarningsBanner'
 import type { ChecklistItem, StatusTone } from '../_lib/checklist'
+import { NoticeCard, StatusButton, Stepper, type StepItem } from '@/components/ui'
 
 export type InspectionBodyProps = {
   inspection: InspectionDetail
@@ -96,6 +97,51 @@ export default function InspectionDetailBody(props: InspectionBodyProps) {
     })
 
   const showError = (message: string) => props.onError('error', message)
+  const requiredPhotosComplete = Boolean(
+    props.photoRequirements &&
+    props.photoRequirements.requirements.required.every(
+      (photoType) => (props.inspectionPhotos[photoType] || []).length > 0,
+    ),
+  )
+  const defectEvidenceComplete = props.checklist
+    .filter((item) => !item.result)
+    .every((item) => (props.defectPhotos[item.title] || []).length > 0)
+  const measurementComplete = props.inspection.type === 'accident'
+    ? Boolean(props.accidentOccurredAt.trim() && props.accidentLocation.trim())
+    : Boolean(props.odometerValue.trim())
+  const readyStates = [
+    true,
+    true,
+    requiredPhotosComplete,
+    props.checklist.length > 0,
+    defectEvidenceComplete,
+    measurementComplete,
+    warnings.length === 0,
+  ]
+  const firstIncompleteStep = readyStates.findIndex((ready) => !ready)
+  const activeStep = props.inspection.completed
+    ? readyStates.length
+    : firstIncompleteStep === -1
+      ? readyStates.length - 1
+      : firstIncompleteStep
+  const stepLabels = [
+    ['Техника', 'Автомобиль выбран'],
+    ['Тип осмотра', 'Сценарий определён'],
+    ['Фото', 'Обязательные ракурсы'],
+    ['Чек-лист', 'Состояние узлов'],
+    ['Дефекты', 'Фото и комментарии'],
+    [props.inspection.type === 'accident' ? 'ДТП' : 'Одометр', 'Подтверждающие данные'],
+    ['Отчёт', 'Готовность к завершению'],
+  ]
+  const inspectionSteps: StepItem[] = stepLabels.map(([label, description], index) => ({
+    label,
+    description,
+    state: props.inspection.completed || index < activeStep
+      ? 'complete'
+      : index === activeStep
+        ? 'active'
+        : 'pending',
+  }))
 
   return (
     <Layout currentPage="inspections">
@@ -107,14 +153,16 @@ export default function InspectionDetailBody(props: InspectionBodyProps) {
         <SubscriptionStatusBanner usage={props.companyUsage} compact />
 
         {props.writeRestrictionMessage ? (
-          <div className="mb-4 rounded-card border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
-            {props.writeRestrictionMessage}
-          </div>
+          <div className="mb-4"><NoticeCard title="Редактирование ограничено" tone="warning" compact>{props.writeRestrictionMessage}</NoticeCard></div>
         ) : null}
 
         {warnings.length > 0 && !props.inspection.completed ? (
           <WarningsBanner warnings={warnings} />
         ) : null}
+
+        <section className="card mb-6 p-5">
+          <Stepper steps={inspectionSteps} label="Этапы осмотра" />
+        </section>
 
         <InspectionStats inspection={props.inspection} />
 
@@ -181,13 +229,14 @@ export default function InspectionDetailBody(props: InspectionBodyProps) {
           <Link href="/inspections" className="rounded-lg border px-6 py-2 hover:bg-slate-50">
             Назад
           </Link>
-          <button
+          <StatusButton
             onClick={props.onSave}
             disabled={props.saving || mutationsDisabled}
-            className="rounded-lg bg-blue-600 px-6 py-2 text-white hover:bg-blue-700 disabled:opacity-50"
+            status={props.saving ? 'loading' : 'idle'}
+            loadingLabel="Сохраняем осмотр…"
           >
-            {props.saving ? 'Сохранение...' : 'Сохранить осмотр'}
-          </button>
+            Сохранить осмотр
+          </StatusButton>
           {!props.inspection.completed ? (
             <button
               onClick={props.onComplete}

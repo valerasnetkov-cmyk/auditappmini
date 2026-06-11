@@ -18,6 +18,7 @@ export type AuthUser = {
   role: UserRole
   status?: 'active' | 'inactive'
   company_id?: string
+  access_mode?: 'standard' | 'demo_readonly' | string
 }
 
 export type LoginResponse = {
@@ -33,6 +34,7 @@ export type CompanyRecord = {
   id: string
   slug: string
   name: string
+  access_mode?: 'standard' | 'demo_readonly' | string
   region_code?: string
   data_residency?: string
   api_cluster_key?: string
@@ -383,6 +385,7 @@ export type CompanyUsageResponse = {
     id: string
     slug?: string | null
     name: string
+    access_mode?: 'standard' | 'demo_readonly' | string
     status: 'active' | 'inactive' | string
     region_code?: string | null
     data_residency?: string | null

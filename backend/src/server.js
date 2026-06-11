@@ -1,8 +1,9 @@
 import 'dotenv/config'
-import { closeDatabase, initDatabase } from './db.js'
-import { GRACEFUL_SHUTDOWN_TIMEOUT_MS } from './config.js'
+import { closeDatabase, getDb, initDatabase } from './db.js'
+import { GRACEFUL_SHUTDOWN_TIMEOUT_MS, PUBLIC_DEMO_ENABLED } from './config.js'
 import { isRedisConfigured, shutdownRedis } from './services/redisClient.js'
 import { createApp } from './app.js'
+import { provisionPublicDemo } from './seed/publicDemo.js'
 
 const PORT = process.env.PORT || 3001
 
@@ -86,7 +87,15 @@ if (typeof process.send === 'function') {
   })
 }
 
-initDatabase().then(() => {
+initDatabase().then(async () => {
+  if (PUBLIC_DEMO_ENABLED) {
+    await provisionPublicDemo({
+      db: getDb(),
+      password: process.env.PUBLIC_DEMO_PASSWORD,
+    })
+    console.log('Public demo company provisioned')
+  }
+
   server = app.listen(PORT, '0.0.0.0', () => {
     console.log(`вњ… Server running on http://0.0.0.0:${PORT}`)
   })

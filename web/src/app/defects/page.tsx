@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import { useSearchParams } from 'next/navigation'
 import Layout from '@/components/Layout'
+import { Badge, NoticeCard, Skeleton, StatusButton, type UiTone } from '@/components/ui'
 import api from '@/lib/api/client'
 import { requireAuthToken } from '@/lib/auth'
 import type { DefectRecord, InspectionType, VehicleListItem } from '@/lib/types'
@@ -17,16 +18,16 @@ function getTypeLabel(type?: string) {
   return type || 'Не указано'
 }
 
-function getTypeBadgeClass(type?: string) {
-  if (type === 'accident') return 'badge badge-danger'
-  if (type === 'scheduled') return 'badge badge-warning'
-  if (type === 'quick') return 'badge badge-info'
-  return 'badge badge-secondary'
+function getTypeBadgeTone(type?: string): UiTone {
+  if (type === 'accident') return 'danger'
+  if (type === 'scheduled') return 'warning'
+  if (type === 'quick') return 'info'
+  return 'neutral'
 }
 
-function getStatusBadgeClass(status?: string) {
-  if (status === 'closed') return 'badge badge-success'
-  return 'badge badge-warning'
+function getStatusBadgeTone(status?: string): UiTone {
+  if (status === 'closed') return 'success'
+  return 'warning'
 }
 
 function getStatusLabel(status?: string) {
@@ -149,9 +150,9 @@ export default function DefectsPage() {
               Единый журнал выявленных дефектов с быстрым переходом в карточку дефекта, осмотр и технику.
             </p>
           </div>
-          <button onClick={() => void loadData()} className="btn btn-primary">
+          <StatusButton onClick={() => void loadData()} status={loading ? 'loading' : 'idle'} loadingLabel="Обновляем…" className="btn btn-primary">
             Обновить
-          </button>
+          </StatusButton>
         </header>
 
         <section className="mb-6 grid grid-cols-1 gap-4 md:grid-cols-4">
@@ -224,10 +225,15 @@ export default function DefectsPage() {
           ) : null}
         </section>
 
-        {error ? <div className="alert-danger mb-4 rounded-card px-4 py-3 text-sm">{error}</div> : null}
+        {error ? <div className="mb-4"><NoticeCard title="Не удалось загрузить дефекты" tone="danger" compact>{error}</NoticeCard></div> : null}
 
         {loading ? (
-          <div className="card p-8 text-foreground-muted">Загрузка...</div>
+          <div className="table-card space-y-3 p-6">
+            <Skeleton className="h-10 w-full" />
+            <Skeleton className="h-14 w-full" />
+            <Skeleton className="h-14 w-full" />
+            <Skeleton className="h-14 w-full" />
+          </div>
         ) : (
           <section className="table-card">
             <div className="border-b border-line px-4 py-3 text-sm text-foreground-muted">
@@ -270,10 +276,10 @@ export default function DefectsPage() {
                         </td>
                         <td className="whitespace-nowrap px-4 py-3 text-foreground-secondary">{formatDateTime(defect.created_at)}</td>
                         <td className="whitespace-nowrap px-4 py-3">
-                          <span className={getTypeBadgeClass(defect.inspection_type)}>{getTypeLabel(defect.inspection_type)}</span>
+                          <Badge tone={getTypeBadgeTone(defect.inspection_type)}>{getTypeLabel(defect.inspection_type)}</Badge>
                         </td>
                         <td className="whitespace-nowrap px-4 py-3">
-                          <span className={getStatusBadgeClass(defect.status)}>{getStatusLabel(defect.status)}</span>
+                          <Badge tone={getStatusBadgeTone(defect.status)}>{getStatusLabel(defect.status)}</Badge>
                         </td>
                         <td className="whitespace-nowrap px-4 py-3 text-foreground-secondary">{defect.photos?.length ?? 0}</td>
                         <td className="whitespace-nowrap px-4 py-3">

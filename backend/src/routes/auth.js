@@ -6,9 +6,11 @@ import { v4 as uuidv4 } from 'uuid'
 import {
   JWT_SECRET,
   MFA_LOGIN_TOKEN_TTL,
+  PUBLIC_DEMO_ENABLED,
   PUBLIC_REGISTRATION_ENABLED,
 } from '../config.js'
 import { setAuthCookie, clearAuthCookie } from '../middleware/auth.js'
+import { PUBLIC_DEMO_COMPANY_ID, PUBLIC_DEMO_USER_ID } from '../seed/publicDemo.js'
 
 function getWebAppUrl() {
   return (process.env.WEB_APP_URL || process.env.FRONTEND_URL || 'http://localhost:3002').replace(/\/+$/, '')
@@ -75,6 +77,7 @@ function toAuthUser(user) {
     name: user.name,
     role: user.role,
     company_id: user.company_id || 'default',
+    access_mode: user.access_mode || 'standard',
   }
 }
 
@@ -247,7 +250,13 @@ export default function registerAuthRoutes({
     }
 
     const normalizedEmail = String(email).trim().toLowerCase()
-    const user = db.prepare('SELECT id, email, password, name, role, status, company_id, mfa_enabled, mfa_secret FROM users WHERE email = ?').get(normalizedEmail)
+    const user = db.prepare(`
+      SELECT u.id, u.email, u.password, u.name, u.role, u.status, u.company_id,
+             u.mfa_enabled, u.mfa_secret, COALESCE(c.access_mode, 'standard') AS access_mode
+      FROM users u
+      LEFT JOIN companies c ON c.id = u.company_id
+      WHERE u.email = ?
+    `).get(normalizedEmail)
     const passwordHash = user?.password || '$2a$10$J9e3WdYLmopA7LzXnxjx7Oq4FMdt0MBGDGg2po7GTL58e86qfqxxK'
     const passwordOk = bcrypt.compareSync(String(password), passwordHash)
 
@@ -264,6 +273,33 @@ export default function registerAuthRoutes({
         mfaRequired: true,
         mfaToken: createMfaLoginToken(user),
         user: toAuthUser(user),
+      })
+    }
+
+    markUserLogin(db, user.id)
+    return sendAuthSession(res, user)
+  })
+
+  app.post('/api/auth/demo', ...publicAuthRateLimit, (req, res) => {
+    if (!PUBLIC_DEMO_ENABLED) {
+      return res.status(404).json({
+        error: 'demo_unavailable',
+        message: 'Публичное демо сейчас недоступно.',
+      })
+    }
+
+    const user = db.prepare(`
+      SELECT u.id, u.email, u.name, u.role, u.status, u.company_id,
+             COALESCE(c.access_mode, 'standard') AS access_mode
+      FROM users u
+      JOIN companies c ON c.id = u.company_id
+      WHERE u.id = ? AND u.company_id = ? AND c.access_mode = 'demo_readonly'
+    `).get(PUBLIC_DEMO_USER_ID, PUBLIC_DEMO_COMPANY_ID)
+
+    if (!user || user.status === 'inactive') {
+      return res.status(503).json({
+        error: 'demo_unavailable',
+        message: 'Публичное демо ещё не подготовлено.',
       })
     }
 
@@ -439,7 +475,6 @@ export default function registerAuthRoutes({
   })
 
   app.get('/api/auth/me', authenticate, (req, res) => {
-    const user = getUserSummaryById(req.user.id)
-    res.json(user)
+    res.json(req.user)
   })
 }

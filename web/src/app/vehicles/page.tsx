@@ -7,6 +7,7 @@ import { useSearchParams } from 'next/navigation'
 import Layout from '@/components/Layout'
 import NewInspectionModal from '@/components/NewInspectionModal'
 import SubscriptionStatusBanner from '@/components/SubscriptionStatusBanner'
+import { NoticeCard, Skeleton, StatusButton } from '@/components/ui'
 import api from '@/lib/api/client'
 import { getCompanyOperationRestriction } from '@/lib/companyAccess'
 import { useCompanyUsage } from '@/lib/useCompanyUsage'
@@ -263,12 +264,12 @@ export default function VehiclesPage() {
         <SubscriptionStatusBanner usage={companyUsage} compact />
 
         {createRestrictionMessage ? (
-          <div className="alert-danger mb-4 rounded-card px-4 py-3 text-sm">
-            {createRestrictionMessage}
+          <div className="mb-4">
+            <NoticeCard title="Создание техники временно недоступно" tone="warning" compact>{createRestrictionMessage}</NoticeCard>
           </div>
         ) : null}
 
-        {error ? <div className="alert-danger mb-4 rounded-card px-4 py-3 text-sm">{error}</div> : null}
+        {error ? <div className="mb-4"><NoticeCard title="Не удалось выполнить действие" tone="danger" compact>{error}</NoticeCard></div> : null}
 
         <VehiclesFilters
           searchQuery={searchQuery}
@@ -302,9 +303,11 @@ export default function VehiclesPage() {
         </div>
 
         {loading ? (
-          <div className="py-12 text-center">
-            <div className="mx-auto h-8 w-8 animate-spin rounded-full border-b-2 border-primary"></div>
-            <p className="mt-3 text-sm text-foreground-muted">Загрузка техники...</p>
+          <div className="table-card space-y-3 p-6">
+            <Skeleton className="h-10 w-full" />
+            <Skeleton className="h-14 w-full" />
+            <Skeleton className="h-14 w-full" />
+            <Skeleton className="h-14 w-full" />
           </div>
         ) : (
           <VehiclesTable
@@ -330,12 +333,12 @@ export default function VehiclesPage() {
 
         {hasMoreVehicles ? (
           <div className="mt-6 flex justify-center">
-            <button
+            <StatusButton
               onClick={loadMore}
               className="btn btn-secondary"
             >
               Загрузить ещё
-            </button>
+            </StatusButton>
           </div>
         ) : null}
 

@@ -22,6 +22,10 @@ export const PUBLIC_REGISTRATION_ENABLED = process.env.PUBLIC_REGISTRATION_ENABL
   ? process.env.PUBLIC_REGISTRATION_ENABLED === 'true'
   : false
 
+export const PUBLIC_DEMO_ENABLED = process.env.PUBLIC_DEMO_ENABLED
+  ? process.env.PUBLIC_DEMO_ENABLED === 'true'
+  : false
+
 export const TRUST_PROXY = parseTrustProxy(process.env.TRUST_PROXY)
 
 export const SECURITY_HSTS_ENABLED = process.env.SECURITY_HSTS_ENABLED
@@ -151,6 +155,10 @@ export function assertProductionConfig() {
 
   if (PUBLIC_REGISTRATION_ENABLED) {
     throw new Error('PUBLIC_REGISTRATION_ENABLED must be false in production; company users are created by company owners')
+  }
+
+  if (PUBLIC_DEMO_ENABLED && String(process.env.PUBLIC_DEMO_PASSWORD || '').trim().length < 12) {
+    throw new Error('PUBLIC_DEMO_PASSWORD must contain at least 12 characters when public demo is enabled')
   }
 
   if (!hasEnvValue('TRUST_PROXY')) {

@@ -14,6 +14,14 @@ export function getCompanyOperationRestriction(
 ): CompanyOperationRestriction | null {
   if (!usage) return null
 
+  if (usage.company.access_mode === 'demo_readonly') {
+    return {
+      status: 'demo_readonly',
+      title: 'Демо-режим',
+      message: 'Изменение данных ограничено. Запросите пилот, чтобы протестировать сервис на своём автопарке.',
+    }
+  }
+
   if (usage.company.status === 'inactive') {
     return {
       status: 'inactive',

@@ -1,9 +1,7 @@
 'use client'
 
+import { EmptyState as SharedEmptyState } from '@/components/ui'
+
 export function EmptyState({ children }: { children: string }) {
-  return (
-    <div className="rounded-lg border border-dashed bg-slate-50 px-4 py-6 text-center text-sm text-slate-500">
-      {children}
-    </div>
-  )
+  return <SharedEmptyState title={children} description="Дополнительных действий сейчас не требуется." />
 }

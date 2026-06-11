@@ -10,6 +10,7 @@ import ManagerAccessDenied from '@/components/ManagerAccessDenied'
 import api from '@/lib/api/client'
 import { useCompanyOwnerAccess } from '@/lib/useCompanyOwnerAccess'
 import type { UserRecord } from '@/lib/types'
+import { Badge, EmptyState, NoticeCard, Skeleton, StatusButton, Tooltip } from '@/components/ui'
 
 function getRoleLabel(role: string) {
   if (role === 'manager') return 'Менеджер'
@@ -107,8 +108,9 @@ export default function AdminMfaUserPage() {
 
   if (ownerAccess.loading) {
     return (
-      <div className="flex min-h-screen items-center justify-center">
-        <div className="h-8 w-8 animate-spin rounded-full border-b-2 border-blue-600"></div>
+      <div className="mx-auto grid min-h-screen max-w-3xl content-center gap-3 p-6">
+        <Skeleton className="h-8 w-48" />
+        <Skeleton className="h-72" />
       </div>
     )
   }
@@ -125,8 +127,9 @@ export default function AdminMfaUserPage() {
 
   if (loading) {
     return (
-      <div className="flex min-h-screen items-center justify-center">
-        <div className="h-8 w-8 animate-spin rounded-full border-b-2 border-blue-600"></div>
+      <div className="mx-auto grid min-h-screen max-w-3xl content-center gap-3 p-6">
+        <Skeleton className="h-8 w-48" />
+        <Skeleton className="h-72" />
       </div>
     )
   }
@@ -144,15 +147,11 @@ export default function AdminMfaUserPage() {
         </div>
 
         {error ? (
-          <div className="mb-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-            {error}
-          </div>
+          <div className="mb-4"><NoticeCard title="Настройка MFA не выполнена" tone="danger" compact>{error}</NoticeCard></div>
         ) : null}
 
         {success ? (
-          <div className="mb-4 rounded-lg border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-700">
-            {success}
-          </div>
+          <div className="mb-4"><NoticeCard title="MFA обновлена" tone="success" compact>{success}</NoticeCard></div>
         ) : null}
 
         {user ? (
@@ -171,9 +170,7 @@ export default function AdminMfaUserPage() {
                 </p>
                 <p>
                   <span className="text-slate-500">MFA:</span>{' '}
-                  <span className={`font-medium ${user.mfa_enabled ? 'text-green-700' : 'text-slate-900'}`}>
-                    {user.mfa_enabled ? 'Включено' : 'Ещё не активировано'}
-                  </span>
+                  <Badge tone={user.mfa_enabled ? 'success' : 'warning'}>{user.mfa_enabled ? 'Включено' : 'Ещё не активировано'}</Badge>
                 </p>
               </div>
             </div>
@@ -184,13 +181,13 @@ export default function AdminMfaUserPage() {
                   <h2 className="text-lg font-semibold text-slate-900">Шаг 1. Выпустить секрет</h2>
                   <p className="mt-1 text-sm text-slate-500">Сформируйте QR-код и секрет для приложения-аутентификатора.</p>
                 </div>
-                <button
+                <StatusButton
                   onClick={handleSetup}
-                  disabled={setupLoading}
-                  className="rounded-lg bg-blue-600 px-4 py-2 text-white hover:bg-blue-700 disabled:opacity-50"
+                  status={setupLoading ? 'loading' : 'idle'}
+                  loadingLabel="Подготавливаем MFA…"
                 >
-                  {setupLoading ? 'Подготовка...' : 'Подготовить MFA'}
-                </button>
+                  Подготовить MFA
+                </StatusButton>
               </div>
 
           {otpauthUrl ? (
@@ -200,7 +197,7 @@ export default function AdminMfaUserPage() {
                     src={`https://chart.googleapis.com/chart?cht=qr&chs=300x300&chl=${encodeURIComponent(otpauthUrl)}`}
                     className="h-56 w-56 rounded-xl border border-slate-200 bg-white"
                   />
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                  <div className="flex flex-col gap-2">
                     <button
                       type="button"
                       className="rounded-md bg-slate-100 px-3 py-1 text-sm"
@@ -214,7 +211,9 @@ export default function AdminMfaUserPage() {
                     {/* Unified toast handles feedback; no inline copy indicator */}
                   </div>
                   <div className="flex-1">
-                    <h3 className="mb-2 font-medium text-slate-900">Ручной код</h3>
+                    <h3 className="mb-2 font-medium text-slate-900">
+                      <Tooltip content="Резервный способ подключения, если QR-код невозможно отсканировать">Ручной код</Tooltip>
+                    </h3>
                     <p className="mb-3 text-sm text-slate-500">
                       Если QR-код не подходит, можно ввести этот секрет вручную в приложении-аутентификаторе.
                     </p>
@@ -260,18 +259,19 @@ export default function AdminMfaUserPage() {
                   onChange={(event) => setCode(event.target.value)}
                   className="w-full rounded-lg border border-slate-200 px-4 py-2 sm:w-56"
                 />
-                <button
+                <StatusButton
                   onClick={handleVerify}
                   disabled={verifyLoading || !code.trim()}
-                  className="rounded-lg bg-green-600 px-4 py-2 text-white hover:bg-green-700 disabled:opacity-50"
+                  status={verifyLoading ? 'loading' : 'idle'}
+                  loadingLabel="Проверяем код…"
                 >
-                  {verifyLoading ? 'Проверка...' : 'Подтвердить'}
-                </button>
+                  Подтвердить
+                </StatusButton>
               </div>
             </div>
           </div>
         ) : (
-          <div className="rounded-lg border border-slate-200 bg-white px-4 py-6 text-slate-500">Пользователь не найден</div>
+          <EmptyState title="Пользователь не найден" description="Вернитесь к списку MFA и выберите существующего пользователя." />
         )}
       </div>
     </Layout>

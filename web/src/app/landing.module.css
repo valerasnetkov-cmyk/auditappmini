@@ -1,8 +1,8 @@
 .page {
   min-height: 100vh;
   overflow-x: hidden;
-  background: #f7faff;
-  color: #081225;
+  background: var(--color-bg-app);
+  color: var(--color-text-primary);
 }
 
 .shell {
@@ -13,7 +13,7 @@
 
 .panel {
   overflow: hidden;
-  border: 1px solid #dbe5f2;
+  border: 1px solid var(--color-border-default);
   border-radius: 22px;
   background: #fff;
   box-shadow: 0 22px 58px rgba(15, 23, 42, 0.065);
@@ -24,7 +24,7 @@
   align-items: center;
   justify-content: space-between;
   gap: 28px;
-  border-bottom: 1px solid #e1e8f2;
+  border-bottom: 1px solid var(--color-border-default);
   padding: 16px clamp(22px, 4vw, 64px);
 }
 
@@ -42,7 +42,7 @@
   display: flex;
   align-items: center;
   gap: 28px;
-  color: #50627c;
+  color: var(--color-text-secondary);
   font-size: 13px;
   font-weight: 620;
 }
@@ -65,7 +65,7 @@
   width: 18px;
   height: 18px;
   flex: 0 0 auto;
-  color: #0d6bff;
+  color: var(--color-brand-primary);
 }
 
 .hero {
@@ -80,9 +80,9 @@
 .heroCopy h1 {
   max-width: 730px;
   margin: 0;
-  color: #061025;
+  color: var(--color-text-primary);
   font-size: clamp(33px, 3.35vw, 48px);
-  font-weight: 680;
+  font-weight: 620;
   letter-spacing: 0;
   line-height: 1.14;
 }
@@ -90,7 +90,7 @@
 .heroCopy > p {
   max-width: 690px;
   margin: 18px 0 0;
-  color: #44546b;
+  color: var(--color-text-secondary);
   font-size: 18px;
   line-height: 1.58;
 }
@@ -119,15 +119,25 @@
 }
 
 .primaryButton {
-  border: 1px solid #0d6bff;
-  background: #0d6bff;
+  border: 1px solid var(--color-brand-primary);
+  background: var(--color-brand-primary);
   color: #fff;
-  box-shadow: 0 12px 26px rgba(13, 107, 255, 0.2);
+  box-shadow: var(--shadow-orange);
 }
 
 .primaryButton:hover,
 .secondaryButton:hover {
   transform: translateY(-1px);
+}
+
+.primaryButton:hover {
+  border-color: var(--color-brand-primary-hover);
+  background: var(--color-brand-primary-hover);
+}
+
+.secondaryButton:hover {
+  border-color: var(--color-brand-primary-line);
+  background: var(--color-brand-primary-soft);
 }
 
 .primaryButton svg {
@@ -137,14 +147,14 @@
 }
 
 .secondaryButton {
-  border: 1px solid #d8e2ef;
+  border: 1px solid var(--color-border-strong);
   background: #fff;
-  color: #0f1e35;
+  color: var(--color-text-primary);
 }
 
 .audience {
   margin-top: 12px !important;
-  color: #64748b !important;
+  color: var(--color-text-muted) !important;
   font-size: 14px !important;
 }
 
@@ -174,7 +184,7 @@
 .loginPanel,
 .benefitPanel,
 .faq details {
-  border: 1px solid #dfe8f4;
+  border: 1px solid var(--color-border-default);
   border-radius: 18px;
   background: #fff;
   box-shadow: 0 12px 28px rgba(15, 23, 42, 0.045);
@@ -187,7 +197,7 @@
 .cardIcon {
   width: 29px;
   height: 29px;
-  color: #0d6bff;
+  color: var(--color-brand-primary);
 }
 
 .smallCard h3,
@@ -200,7 +210,7 @@
 .finalCta h2,
 .sectionTitle h2 {
   margin: 0;
-  color: #071126;
+  color: var(--color-text-primary);
   font-weight: 720;
   letter-spacing: 0;
   line-height: 1.12;
@@ -220,7 +230,7 @@
 .sectionTitle p,
 .faq p {
   margin: 9px 0 0;
-  color: #52627a;
+  color: var(--color-text-secondary);
   font-size: 14px;
   line-height: 1.52;
 }
@@ -251,7 +261,7 @@
 .vehicleHeader span {
   display: block;
   margin-top: 3px;
-  color: #64748b;
+  color: var(--color-text-muted);
   font-size: 12px;
   font-weight: 700;
 }
@@ -268,16 +278,21 @@
 .vehiclePhoto {
   position: relative;
   height: 138px;
-  overflow: hidden;
   margin-top: 12px;
-  border-radius: 14px;
-  background: #eef5ff;
+  background: #fff;
 }
 
 .vehiclePhoto img,
 .imageFrame img,
 .defectPhotos img {
   object-fit: cover;
+}
+
+.vehiclePhoto img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  object-position: center;
 }
 
 .vehicleCard dl {
@@ -289,12 +304,12 @@
 }
 
 .vehicleCard dt {
-  color: #64748b;
+  color: var(--color-text-muted);
 }
 
 .vehicleCard dd {
   margin: 0;
-  color: #1f2a44;
+  color: var(--color-text-primary);
   font-weight: 750;
 }
 
@@ -304,12 +319,12 @@
   margin: 12px 0 0;
   padding: 0;
   list-style: none;
-  color: #52627a;
+  color: var(--color-text-secondary);
   font-size: 13px;
 }
 
 .checkHeader span {
-  color: #0d6bff;
+  color: var(--color-brand-primary);
   font-weight: 760;
 }
 
@@ -318,7 +333,7 @@
   overflow: hidden;
   margin-top: 12px;
   border-radius: 999px;
-  background: #e8eef7;
+  background: var(--color-bg-soft);
 }
 
 .progress span {
@@ -326,20 +341,20 @@
   width: 72%;
   height: 100%;
   border-radius: inherit;
-  background: #0d6bff;
+  background: var(--color-brand-primary);
 }
 
 .metricCard span,
 .metricCard small {
   display: block;
-  color: #64748b;
+  color: var(--color-text-muted);
   font-size: 13px;
 }
 
 .metricCard strong {
   display: block;
   margin-top: 7px;
-  color: #071126;
+  color: var(--color-text-primary);
   font-size: 28px;
   line-height: 1;
 }
@@ -351,7 +366,7 @@
 }
 
 .defectStrip {
-  grid-column: 2;
+  grid-column: 1 / -1;
 }
 
 .defectStrip span {
@@ -387,7 +402,7 @@
 
 .loginPanel h2 {
   margin: 0;
-  color: #071126;
+  color: var(--color-text-primary);
   font-size: 27px;
   font-weight: 720;
   line-height: 1.18;
@@ -395,13 +410,13 @@
 
 .loginPanel > p {
   margin: 12px 0 0;
-  color: #52627a;
+  color: var(--color-text-secondary);
   font-size: 16px;
 }
 
 .loginNote {
   margin-top: 24px;
-  color: #64748b;
+  color: var(--color-text-muted);
   font-size: 14px;
   font-weight: 650;
 }
@@ -411,7 +426,7 @@
   grid-template-columns: repeat(3, 1fr);
   gap: 16px;
   margin: 0 clamp(22px, 4vw, 64px) 32px;
-  border: 1px solid #dfe8f4;
+  border: 1px solid var(--color-border-default);
   border-radius: 18px;
   padding: 18px 20px;
   background: #fff;
@@ -429,15 +444,15 @@
   grid-row: span 2;
   width: 34px;
   height: 34px;
-  color: #0d6bff;
+  color: var(--color-brand-primary);
 }
 
 .securityStrip strong {
-  color: #071126;
+  color: var(--color-text-primary);
 }
 
 .securityStrip span {
-  color: #64748b;
+  color: var(--color-text-muted);
   font-size: 14px;
 }
 
@@ -478,7 +493,7 @@
   position: relative;
   min-height: 340px;
   overflow: hidden;
-  border: 1px solid #dfe8f4;
+  border: 1px solid var(--color-border-default);
   border-radius: 20px;
   background: #fff;
   box-shadow: 0 14px 34px rgba(15, 23, 42, 0.06);
@@ -504,7 +519,7 @@
 }
 
 .steps article {
-  border: 1px solid #dfe8f4;
+  border: 1px solid var(--color-border-default);
   border-radius: 18px;
   background: #fff;
   padding: 18px;
@@ -518,21 +533,21 @@
   width: 34px;
   height: 34px;
   border-radius: 12px;
-  background: #0d6bff;
+  background: var(--color-brand-primary);
   color: #fff;
   font-weight: 760;
 }
 
 .steps h3 {
   margin: 14px 0 0;
-  color: #071126;
+  color: var(--color-text-primary);
   font-size: 16px;
   font-weight: 760;
 }
 
 .steps p {
   margin: 8px 0 0;
-  color: #52627a;
+  color: var(--color-text-secondary);
   font-size: 14px;
   line-height: 1.5;
 }
@@ -564,7 +579,7 @@
 
 .productSection li,
 .benefitPanel li {
-  color: #334155;
+  color: var(--color-text-secondary);
   font-weight: 650;
 }
 
@@ -573,9 +588,9 @@
   grid-template-columns: 34px 1fr;
   column-gap: 12px;
   margin-top: 20px;
-  border: 1px solid #c7ddff;
+  border: 1px solid var(--color-brand-primary-line);
   border-radius: 16px;
-  background: #eef6ff;
+  background: var(--color-brand-primary-soft);
   padding: 16px;
 }
 
@@ -583,16 +598,16 @@
   grid-row: span 2;
   width: 30px;
   height: 30px;
-  color: #0d6bff;
+  color: var(--color-brand-primary);
 }
 
 .accentNote strong {
-  color: #071126;
+  color: var(--color-text-primary);
 }
 
 .accentNote span {
   margin-top: 4px;
-  color: #52627a;
+  color: var(--color-text-secondary);
   font-size: 14px;
 }
 
@@ -603,7 +618,6 @@
   align-items: center;
   padding: 30px;
 }
-
 .tariffGrid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -615,7 +629,7 @@
   display: flex;
   min-height: 100%;
   flex-direction: column;
-  border: 1px solid #dfe8f4;
+  border: 1px solid var(--color-border-default);
   border-radius: 18px;
   background: #fff;
   padding: 24px;
@@ -623,8 +637,8 @@
 }
 
 .tariffRecommended {
-  border-color: #8dbbff;
-  box-shadow: 0 18px 38px rgba(13, 107, 255, 0.11);
+  border-color: var(--color-brand-primary);
+  box-shadow: var(--shadow-orange);
 }
 
 .tariffHeader {
@@ -637,7 +651,7 @@
 
 .tariffHeader h3 {
   margin: 0;
-  color: #071126;
+  color: var(--color-text-primary);
   font-size: 21px;
   font-weight: 720;
   line-height: 1.2;
@@ -645,7 +659,7 @@
 
 .tariffHeader p {
   margin: 8px 0 0;
-  color: #52627a;
+  color: var(--color-text-secondary);
   font-size: 14px;
   line-height: 1.5;
 }
@@ -653,9 +667,9 @@
 .tariffHeader > span {
   flex: 0 0 auto;
   border-radius: 999px;
-  background: #eaf3ff;
+  background: var(--color-brand-primary-soft);
   padding: 6px 9px;
-  color: #075ed8;
+  color: var(--color-brand-primary-active);
   font-size: 11px;
   font-weight: 760;
 }
@@ -668,7 +682,7 @@
 }
 
 .tariffPrice strong {
-  color: #071126;
+  color: var(--color-text-primary);
   font-size: 29px;
   font-weight: 720;
   line-height: 1;
@@ -677,13 +691,48 @@
 .tariffPrice span,
 .tariffYearly,
 .tariffFootnote {
-  color: #64748b;
+  color: var(--color-text-muted);
   font-size: 13px;
+}
+
+.vehicleFacts {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 16px;
+}
+
+.vehicleFacts > div {
+  min-height: 82px;
+  border: 1px solid var(--color-border-muted);
+  border-radius: 10px;
+  background: var(--color-bg-muted);
+  padding: 12px;
+}
+
+.vehicleFacts span,
+.vehicleFacts small {
+  display: block;
+  color: var(--color-text-muted);
+  font-size: 11px;
+  line-height: 1.35;
+}
+
+.vehicleFacts strong {
+  display: block;
+  margin-top: 5px;
+  color: var(--color-text-primary);
+  font-size: 14px;
+  line-height: 1.25;
+}
+
+.vehicleFacts small {
+  margin-top: 4px;
 }
 
 .tariffYearly {
   margin: 8px 0 0;
-  color: #0d6bff;
+  color: var(--color-brand-primary);
   font-weight: 650;
 }
 
@@ -692,7 +741,7 @@
   gap: 10px;
   margin: 24px 0;
   padding: 20px 0 0;
-  border-top: 1px solid #e5ebf3;
+  border-top: 1px solid var(--color-border-muted);
   list-style: none;
 }
 
@@ -700,7 +749,7 @@
   display: flex;
   align-items: flex-start;
   gap: 9px;
-  color: #334155;
+  color: var(--color-text-secondary);
   font-size: 14px;
   line-height: 1.45;
 }
@@ -709,7 +758,7 @@
   width: 18px;
   height: 18px;
   flex: 0 0 auto;
-  color: #0d6bff;
+  color: var(--color-brand-primary);
 }
 
 .tariffCard > a {
@@ -735,13 +784,72 @@
   grid-template-columns: 1fr auto;
   gap: 28px;
   align-items: center;
-  border: 1px solid #cfe1ff;
+  border: 1px solid var(--color-brand-primary-line);
   background: #fff;
   box-shadow: 0 20px 48px rgba(15, 23, 42, 0.065);
 }
 
 .offerActions {
   margin-top: 0;
+}
+
+.demoSection {
+  display: grid;
+  grid-template-columns: minmax(0, 1.25fr) minmax(280px, 0.75fr);
+  gap: 36px;
+  align-items: center;
+  border: 1px solid var(--color-brand-primary-line);
+  border-radius: 22px;
+  background: var(--color-brand-primary-soft);
+  padding: clamp(28px, 5vw, 54px);
+}
+
+.demoSection h2 {
+  margin: 0;
+  color: var(--color-text-primary);
+  font-size: clamp(28px, 3vw, 40px);
+  line-height: 1.15;
+}
+
+.demoSection p {
+  max-width: 720px;
+  margin: 16px 0 0;
+  color: var(--color-text-secondary);
+  font-size: 17px;
+  line-height: 1.65;
+}
+
+.demoSection small {
+  display: block;
+  margin-top: 16px;
+  color: var(--color-text-muted);
+  font-size: 13px;
+}
+
+.demoChecklist {
+  display: grid;
+  gap: 12px;
+  border: 1px solid var(--color-border-default);
+  border-radius: 18px;
+  background: #fff;
+  padding: 24px;
+  box-shadow: var(--shadow-card);
+}
+
+.demoChecklist span {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--color-text-secondary);
+  font-size: 14px;
+  font-weight: 650;
+}
+
+.demoChecklist svg {
+  width: 20px;
+  height: 20px;
+  flex: 0 0 auto;
+  color: var(--color-brand-primary);
 }
 
 .faq {
@@ -756,14 +864,14 @@
 
 .faq summary {
   cursor: pointer;
-  color: #071126;
+  color: var(--color-text-primary);
   font-size: 16px;
   font-weight: 760;
 }
 
 .finalCta {
   margin-bottom: 48px;
-  background: #071126;
+  background: var(--color-text-primary);
   color: #fff;
   text-align: center;
 }
@@ -778,7 +886,35 @@
 
 .finalCta p {
   margin-bottom: 24px;
-  color: #d3deed;
+  color: #d6d3d1;
+}
+
+.footer {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  gap: 24px;
+  align-items: center;
+  max-width: 1240px;
+  margin: 0 auto;
+  padding: 0 28px 36px;
+  color: var(--color-text-muted);
+  font-size: 13px;
+}
+
+.footerBrand {
+  color: var(--color-text-primary);
+  font-weight: 760;
+}
+
+.footer nav {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 12px 20px;
+}
+
+.footer a:hover {
+  color: var(--color-brand-primary-active);
 }
 
 @media (max-width: 1180px) {
@@ -815,7 +951,8 @@
   .twoColumn,
   .productSection,
   .benefitPanel,
-  .offer {
+  .offer,
+  .demoSection {
     grid-template-columns: 1fr;
   }
 
@@ -893,6 +1030,10 @@
     grid-template-columns: 1fr;
   }
 
+  .vehicleFacts {
+    grid-template-columns: 1fr;
+  }
+
   .loginPanel {
     padding: 22px;
   }
@@ -930,5 +1071,12 @@
   .finalCta {
     border-radius: 0;
     padding: 36px 16px;
+  }
+
+  .footer {
+    grid-template-columns: 1fr;
+    justify-items: center;
+    padding: 0 16px 28px;
+    text-align: center;
   }
 }

@@ -4,6 +4,7 @@ import { FormEvent, useEffect, useMemo, useState } from 'react'
 import Layout from '@/components/Layout'
 import api from '@/lib/api/client'
 import type { ResourcePaymentPayload, SaasPaymentsResponse } from '@/lib/types'
+import { Badge, NoticeCard, Skeleton, StatusButton, type UiTone } from '@/components/ui'
 
 const today = new Date().toISOString().slice(0, 10)
 
@@ -47,10 +48,10 @@ function statusLabel(value?: string | null) {
   return labels[value || 'active'] || value || 'активна'
 }
 
-function statusClass(value?: string | null) {
-  if (value === 'expired' || value === 'suspended' || value === 'cancelled') return 'bg-red-50 text-red-700 ring-red-100'
-  if (value === 'expiring' || value === 'grace') return 'bg-amber-50 text-amber-700 ring-amber-100'
-  return 'bg-emerald-50 text-emerald-700 ring-emerald-100'
+function statusTone(value?: string | null): UiTone {
+  if (value === 'expired' || value === 'suspended' || value === 'cancelled') return 'danger'
+  if (value === 'expiring' || value === 'grace') return 'warning'
+  return 'success'
 }
 
 function MetricCard({ label, value, hint }: { label: string; value: string; hint?: string }) {
@@ -157,11 +158,11 @@ export default function ResourcePaymentsPage() {
           </p>
         </div>
 
-        {error ? <div className="rounded-lg bg-red-50 px-4 py-3 text-sm text-red-700">{error}</div> : null}
-        {message ? <div className="rounded-lg bg-emerald-50 px-4 py-3 text-sm text-emerald-700">{message}</div> : null}
+        {error ? <NoticeCard title="Операция с платежом не выполнена" tone="danger" compact>{error}</NoticeCard> : null}
+        {message ? <NoticeCard title="Платёж обновлён" tone="success" compact>{message}</NoticeCard> : null}
 
         {loading ? (
-          <div className="rounded-lg border bg-white p-6 text-sm text-gray-600">Загрузка платежей...</div>
+          <Skeleton className="h-48" />
         ) : data ? (
           <>
             <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-6">
@@ -191,9 +192,9 @@ export default function ResourcePaymentsPage() {
                 <input value={form.paymentMethod || ''} onChange={(event) => setForm({ ...form, paymentMethod: event.target.value })} className="rounded-lg border px-3 py-2 text-sm" placeholder="Способ оплаты" />
                 <input value={form.documentNumber || ''} onChange={(event) => setForm({ ...form, documentNumber: event.target.value })} className="rounded-lg border px-3 py-2 text-sm" placeholder="Счет / акт" />
                 <input value={form.comment || ''} onChange={(event) => setForm({ ...form, comment: event.target.value })} className="rounded-lg border px-3 py-2 text-sm xl:col-span-2" placeholder="Комментарий" />
-                <button type="submit" disabled={saving} className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">
+                <StatusButton type="submit" status={saving ? 'loading' : 'idle'} loadingLabel="Добавляем платёж…">
                   Добавить платеж
-                </button>
+                </StatusButton>
               </form>
             </section>
 
@@ -223,7 +224,7 @@ export default function ResourcePaymentsPage() {
                         <td className="px-4 py-3">{formatDate(subscription.currentPeriodEnd)}</td>
                         <td className="px-4 py-3">{subscription.daysUntilEnd === null || subscription.daysUntilEnd === undefined ? 'не указано' : `${subscription.daysUntilEnd} дн.`}</td>
                         <td className="px-4 py-3">{formatCurrency(subscription.mrrRub)}</td>
-                        <td className="px-4 py-3"><span className={`rounded-full px-2.5 py-1 text-xs font-semibold ring-1 ${statusClass(subscription.status)}`}>{statusLabel(subscription.status)}</span></td>
+                        <td className="px-4 py-3"><Badge tone={statusTone(subscription.status)}>{statusLabel(subscription.status)}</Badge></td>
                       </tr>
                     )) : (
                       <tr><td className="px-4 py-6 text-center text-gray-500" colSpan={7}>Подписок, требующих внимания, нет</td></tr>
@@ -260,7 +261,7 @@ export default function ResourcePaymentsPage() {
                         <td className="px-4 py-3">{formatCurrency(payment.amount, payment.currency)}</td>
                         <td className="px-4 py-3">{formatDate(payment.periodStart)} - {formatDate(payment.periodEnd)}</td>
                         <td className="px-4 py-3">{payment.documentNumber || 'нет'}</td>
-                        <td className="px-4 py-3"><span className={`rounded-full px-2.5 py-1 text-xs font-semibold ring-1 ${statusClass(payment.status)}`}>{statusLabel(payment.status)}</span></td>
+                        <td className="px-4 py-3"><Badge tone={statusTone(payment.status)}>{statusLabel(payment.status)}</Badge></td>
                         <td className="px-4 py-3">
                           {payment.status !== 'cancelled' ? (
                             <button type="button" onClick={() => void handleCancelPayment(payment.id)} disabled={saving} className="text-sm font-medium text-red-700 disabled:opacity-50">

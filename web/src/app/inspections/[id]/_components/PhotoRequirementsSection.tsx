@@ -3,6 +3,7 @@
 import { buildApiUrl } from '@/lib/api/client'
 import { getPhotoPreviewUrl, getPhotoThumbUrl } from '../_lib/checklist'
 import type { PhotoRecord, PhotoRequirementsResponse } from '@/lib/types'
+import { Badge, ProgressBar } from '@/components/ui'
 
 export default function PhotoRequirementsSection({
   requirements,
@@ -21,11 +22,25 @@ export default function PhotoRequirementsSection({
   onDelete: (photoType: string, photoIndex: number) => void
   disabled: boolean
 }) {
+  const required = requirements.requirements.required
+  const completedCount = required.filter((photoType) => (inspectionPhotos[photoType] || []).length > 0).length
+
   return (
     <div className="mb-6 rounded-xl border border-slate-200 bg-slate-50 p-4">
-      <h2 className="mb-3 text-base font-semibold text-slate-900">Обязательные фото осмотра</h2>
+      <div className="mb-4">
+        <h2 className="text-base font-semibold text-slate-900">Обязательные фото осмотра</h2>
+        <div className="mt-3">
+          <ProgressBar
+            value={completedCount}
+            max={required.length || 1}
+            label="Готовность фото"
+            detail={`${completedCount} из ${required.length}`}
+            tone={completedCount === required.length ? 'success' : 'warning'}
+          />
+        </div>
+      </div>
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-        {requirements.requirements.required.map((photoType) => {
+        {required.map((photoType) => {
           const photos = inspectionPhotos[photoType] || []
           const label = requirements.labels[photoType] || photoType
 
@@ -33,13 +48,9 @@ export default function PhotoRequirementsSection({
             <div key={photoType} className="rounded-lg border border-slate-200 bg-white p-3">
               <div className="mb-2 flex items-center justify-between gap-2">
                 <span className="text-sm font-medium text-slate-800">{label}</span>
-                <span
-                  className={`rounded px-2 py-0.5 text-xs ${
-                    photos.length ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700'
-                  }`}
-                >
+                <Badge tone={photos.length ? 'success' : 'warning'}>
                   {photos.length ? 'Добавлено' : 'Требуется'}
-                </span>
+                </Badge>
               </div>
 
               <div className="flex flex-wrap items-center gap-2">
@@ -68,7 +79,7 @@ export default function PhotoRequirementsSection({
 
                 <label className="flex h-20 w-20 cursor-pointer items-center justify-center rounded border-2 border-dashed border-slate-300 transition-colors hover:border-blue-400 hover:bg-blue-50">
                   {uploadingPhoto === photoType ? (
-                    <div className="h-6 w-6 animate-spin rounded-full border-b-2 border-blue-600"></div>
+                    <span className="ui-inline-spinner" aria-label="Загрузка фото" />
                   ) : (
                     <span className="text-2xl text-slate-400">+</span>
                   )}

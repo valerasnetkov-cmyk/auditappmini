@@ -7,6 +7,7 @@ import { useParams } from 'next/navigation'
 import Layout from '@/components/Layout'
 import SubscriptionStatusBanner from '@/components/SubscriptionStatusBanner'
 import Timeline from '@/components/Timeline'
+import { Badge, NoticeCard, Skeleton, StatusButton, type UiTone } from '@/components/ui'
 import { useToast } from '@/app/contexts/ToastContext'
 import api, { buildApiUrl } from '@/lib/api/client'
 import { requireAuthToken } from '@/lib/auth'
@@ -44,16 +45,16 @@ function getStatusLabel(status?: string) {
   return status || 'Открыт'
 }
 
-function getStatusClass(status?: string) {
-  if (status === 'closed') return 'badge badge-success'
-  return 'badge badge-warning'
+function getStatusTone(status?: string): UiTone {
+  if (status === 'closed') return 'success'
+  return 'warning'
 }
 
-function getInspectionTypeBadgeClass(type?: string) {
-  if (type === 'accident') return 'badge badge-danger'
-  if (type === 'scheduled') return 'badge badge-warning'
-  if (type === 'quick') return 'badge badge-info'
-  return 'badge badge-secondary'
+function getInspectionTypeTone(type?: string): UiTone {
+  if (type === 'accident') return 'danger'
+  if (type === 'scheduled') return 'warning'
+  if (type === 'quick') return 'info'
+  return 'neutral'
 }
 
 function formatDateTime(value?: string | null) {
@@ -186,7 +187,13 @@ export default function DefectDetailPage() {
   if (loading) {
     return (
       <Layout currentPage="defects">
-        <div className="flex min-h-[60vh] items-center justify-center p-6 text-foreground-muted">Загрузка...</div>
+        <div className="mx-auto min-h-[60vh] w-full max-w-6xl space-y-4 p-6">
+          <Skeleton className="h-8 w-64" />
+          <div className="grid gap-6 lg:grid-cols-[1.25fr,0.75fr]">
+            <Skeleton className="h-80 w-full" />
+            <Skeleton className="h-64 w-full" />
+          </div>
+        </div>
       </Layout>
     )
   }
@@ -219,9 +226,7 @@ export default function DefectDetailPage() {
             </Link>
             <div className="mt-2 flex flex-wrap items-center gap-3">
               <h1 className="page-title text-2xl">{defect.title}</h1>
-              <span className={getStatusClass(defect.status)}>
-                {getStatusLabel(defect.status)}
-              </span>
+              <Badge tone={getStatusTone(defect.status)}>{getStatusLabel(defect.status)}</Badge>
             </div>
             <p className="mt-1 text-foreground-muted">
               {defect.vehicle_number} · {defect.vehicle_name}
@@ -229,29 +234,33 @@ export default function DefectDetailPage() {
           </div>
 
           {defect.status === 'closed' ? (
-            <button
+            <StatusButton
               onClick={reopenDefect}
-              disabled={actionLoading || Boolean(writeRestrictionMessage)}
+              status={actionLoading ? 'loading' : 'idle'}
+              loadingLabel="Возвращаем…"
+              disabled={Boolean(writeRestrictionMessage)}
               className="btn btn-success disabled:opacity-50"
             >
               Вернуть в работу
-            </button>
+            </StatusButton>
           ) : (
-            <button
+            <StatusButton
               onClick={closeDefect}
-              disabled={actionLoading || Boolean(writeRestrictionMessage)}
+              status={actionLoading ? 'loading' : 'idle'}
+              loadingLabel="Закрываем…"
+              disabled={Boolean(writeRestrictionMessage)}
               className="btn btn-danger disabled:opacity-50"
             >
               Закрыть дефект
-            </button>
+            </StatusButton>
           )}
         </div>
 
         <SubscriptionStatusBanner usage={companyUsage} compact />
 
         {writeRestrictionMessage ? (
-          <div className="mb-4 rounded-card border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
-            {writeRestrictionMessage}
+          <div className="mb-4">
+            <NoticeCard title="Изменение статуса временно недоступно" tone="warning" compact>{writeRestrictionMessage}</NoticeCard>
           </div>
         ) : null}
 
@@ -295,7 +304,7 @@ export default function DefectDetailPage() {
                 <div>
                   <div className="text-foreground-muted">Тип осмотра</div>
                   <div className="mt-1">
-                    <span className={getInspectionTypeBadgeClass(defect.inspection_type)}>{getInspectionTypeLabel(defect.inspection_type)}</span>
+                    <Badge tone={getInspectionTypeTone(defect.inspection_type)}>{getInspectionTypeLabel(defect.inspection_type)}</Badge>
                   </div>
                 </div>
                 <div>

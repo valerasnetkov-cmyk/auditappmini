@@ -2,13 +2,14 @@
 
 import Link from 'next/link'
 import type { NotificationItem } from '@/lib/types'
+import { Badge } from '@/components/ui'
 
 export function NotificationsCard({ notifications }: { notifications: NotificationItem[] }) {
   return (
     <section className="card p-6">
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
         <h2 className="text-lg font-bold text-status-warning">Напоминания о плановых осмотрах</h2>
-        <span className="text-sm text-foreground-muted">{notifications.length} шт.</span>
+        <Badge tone={notifications.some((item) => item.is_overdue) ? 'danger' : 'warning'}>{notifications.length} шт.</Badge>
       </div>
       <div className="space-y-2">
         {notifications.slice(0, 3).map((notification) => (
