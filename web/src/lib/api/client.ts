@@ -27,6 +27,11 @@ import type {
   ResourceCompanyLimitsPayload,
   ResourcePaymentPayload,
   ResourcePlanPayload,
+  ResourceAccess,
+  ResourceServiceUser,
+  CompanyBillingDetails,
+  ServiceProfile,
+  NotificationTemplate,
   SaasAlertsResponse,
   SaasAdminStats,
   SaasCompanyDetailsResponse,
@@ -584,6 +589,61 @@ class ApiClient {
 
   async getSaasAdminStats() {
     return this.request<SaasAdminStats>('/admin/resource/stats')
+  }
+
+  async getResourceAccess() {
+    return this.request<ResourceAccess>('/admin/resource/access')
+  }
+
+  async getResourceCompanyRegistry(query = '') {
+    return this.request<{ companies: SaasAdminStats['companies'] }>(`/admin/resource/companies-list${query ? `?${query}` : ''}`)
+  }
+
+  async getCompanyBillingDetails(companyId: string) {
+    return this.request<CompanyBillingDetails>(`/admin/resource/companies/${companyId}/billing-details`)
+  }
+
+  async updateCompanyBillingDetails(companyId: string, data: CompanyBillingDetails) {
+    return this.request<CompanyBillingDetails>(`/admin/resource/companies/${companyId}/billing-details`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    })
+  }
+
+  async getResourceServiceUsers() {
+    return this.request<{ users: ResourceServiceUser[]; presets: Record<string, string[]>; permissions: string[] }>('/admin/resource/service-users')
+  }
+
+  async createResourceServiceUser(data: { email: string; name: string; password: string; preset: string; permissions?: string[] }) {
+    return this.request<ResourceServiceUser>('/admin/resource/service-users', { method: 'POST', body: JSON.stringify(data) })
+  }
+
+  async updateResourceServiceUser(id: string, data: Partial<ResourceServiceUser>) {
+    return this.request<ResourceServiceUser>(`/admin/resource/service-users/${id}`, { method: 'PUT', body: JSON.stringify(data) })
+  }
+
+  async updateResourceProfile(data: { name?: string; email?: string; password?: string }) {
+    return this.request<AuthUser>('/admin/resource/profile', { method: 'PUT', body: JSON.stringify(data) })
+  }
+
+  async getServiceProfile() {
+    return this.request<ServiceProfile>('/admin/resource/service-profile')
+  }
+
+  async updateServiceProfile(data: ServiceProfile) {
+    return this.request<ServiceProfile>('/admin/resource/service-profile', { method: 'PUT', body: JSON.stringify(data) })
+  }
+
+  async getNotificationTemplates() {
+    return this.request<{ templates: NotificationTemplate[] }>('/admin/resource/notification-templates')
+  }
+
+  async createNotificationTemplate(data: Partial<NotificationTemplate>) {
+    return this.request<NotificationTemplate>('/admin/resource/notification-templates', { method: 'POST', body: JSON.stringify(data) })
+  }
+
+  async createResourceMessage(data: { companyId: string; recipientUserId?: string; title: string; message: string; templateId?: string }) {
+    return this.request<{ created: number }>('/admin/resource/messages', { method: 'POST', body: JSON.stringify(data) })
   }
 
   async getResourcePayments() {

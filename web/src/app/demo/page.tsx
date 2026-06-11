@@ -12,8 +12,16 @@ import {
 import { DemoLoginButton } from './DemoLoginButton'
 
 export const metadata: Metadata = {
-  title: 'Демо AuditAvto — контроль техники на тестовом автопарке',
+  title: 'Демо системы контроля автопарка',
   description: 'Откройте демо-кабинет AuditAvto с тестовыми осмотрами, дефектами, фото и историей пробега.',
+  alternates: {
+    canonical: '/demo',
+  },
+  openGraph: {
+    url: '/demo',
+    title: 'Демо системы контроля автопарка | AuditAvto',
+    description: 'Посмотрите тестовый автопарк, осмотры, фотофиксацию, дефекты и аналитику AuditAvto.',
+  },
 }
 
 const pilotHref = 'mailto:info@auditavto.ru?subject=Запустить пилот AuditAvto'

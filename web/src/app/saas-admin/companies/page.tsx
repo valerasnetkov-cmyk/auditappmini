@@ -1,6 +1,7 @@
 'use client'
 
 import { useCallback, useEffect } from 'react'
+import { useSearchParams } from 'next/navigation'
 import Layout from '@/components/Layout'
 import CreateCompanyForm from './_components/CreateCompanyForm'
 import CreateOwnerForm from './_components/CreateOwnerForm'
@@ -20,6 +21,7 @@ import {
 
 export default function ResourceCompaniesPage() {
   const list = useCompaniesList()
+  const searchParams = useSearchParams()
   const companyForm = useCompanyFormState()
   const ownerForm = useOwnerFormState(list.companies)
   const limitForm = useLimitFormState(list.companies)
@@ -46,11 +48,11 @@ export default function ResourceCompaniesPage() {
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
-      void list.loadStats()
+      void list.loadStats(searchParams.toString())
     }, 0)
     return () => window.clearTimeout(timer)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+  }, [searchParams])
 
   return (
     <Layout currentPage="resource-companies">

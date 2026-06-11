@@ -196,6 +196,56 @@ async function run() {
       throw new Error(`Owner setup completion failed: ${JSON.stringify(ownerSetupComplete)}`)
     }
 
+    const billingDetails = await request(`/api/admin/resource/companies/${company.id}/billing-details`, {
+      method: 'PUT',
+      headers: jsonHeaders,
+      body: JSON.stringify({
+        legal_name: 'ООО Ресурс Смоук',
+        inn: '6500000000',
+        billing_email: `billing-${suffix}@example.com`,
+      }),
+    })
+    if (billingDetails.inn !== '6500000000') throw new Error(`Billing details update failed: ${JSON.stringify(billingDetails)}`)
+
+    const template = await request('/api/admin/resource/notification-templates', {
+      method: 'POST',
+      headers: jsonHeaders,
+      body: JSON.stringify({ code: `maintenance-${suffix}`, title: 'Плановые работы', body: 'Сервис временно недоступен.' }),
+    }, 201)
+    const manualMessage = await request('/api/admin/resource/messages', {
+      method: 'POST',
+      headers: jsonHeaders,
+      body: JSON.stringify({ companyId: company.id, title: template.title, message: template.body, templateId: template.id }),
+    }, 201)
+    if (manualMessage.created < 1) throw new Error(`Manual message was not created: ${JSON.stringify(manualMessage)}`)
+
+    await request('/api/admin/resource/service-profile', {
+      method: 'PUT',
+      headers: jsonHeaders,
+      body: JSON.stringify({ service_name: 'AuditAvto Smoke', inn: '6500000000', bank_name: 'Smoke Bank' }),
+    })
+
+    const resourceManagerEmail = `resource-manager-${suffix}@example.com`
+    await request('/api/admin/resource/service-users', {
+      method: 'POST',
+      headers: jsonHeaders,
+      body: JSON.stringify({
+        email: resourceManagerEmail,
+        name: 'Support Manager',
+        password: 'ResourceManager123!',
+        preset: 'support',
+      }),
+    }, 201)
+    const resourceManagerLogin = await request('/api/auth/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email: resourceManagerEmail, password: 'ResourceManager123!' }),
+    })
+    const resourceManagerHeaders = { Authorization: `Bearer ${resourceManagerLogin.token}` }
+    await request('/api/admin/resource/companies-list', { headers: resourceManagerHeaders })
+    await request('/api/admin/resource/payments', { headers: resourceManagerHeaders }, 403)
+    await request('/api/vehicles', { headers: resourceManagerHeaders }, 403)
+
     const plan = await request('/api/admin/resource/plans', {
       method: 'POST',
       headers: jsonHeaders,
@@ -472,6 +522,8 @@ async function run() {
       legacyAliasOk: legacyAlias.totals?.companies === stats.totals?.companies,
       adminTenantEndpointsDenied: deniedTenantEndpoints.length,
       resourceAdminDeniedForTenantRoles: Boolean(tenantManager.id),
+      resourceManagerRbacOk: true,
+      manualMessageRecipients: manualMessage.created,
     }, null, 2))
   } finally {
     server.kill()

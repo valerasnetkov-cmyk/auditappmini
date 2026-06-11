@@ -14,6 +14,7 @@ import { DashboardFilters } from '@/app/_components/DashboardFilters'
 import { DashboardLoading } from '@/app/_components/DashboardLoading'
 import { EmptyDashboard } from '@/app/_components/EmptyDashboard'
 import { NotificationsCard } from '@/app/_components/NotificationsCard'
+import { ServiceMessagesCard } from '@/app/_components/ServiceMessagesCard'
 import { StatCard } from '@/app/_components/StatCard'
 import { useDashboard, useDashboardExport } from '@/app/_hooks/useDashboard'
 import { useToast } from '@/app/_hooks/useToast'
@@ -66,7 +67,7 @@ export default function DashboardPage() {
         return
       }
 
-      if (result.data?.role === 'admin') {
+      if (result.data?.role === 'admin' || result.data?.role === 'resource_manager') {
         router.replace('/saas-admin/dashboard')
         return
       }
@@ -221,6 +222,7 @@ export default function DashboardPage() {
               </>
             )}
 
+            <ServiceMessagesCard messages={dashboard.usage?.alerts || []} />
             {dashboard.notifications.length ? <NotificationsCard notifications={dashboard.notifications} /> : null}
           </>
         )}

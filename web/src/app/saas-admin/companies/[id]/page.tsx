@@ -11,6 +11,7 @@ import CompanyEditForm from './_components/CompanyEditForm'
 import LimitsForm from './_components/LimitsForm'
 import OwnersSection from './_components/OwnersSection'
 import PaymentsList from './_components/PaymentsList'
+import BillingDetailsForm from './_components/BillingDetailsForm'
 import { useCompanyDetails } from './_hooks/useCompanyDetails'
 
 export default function ResourceCompanyDetailsPage() {
@@ -153,6 +154,8 @@ export default function ResourceCompanyDetailsPage() {
               onSubmit={handleLimitsSave}
               saving={details.saving}
             />
+
+            <BillingDetailsForm companyId={companyId} />
 
             <div className="grid gap-4 xl:grid-cols-2">
               <PaymentsList payments={details.data.payments} />

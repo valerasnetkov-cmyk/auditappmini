@@ -18,13 +18,13 @@ export default function CreateCompanyForm({ form, setForm, onSubmit, saving }: P
       <div className="mt-4 grid gap-3 md:grid-cols-3">
         <input
           className="rounded-lg border px-3 py-2"
-          placeholder="id"
+          placeholder="ID (необязательно)"
           value={form.id}
           onChange={(event) => setForm((prev) => ({ ...prev, id: event.target.value }))}
         />
         <input
           className="rounded-lg border px-3 py-2"
-          placeholder="slug"
+          placeholder="Slug (создастся автоматически)"
           value={form.slug}
           onChange={(event) => setForm((prev) => ({ ...prev, slug: event.target.value }))}
         />

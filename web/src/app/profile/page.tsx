@@ -3,8 +3,8 @@
 import { useEffect, useState } from 'react'
 import Layout from '@/components/Layout'
 import api from '@/lib/api/client'
-import { clearAuthToken, isAdminRole, requireAuthToken } from '@/lib/auth'
-import type { AnalyticsOverview, AuthUser, DashboardStats } from '@/lib/types'
+import { clearAuthToken, isResourceRole, requireAuthToken } from '@/lib/auth'
+import type { AnalyticsOverview, AuthUser, DashboardStats, ServiceProfile } from '@/lib/types'
 
 type ProfileStats = {
   totalVehicles: number
@@ -20,12 +20,14 @@ function getRoleLabel(role: string) {
   if (role === 'manager') return 'Менеджер'
   if (role === 'inspector') return 'Инспектор'
   if (role === 'admin') return 'Администратор'
+  if (role === 'resource_manager') return 'Сотрудник SaaS'
   return role
 }
 
 function getRoleStyle(role: string) {
   if (role === 'manager') return 'bg-purple-100 text-purple-800'
   if (role === 'admin') return 'bg-red-100 text-red-800'
+  if (role === 'resource_manager') return 'bg-amber-100 text-amber-800'
   return 'bg-blue-100 text-blue-800'
 }
 
@@ -35,6 +37,9 @@ export default function ProfilePage() {
   const [error, setError] = useState('')
   const [stats, setStats] = useState<ProfileStats | null>(null)
   const [analyticsDisabled, setAnalyticsDisabled] = useState(false)
+  const [profileForm, setProfileForm] = useState({ name: '', email: '', password: '' })
+  const [serviceProfile, setServiceProfile] = useState<ServiceProfile | null>(null)
+  const [message, setMessage] = useState('')
 
   useEffect(() => {
     if (!requireAuthToken()) return
@@ -61,10 +66,15 @@ export default function ProfilePage() {
 
       if (authResult.data) {
         setUser(authResult.data)
+        setProfileForm({ name: authResult.data.name, email: authResult.data.email, password: '' })
       }
 
-      if (isAdminRole(authResult.data?.role)) {
-        const resourceResult = await api.getSaasAdminStats()
+      if (isResourceRole(authResult.data?.role)) {
+        const [resourceResult, serviceProfileResult] = await Promise.all([
+          api.getSaasAdminStats(),
+          api.getServiceProfile(),
+        ])
+        if (serviceProfileResult.data) setServiceProfile(serviceProfileResult.data)
 
         if (resourceResult.error) {
           setError(resourceResult.error)
@@ -132,6 +142,24 @@ export default function ProfilePage() {
     window.location.reload()
   }
 
+  const savePersonalProfile = async () => {
+    const result = await api.updateResourceProfile(profileForm)
+    if (result.data) {
+      setUser(result.data)
+      setProfileForm((current) => ({ ...current, password: '' }))
+      setMessage('Личные данные обновлены')
+    } else setError(result.error || 'Не удалось обновить профиль')
+  }
+
+  const saveServiceProfile = async () => {
+    if (!serviceProfile) return
+    const result = await api.updateServiceProfile(serviceProfile)
+    if (result.data) {
+      setServiceProfile(result.data)
+      setMessage('Реквизиты сервиса обновлены')
+    } else setError(result.error || 'Не удалось обновить реквизиты')
+  }
+
   if (loading) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-gray-100">
@@ -150,6 +178,7 @@ export default function ProfilePage() {
             {error}
           </div>
         ) : null}
+        {message ? <div className="mb-4 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">{message}</div> : null}
 
         <div className="max-w-2xl">
           <div className="mb-6 rounded-lg bg-white p-6 shadow">
@@ -193,6 +222,43 @@ export default function ProfilePage() {
                   <div className="text-sm text-gray-600">{stats.adminSummary ? 'MRR' : analyticsDisabled ? 'Сегодня' : 'За неделю'}</div>
                 </div>
               </div>
+            </div>
+          ) : null}
+
+          {user && isResourceRole(user.role) ? (
+            <div className="mb-6 rounded-lg bg-white p-6 shadow">
+              <h3 className="font-semibold">Личные данные</h3>
+              <div className="mt-4 grid gap-3 md:grid-cols-2">
+                <input className="rounded-lg border px-3 py-2" value={profileForm.name} onChange={(e) => setProfileForm({ ...profileForm, name: e.target.value })} placeholder="Имя" />
+                <input className="rounded-lg border px-3 py-2" type="email" value={profileForm.email} onChange={(e) => setProfileForm({ ...profileForm, email: e.target.value })} placeholder="Email" />
+                <input className="rounded-lg border px-3 py-2 md:col-span-2" type="password" minLength={8} value={profileForm.password} onChange={(e) => setProfileForm({ ...profileForm, password: e.target.value })} placeholder="Новый пароль (необязательно)" />
+              </div>
+              <button type="button" onClick={() => void savePersonalProfile()} className="mt-4 rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white">Сохранить профиль</button>
+            </div>
+          ) : null}
+
+          {serviceProfile ? (
+            <div className="mb-6 rounded-lg bg-white p-6 shadow">
+              <h3 className="font-semibold">Реквизиты SaaS-сервиса</h3>
+              <div className="mt-4 grid gap-3 md:grid-cols-2">
+                {[
+                  ['service_name', 'Название сервиса'], ['legal_name', 'Юридическое название'],
+                  ['inn', 'ИНН'], ['kpp', 'КПП'], ['ogrn', 'ОГРН'], ['bank_name', 'Банк'],
+                  ['bik', 'БИК'], ['bank_account', 'Расчётный счёт'],
+                  ['correspondent_account', 'Корреспондентский счёт'], ['billing_email', 'Billing email'],
+                  ['support_email', 'Email поддержки'], ['support_phone', 'Телефон поддержки'],
+                  ['legal_address', 'Юридический адрес'], ['postal_address', 'Почтовый адрес'],
+                ].map(([field, label]) => (
+                  <input
+                    key={field}
+                    className="rounded-lg border px-3 py-2"
+                    placeholder={label}
+                    value={String(serviceProfile[field as keyof ServiceProfile] || '')}
+                    onChange={(e) => setServiceProfile({ ...serviceProfile, [field]: e.target.value })}
+                  />
+                ))}
+              </div>
+              <button type="button" onClick={() => void saveServiceProfile()} className="mt-4 rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white">Сохранить реквизиты</button>
             </div>
           ) : null}
 

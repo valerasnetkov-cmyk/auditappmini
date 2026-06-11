@@ -1,5 +1,7 @@
 import bcrypt from 'bcryptjs'
 import { v4 as uuidv4 } from 'uuid'
+import { hasResourcePermission } from '../services/resourcePermissions.js'
+import { uniqueCompanySlug } from './adminOperations.js'
 
 function toNumber(value) {
   return Number(value || 0)
@@ -361,7 +363,7 @@ function getCompanies(db) {
     LEFT JOIN (
       SELECT company_id, COUNT(*) as users
       FROM users
-      WHERE role != 'admin'
+      WHERE role NOT IN ('admin', 'resource_manager')
       GROUP BY company_id
     ) users ON users.company_id = c.id
     LEFT JOIN (
@@ -480,7 +482,7 @@ function getTotals(db) {
       (SELECT COUNT(DISTINCT company_id) FROM inspections WHERE created_at >= datetime('now', '-7 days')) as activeCompanies7d,
       (SELECT COUNT(DISTINCT company_id) FROM inspections WHERE created_at >= datetime('now', '-30 days')) as activeCompanies30d,
       (SELECT COUNT(*) FROM companies WHERE status = 'inactive') as inactiveCompanies,
-      (SELECT COUNT(*) FROM users WHERE role != 'admin') as tenantUsers,
+      (SELECT COUNT(*) FROM users WHERE role NOT IN ('admin', 'resource_manager')) as tenantUsers,
       (SELECT COUNT(*) FROM users WHERE role = 'owner') as owners,
       (SELECT COUNT(*) FROM users WHERE role = 'manager') as managers,
       (SELECT COUNT(*) FROM users WHERE role = 'inspector') as inspectors,
@@ -1007,7 +1009,7 @@ function buildHealthCenter(db, companies) {
     inspections: count(db, `SELECT COUNT(*) as count FROM inspections i LEFT JOIN companies c ON c.id = i.company_id WHERE c.id IS NULL`),
     defects: count(db, `SELECT COUNT(*) as count FROM defects d LEFT JOIN companies c ON c.id = d.company_id WHERE c.id IS NULL`),
     photos: count(db, `SELECT COUNT(*) as count FROM photos p LEFT JOIN companies c ON c.id = p.company_id WHERE c.id IS NULL`),
-    users: count(db, `SELECT COUNT(*) as count FROM users u LEFT JOIN companies c ON c.id = u.company_id WHERE u.role != 'admin' AND c.id IS NULL`),
+    users: count(db, `SELECT COUNT(*) as count FROM users u LEFT JOIN companies c ON c.id = u.company_id WHERE u.role NOT IN ('admin', 'resource_manager') AND c.id IS NULL`),
   }
 
   return {
@@ -1598,6 +1600,15 @@ export function scanSubscriptionAlerts(db, { actorUserId = null, actorRole = 'sy
 
 export default function registerSaasAdminRoutes({ app, db, authenticate, ensureAdmin, sendError, API_MESSAGES, createOwnerSetupInvitation }) {
   function requireAdmin(req, res) {
+    if (req.user?.role === 'admin') return true
+    const path = req.path
+    const method = req.method
+    let permission = 'dashboard.view'
+    if (path.includes('/payments')) permission = method === 'GET' ? 'payments.view' : 'payments.manage'
+    else if (path.includes('/alerts')) permission = method === 'GET' ? 'notifications.view' : 'notifications.manage'
+    else if (path.includes('/plans')) permission = method === 'GET' ? 'plans.view' : 'plans.manage'
+    else if (path.includes('/companies') || path.includes('/owners')) permission = method === 'GET' ? 'companies.view' : 'companies.manage'
+    if (hasResourcePermission(db, req.user, permission)) return true
     return ensureAdmin(req, res)
   }
 
@@ -1605,7 +1616,14 @@ export default function registerSaasAdminRoutes({ app, db, authenticate, ensureA
     if (!requireAdmin(req, res)) return
 
     try {
-      res.json(buildResourceAdminStats(db))
+      const stats = buildResourceAdminStats(db)
+      if (req.user?.role !== 'admin' && !hasResourcePermission(db, req.user, 'payments.view')) {
+        delete stats.billing
+        delete stats.recent_payments
+        delete stats.expiring_subscriptions
+        stats.companies = stats.companies.map(({ billing, ...company }) => company)
+      }
+      res.json(stats)
     } catch (error) {
       console.error('Resource admin stats error:', error)
       sendError(res, 500, API_MESSAGES.internalServerError)
@@ -1621,6 +1639,13 @@ export default function registerSaasAdminRoutes({ app, db, authenticate, ensureA
     if (!requireAdmin(req, res)) return
     const details = buildResourceCompanyDetails(db, req.params.id)
     if (!details) return sendCompanyNotFound(res, sendError)
+    if (req.user?.role !== 'admin' && !hasResourcePermission(db, req.user, 'payments.view')) {
+      details.payments = []
+      delete details.company.billing
+    }
+    if (req.user?.role !== 'admin' && !hasResourcePermission(db, req.user, 'notifications.view')) {
+      details.alerts = []
+    }
     res.json(details)
   })
 
@@ -1759,8 +1784,8 @@ export default function registerSaasAdminRoutes({ app, db, authenticate, ensureA
   app.post('/api/admin/resource/companies', authenticate, (req, res) => {
     if (!requireAdmin(req, res)) return
 
-    const slug = normalizeIdentifier(req.body?.slug)
     const name = normalizeText(req.body?.name)
+    const slug = normalizeIdentifier(req.body?.slug) || uniqueCompanySlug(db, name)
     const id = normalizeIdentifier(req.body?.id || slug)
 
     if (!id || !slug || !name) {
@@ -1820,6 +1845,9 @@ export default function registerSaasAdminRoutes({ app, db, authenticate, ensureA
 
     const slug = req.body?.slug === undefined ? existing.slug : normalizeIdentifier(req.body.slug)
     const name = req.body?.name === undefined ? existing.name : normalizeText(req.body.name)
+    if (req.user?.role !== 'admin' && slug !== existing.slug) {
+      return sendError(res, 403, 'Only the main resource administrator can change company slug')
+    }
 
     if (!slug || !name) {
       return sendError(res, 400, 'Company slug and name are required')

@@ -9,6 +9,10 @@ export function createRoleGuards({ sendError, API_MESSAGES }) {
     return req.user?.role === 'admin'
   }
 
+  function isResourceUser(req) {
+    return req.user?.role === 'admin' || req.user?.role === 'resource_manager'
+  }
+
   function isCompanyOwner(req) {
     return req.user?.role === 'owner'
   }
@@ -59,6 +63,7 @@ export function createRoleGuards({ sendError, API_MESSAGES }) {
   return {
     isManager,
     isAdmin,
+    isResourceUser,
     isCompanyOwner,
     isSelf,
     ensureManager,

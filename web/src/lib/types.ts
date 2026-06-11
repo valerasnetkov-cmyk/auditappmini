@@ -21,6 +21,66 @@ export type AuthUser = {
   access_mode?: 'standard' | 'demo_readonly' | string
 }
 
+export type ResourceAccess = {
+  role: string
+  permissions: string[]
+  availablePermissions: string[]
+  presets: Record<string, string[]>
+}
+
+export type ResourceServiceUser = {
+  id: string
+  email: string
+  name: string
+  role: string
+  status: string
+  preset: string
+  permissions: string[]
+  createdAt?: string | null
+}
+
+export type CompanyBillingDetails = {
+  id?: string
+  legal_name?: string | null
+  short_name?: string | null
+  inn?: string | null
+  kpp?: string | null
+  ogrn?: string | null
+  legal_address?: string | null
+  postal_address?: string | null
+  billing_email?: string | null
+  billing_contact_name?: string | null
+  billing_contact_phone?: string | null
+  accounting_comment?: string | null
+}
+
+export type ServiceProfile = {
+  id?: string
+  service_name?: string | null
+  legal_name?: string | null
+  inn?: string | null
+  kpp?: string | null
+  ogrn?: string | null
+  legal_address?: string | null
+  postal_address?: string | null
+  bank_name?: string | null
+  bik?: string | null
+  bank_account?: string | null
+  correspondent_account?: string | null
+  billing_email?: string | null
+  support_email?: string | null
+  support_phone?: string | null
+}
+
+export type NotificationTemplate = {
+  id: string
+  code: string
+  title: string
+  body: string
+  category: string
+  is_active: number
+}
+
 export type LoginResponse = {
   token?: string
   user?: AuthUser
@@ -28,7 +88,7 @@ export type LoginResponse = {
   mfaToken?: string
 }
 
-export type UserRole = 'inspector' | 'manager' | 'owner' | 'admin' | string
+export type UserRole = 'inspector' | 'manager' | 'owner' | 'admin' | 'resource_manager' | string
 
 export type CompanyRecord = {
   id: string

@@ -10,18 +10,11 @@ export function useCreateCompany(list: { withSave: (action: () => Promise<boolea
     event.preventDefault()
     await list.withSave(async () => {
       const result = await api.createResourceCompany({
-        id: form.id || form.slug,
-        slug: form.slug || form.id,
+        id: form.id || undefined,
+        slug: form.slug || '',
         name: form.name,
         limits: {
           planCode: 'pilot',
-          maxVehicles: 25,
-          maxUsers: 10,
-          maxStorageMb: 10240,
-          ocrEnabled: true,
-          accidentModuleEnabled: true,
-          analyticsEnabled: true,
-          apiAccessEnabled: false,
         },
       })
       if (result.data) {

@@ -351,7 +351,7 @@ function ensureUsersRoleSupportsAdminAndOwner() {
     WHERE type = 'table' AND name = 'users'
   `)?.[0]?.values?.[0]?.[0]
 
-  if (typeof usersTableSql === 'string' && usersTableSql.includes("'owner'")) {
+  if (typeof usersTableSql === 'string' && usersTableSql.includes("'resource_manager'")) {
     return
   }
 
@@ -363,11 +363,19 @@ function ensureUsersRoleSupportsAdminAndOwner() {
         email TEXT UNIQUE NOT NULL,
         password TEXT NOT NULL,
         name TEXT NOT NULL,
-        role TEXT NOT NULL CHECK (role IN ('inspector', 'manager', 'owner', 'admin')),
+        role TEXT NOT NULL CHECK (role IN ('inspector', 'manager', 'owner', 'admin', 'resource_manager')),
         status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'inactive')),
         company_id TEXT DEFAULT 'default',
         mfa_enabled INTEGER NOT NULL DEFAULT 0,
         mfa_secret TEXT,
+        last_login_at TEXT,
+        service_notifications_enabled INTEGER NOT NULL DEFAULT 0,
+        service_notification_types TEXT,
+        resource_permission_preset TEXT NOT NULL DEFAULT 'custom',
+        owner_setup_nonce TEXT,
+        owner_setup_issued_at TEXT,
+        owner_setup_expires_at TEXT,
+        owner_setup_accepted_at TEXT,
         created_at TEXT DEFAULT (datetime('now'))
       )
     `)
@@ -383,6 +391,14 @@ function ensureUsersRoleSupportsAdminAndOwner() {
         company_id,
         mfa_enabled,
         mfa_secret,
+        last_login_at,
+        service_notifications_enabled,
+        service_notification_types,
+        resource_permission_preset,
+        owner_setup_nonce,
+        owner_setup_issued_at,
+        owner_setup_expires_at,
+        owner_setup_accepted_at,
         created_at
       )
       SELECT
@@ -390,11 +406,19 @@ function ensureUsersRoleSupportsAdminAndOwner() {
         email,
         password,
         name,
-        CASE WHEN role IN ('inspector', 'manager', 'owner', 'admin') THEN role ELSE 'inspector' END,
+        CASE WHEN role IN ('inspector', 'manager', 'owner', 'admin', 'resource_manager') THEN role ELSE 'inspector' END,
         CASE WHEN status IN ('active', 'inactive') THEN status ELSE 'active' END,
         COALESCE(company_id, 'default'),
         COALESCE(mfa_enabled, 0),
         mfa_secret,
+        last_login_at,
+        COALESCE(service_notifications_enabled, 0),
+        service_notification_types,
+        COALESCE(resource_permission_preset, 'custom'),
+        owner_setup_nonce,
+        owner_setup_issued_at,
+        owner_setup_expires_at,
+        owner_setup_accepted_at,
         COALESCE(created_at, datetime('now'))
       FROM users
     `)
@@ -402,7 +426,7 @@ function ensureUsersRoleSupportsAdminAndOwner() {
     db.run('DROP TABLE users')
     db.run('ALTER TABLE users_with_admin_owner_role RENAME TO users')
     db.run('COMMIT')
-    console.log('Expanded users.role to support owner and admin')
+    console.log('Expanded users.role to support resource roles')
   } catch (error) {
     db.run('ROLLBACK')
     throw error
@@ -502,6 +526,7 @@ function applySchemaMigrations() {
   ensureColumn('users', 'last_login_at', 'TEXT')
   ensureColumn('users', 'service_notifications_enabled', 'INTEGER NOT NULL DEFAULT 0')
   ensureColumn('users', 'service_notification_types', 'TEXT')
+  ensureColumn('users', 'resource_permission_preset', "TEXT NOT NULL DEFAULT 'custom'")
   ensureColumn('users', 'owner_setup_nonce', 'TEXT')
   ensureColumn('users', 'owner_setup_issued_at', 'TEXT')
   ensureColumn('users', 'owner_setup_expires_at', 'TEXT')
@@ -755,7 +780,60 @@ function applySchemaMigrations() {
   ensureColumn('company_notifications', 'status', "TEXT NOT NULL DEFAULT 'new'")
   ensureColumn('company_notifications', 'sent_at', 'TEXT')
   ensureColumn('company_notifications', 'read_at', 'TEXT')
+  ensureColumn('company_notifications', 'created_by_user_id', 'TEXT')
+  ensureColumn('company_notifications', 'template_id', 'TEXT')
+  ensureColumn('company_notifications', 'source', "TEXT NOT NULL DEFAULT 'system'")
   ensureColumn('company_notifications', 'created_at', 'TEXT')
+
+  db.run(`
+    CREATE TABLE IF NOT EXISTS resource_user_permissions (
+      user_id TEXT NOT NULL,
+      permission TEXT NOT NULL,
+      enabled INTEGER NOT NULL DEFAULT 1,
+      created_at TEXT DEFAULT (datetime('now')),
+      updated_at TEXT DEFAULT (datetime('now')),
+      PRIMARY KEY (user_id, permission),
+      FOREIGN KEY (user_id) REFERENCES users(id)
+    )
+  `)
+
+  db.run(`
+    CREATE TABLE IF NOT EXISTS notification_templates (
+      id TEXT PRIMARY KEY,
+      code TEXT NOT NULL UNIQUE,
+      title TEXT NOT NULL,
+      body TEXT NOT NULL,
+      category TEXT NOT NULL DEFAULT 'system',
+      is_active INTEGER NOT NULL DEFAULT 1,
+      created_by_user_id TEXT,
+      updated_by_user_id TEXT,
+      created_at TEXT DEFAULT (datetime('now')),
+      updated_at TEXT DEFAULT (datetime('now'))
+    )
+  `)
+
+  db.run(`
+    CREATE TABLE IF NOT EXISTS service_profile (
+      id TEXT PRIMARY KEY,
+      service_name TEXT,
+      legal_name TEXT,
+      inn TEXT,
+      kpp TEXT,
+      ogrn TEXT,
+      legal_address TEXT,
+      postal_address TEXT,
+      bank_name TEXT,
+      bik TEXT,
+      bank_account TEXT,
+      correspondent_account TEXT,
+      billing_email TEXT,
+      support_email TEXT,
+      support_phone TEXT,
+      updated_by_user_id TEXT,
+      updated_at TEXT DEFAULT (datetime('now'))
+    )
+  `)
+  db.run(`INSERT OR IGNORE INTO service_profile (id, service_name) VALUES ('default', 'AuditAvto')`)
 
   db.run(`
     CREATE TABLE IF NOT EXISTS audit_logs (
@@ -829,7 +907,7 @@ export async function initDatabase() {
       email TEXT UNIQUE NOT NULL,
       password TEXT NOT NULL,
       name TEXT NOT NULL,
-      role TEXT NOT NULL CHECK (role IN ('inspector', 'manager', 'owner', 'admin')),
+      role TEXT NOT NULL CHECK (role IN ('inspector', 'manager', 'owner', 'admin', 'resource_manager')),
       status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'inactive')),
       company_id TEXT DEFAULT 'default',
       mfa_enabled INTEGER NOT NULL DEFAULT 0,
@@ -843,6 +921,12 @@ export async function initDatabase() {
   ensureColumn('users', 'status', "TEXT NOT NULL DEFAULT 'active'")
   ensureColumn('users', 'service_notifications_enabled', 'INTEGER NOT NULL DEFAULT 0')
   ensureColumn('users', 'service_notification_types', 'TEXT')
+  ensureColumn('users', 'resource_permission_preset', "TEXT NOT NULL DEFAULT 'custom'")
+  ensureColumn('users', 'last_login_at', 'TEXT')
+  ensureColumn('users', 'owner_setup_nonce', 'TEXT')
+  ensureColumn('users', 'owner_setup_issued_at', 'TEXT')
+  ensureColumn('users', 'owner_setup_expires_at', 'TEXT')
+  ensureColumn('users', 'owner_setup_accepted_at', 'TEXT')
   ensureUsersRoleSupportsAdminAndOwner()
   ensureColumn('users', 'service_notifications_enabled', 'INTEGER NOT NULL DEFAULT 0')
   ensureColumn('users', 'service_notification_types', 'TEXT')
@@ -877,6 +961,17 @@ export async function initDatabase() {
       created_at TEXT DEFAULT (datetime('now'))
     )
   `)
+  ensureColumn('companies', 'legal_name', 'TEXT')
+  ensureColumn('companies', 'short_name', 'TEXT')
+  ensureColumn('companies', 'inn', 'TEXT')
+  ensureColumn('companies', 'kpp', 'TEXT')
+  ensureColumn('companies', 'ogrn', 'TEXT')
+  ensureColumn('companies', 'legal_address', 'TEXT')
+  ensureColumn('companies', 'postal_address', 'TEXT')
+  ensureColumn('companies', 'billing_email', 'TEXT')
+  ensureColumn('companies', 'billing_contact_name', 'TEXT')
+  ensureColumn('companies', 'billing_contact_phone', 'TEXT')
+  ensureColumn('companies', 'accounting_comment', 'TEXT')
 
   db.run(`
     CREATE TABLE IF NOT EXISTS company_limits (

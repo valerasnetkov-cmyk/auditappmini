@@ -36,6 +36,12 @@ function formatDate(value?: string | null) {
   return new Intl.DateTimeFormat('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric' }).format(date)
 }
 
+function addMonth(value: string) {
+  const date = new Date(`${value}T00:00:00Z`)
+  date.setUTCMonth(date.getUTCMonth() + 1)
+  return date.toISOString().slice(0, 10)
+}
+
 function statusLabel(value?: string | null) {
   const labels: Record<string, string> = {
     active: 'активна',
@@ -133,6 +139,21 @@ export default function ResourcePaymentsPage() {
     setSaving(false)
   }
 
+  const selectCompany = (companyId: string) => {
+    const company = companies.find((item) => item.id === companyId)
+    const planCode = company?.subscription?.planCode || company?.limits?.planCode || 'pilot'
+    const plan = plans.find((item) => item.code === planCode)
+    const periodStart = company?.subscription?.currentPeriodEnd || today
+    setForm((current) => ({
+      ...current,
+      companyId,
+      planCode,
+      amount: plan?.monthlyPriceRub || company?.billing?.monthlyPriceRub || 0,
+      periodStart,
+      periodEnd: addMonth(periodStart),
+    }))
+  }
+
   const handleCancelPayment = async (id: string) => {
     setSaving(true)
     setError('')
@@ -177,7 +198,7 @@ export default function ResourcePaymentsPage() {
             <section className="rounded-lg border bg-white p-4">
               <h2 className="text-base font-semibold text-gray-950">Добавить оффлайн-платеж</h2>
               <form onSubmit={handleCreatePayment} className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-                <select value={form.companyId} onChange={(event) => setForm({ ...form, companyId: event.target.value })} className="rounded-lg border px-3 py-2 text-sm" required>
+                <select value={form.companyId} onChange={(event) => selectCompany(event.target.value)} className="rounded-lg border px-3 py-2 text-sm" required>
                   <option value="">Компания</option>
                   {companies.map((company) => <option key={company.id} value={company.id}>{company.name}</option>)}
                 </select>
@@ -248,6 +269,7 @@ export default function ResourcePaymentsPage() {
                       <th className="px-4 py-3">Сумма</th>
                       <th className="px-4 py-3">Период</th>
                       <th className="px-4 py-3">Документ</th>
+                      <th className="px-4 py-3">Внёс</th>
                       <th className="px-4 py-3">Статус</th>
                       <th className="px-4 py-3">Действие</th>
                     </tr>
@@ -261,6 +283,7 @@ export default function ResourcePaymentsPage() {
                         <td className="px-4 py-3">{formatCurrency(payment.amount, payment.currency)}</td>
                         <td className="px-4 py-3">{formatDate(payment.periodStart)} - {formatDate(payment.periodEnd)}</td>
                         <td className="px-4 py-3">{payment.documentNumber || 'нет'}</td>
+                        <td className="px-4 py-3">{payment.createdByName || payment.createdBy || 'не указано'}</td>
                         <td className="px-4 py-3"><Badge tone={statusTone(payment.status)}>{statusLabel(payment.status)}</Badge></td>
                         <td className="px-4 py-3">
                           {payment.status !== 'cancelled' ? (
@@ -273,7 +296,7 @@ export default function ResourcePaymentsPage() {
                         </td>
                       </tr>
                     )) : (
-                      <tr><td className="px-4 py-6 text-center text-gray-500" colSpan={8}>Платежей пока нет</td></tr>
+                      <tr><td className="px-4 py-6 text-center text-gray-500" colSpan={9}>Платежей пока нет</td></tr>
                     )}
                   </tbody>
                 </table>

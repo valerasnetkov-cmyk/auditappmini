@@ -1,18 +1,16 @@
 'use client'
 
 import type { Dispatch, FormEvent, SetStateAction } from 'react'
-import type { SaasCompanyStats } from '@/lib/types'
+import type { SaasCompanyStats, SaasPlan } from '@/lib/types'
 import { companyLimitForm, numberOrNull } from '../_lib/companies'
 import type { LimitForm } from '../_lib/companies'
 import { StatusButton } from '@/components/ui'
-
-type Plan = { code: string; name: string }
 
 type Props = {
   form: LimitForm
   setForm: Dispatch<SetStateAction<LimitForm>>
   companies: SaasCompanyStats[]
-  plans: Plan[]
+  plans: SaasPlan[]
   onSubmit: (event: FormEvent<HTMLFormElement>) => void
   saving: boolean
 }
@@ -36,7 +34,20 @@ export default function LimitsForm({ form, setForm, companies, plans, onSubmit, 
         <select
           className="rounded-lg border px-3 py-2"
           value={form.planCode || ''}
-          onChange={(event) => setForm((prev) => ({ ...prev, planCode: event.target.value }))}
+          onChange={(event) => {
+            const plan = plans.find((item) => item.code === event.target.value)
+            setForm((prev) => ({
+              ...prev,
+              planCode: event.target.value,
+              maxVehicles: plan?.limits.maxVehicles ?? null,
+              maxUsers: plan?.limits.maxUsers ?? null,
+              maxStorageMb: plan?.limits.maxStorageMb ?? null,
+              ocrEnabled: plan?.features.ocrEnabled ?? false,
+              accidentModuleEnabled: plan?.features.accidentModuleEnabled ?? false,
+              analyticsEnabled: plan?.features.analyticsEnabled ?? false,
+              apiAccessEnabled: plan?.features.apiAccessEnabled ?? false,
+            }))
+          }}
         >
           {plans.map((plan) => (
             <option key={plan.code} value={plan.code}>{plan.name}</option>

@@ -8,6 +8,7 @@ import registerCompanyUsageRoutes from './routes/companyUsage.js'
 import registerAuthRoutes, { createOwnerSetupInvitationFactory } from './routes/auth.js'
 import registerSaasAdminRoutes from './routes/adminSaas.js'
 import registerAdminBillingRoutes from './routes/adminBilling.js'
+import registerAdminOperationsRoutes from './routes/adminOperations.js'
 import registerRegionRoutes from './routes/regions.js'
 import registerVehicleRoutes from './routes/vehicles.js'
 import registerInspectionRoutes from './routes/inspections.js'
@@ -291,6 +292,7 @@ function sendInternalError(res, scope, err) {
 }
 
 const createOwnerSetupInvitation = createOwnerSetupInvitationFactory({ db })
+registerAdminOperationsRoutes({ app, db, authenticate })
 registerSaasAdminRoutes({ app, db, authenticate, ensureAdmin, sendError, API_MESSAGES, createOwnerSetupInvitation })
 registerAdminBillingRoutes({ app, db, authenticate, ensureAdmin, planLimits })
 

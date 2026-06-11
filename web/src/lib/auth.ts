@@ -16,6 +16,10 @@ export function isAdminRole(role?: string | null): boolean {
   return role === 'admin'
 }
 
+export function isResourceRole(role?: string | null): boolean {
+  return role === 'admin' || role === 'resource_manager'
+}
+
 export function getAuthToken(): string | null {
   if (typeof window === 'undefined') {
     return null

@@ -24,7 +24,7 @@ function getSafeNextPath(value: string | null | undefined, fallback = '/dashboar
 }
 
 function getPostLoginPath(user: AuthUser | undefined, nextPath: string) {
-  if (user?.role === 'admin') return '/saas-admin/dashboard'
+  if (user?.role === 'admin' || user?.role === 'resource_manager') return '/saas-admin/dashboard'
   return nextPath || '/dashboard'
 }
 

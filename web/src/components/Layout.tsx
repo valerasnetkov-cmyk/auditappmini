@@ -22,7 +22,7 @@ import {
   ArrowLeftStartOnRectangleIcon,
 } from '@heroicons/react/24/outline'
 import api from '@/lib/api/client'
-import { getAuthToken, hasAuthSession, isAdminRole, isCompanyOwnerRole, isManagerRole } from '@/lib/auth'
+import { getAuthToken, hasAuthSession, isCompanyOwnerRole, isManagerRole, isResourceRole } from '@/lib/auth'
 
 const PILOT_HREF = 'mailto:info@auditavto.ru?subject=Запустить пилот AuditAvto'
 
@@ -39,6 +39,7 @@ type MenuItem = {
   adminOnly?: boolean
   managerOnly?: boolean
   ownerOnly?: boolean
+  permission?: string
 }
 
 function readStoredRole() {
@@ -58,6 +59,7 @@ export default function Layout({ children, currentPage }: LayoutProps) {
   const [quickSearch, setQuickSearch] = useState('')
   const [currentRole, setCurrentRole] = useState<string | null>(null)
   const [accessMode, setAccessMode] = useState<string>('standard')
+  const [resourcePermissions, setResourcePermissions] = useState<string[]>([])
 
   useEffect(() => {
     if (!hasAuthSession()) return
@@ -69,6 +71,10 @@ export default function Layout({ children, currentPage }: LayoutProps) {
       if (!cancelled && result.data?.role) {
         setCurrentRole(result.data.role)
         setAccessMode(result.data.access_mode || 'standard')
+        if (isResourceRole(result.data.role)) {
+          const access = await api.getResourceAccess()
+          if (!cancelled && access.data) setResourcePermissions(access.data.permissions)
+        }
       } else if (!cancelled) {
         setCurrentRole(readStoredRole())
       }
@@ -98,24 +104,27 @@ export default function Layout({ children, currentPage }: LayoutProps) {
     { href: '/inspections', label: 'Осмотры', icon: ClipboardDocumentCheckIcon, key: 'inspections' },
     { href: '/defects', label: 'Дефекты', icon: ExclamationTriangleIcon, key: 'defects' },
     { href: '/users', label: 'Пользователи', icon: UserGroupIcon, key: 'users', ownerOnly: true },
-    { href: '/saas-admin', label: 'Обзор', icon: RectangleGroupIcon, key: 'saas-admin', adminOnly: true },
-    { href: '/saas-admin/dashboard', label: 'Дашборд', icon: ChartBarSquareIcon, key: 'resource-dashboard', adminOnly: true },
-    { href: '/saas-admin/companies', label: 'Компании', icon: BuildingOffice2Icon, key: 'resource-companies', adminOnly: true },
-    { href: '/saas-admin/plans', label: 'Тарифы', icon: TagIcon, key: 'resource-plans', adminOnly: true },
-    { href: '/saas-admin/payments', label: 'Платежи', icon: CreditCardIcon, key: 'resource-payments', adminOnly: true },
-    { href: '/saas-admin/alerts', label: 'Уведомления', icon: BellAlertIcon, key: 'resource-alerts', adminOnly: true },
+    { href: '/saas-admin', label: 'Обзор', icon: RectangleGroupIcon, key: 'saas-admin', adminOnly: true, permission: 'dashboard.view' },
+    { href: '/saas-admin/dashboard', label: 'Дашборд', icon: ChartBarSquareIcon, key: 'resource-dashboard', adminOnly: true, permission: 'dashboard.view' },
+    { href: '/saas-admin/companies', label: 'Компании', icon: BuildingOffice2Icon, key: 'resource-companies', adminOnly: true, permission: 'companies.view' },
+    { href: '/saas-admin/plans', label: 'Тарифы', icon: TagIcon, key: 'resource-plans', adminOnly: true, permission: 'plans.view' },
+    { href: '/saas-admin/payments', label: 'Платежи', icon: CreditCardIcon, key: 'resource-payments', adminOnly: true, permission: 'payments.view' },
+    { href: '/saas-admin/alerts', label: 'Уведомления', icon: BellAlertIcon, key: 'resource-alerts', adminOnly: true, permission: 'notifications.view' },
+    { href: '/saas-admin/service-users', label: 'Команда сервиса', icon: UserGroupIcon, key: 'resource-service-users', adminOnly: true, permission: 'service_users.view' },
     { href: '/profile', label: 'Профиль', icon: UserCircleIcon, key: 'profile' },
     { href: '/settings', label: 'Настройки', icon: Cog6ToothIcon, key: 'settings', managerOnly: true },
   ]
 
-  const resourceAdminContext = ['saas-admin', 'resource-dashboard', 'resource-companies', 'resource-plans', 'resource-payments', 'resource-alerts'].includes(currentPage || '') || isAdminRole(currentRole)
+  const resourceAdminContext = ['saas-admin', 'resource-dashboard', 'resource-companies', 'resource-plans', 'resource-payments', 'resource-alerts', 'resource-service-users'].includes(currentPage || '') || isResourceRole(currentRole)
   const isDemo = accessMode === 'demo_readonly'
 
   const visibleMenuItems = menuItems.filter((item) => {
     if (resourceAdminContext) {
-      return item.adminOnly || item.key === 'profile'
+      if (item.key === 'profile') return true
+      if (!item.adminOnly) return false
+      return currentRole === 'admin' || !item.permission || resourcePermissions.includes(item.permission)
     }
-    if (item.adminOnly) return isAdminRole(currentRole)
+    if (item.adminOnly) return isResourceRole(currentRole)
     if (isDemo && (item.key === 'settings' || item.key === 'profile')) return false
     if (item.ownerOnly) return isCompanyOwnerRole(currentRole)
     if (item.managerOnly) return isManagerRole(currentRole)

@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from 'react'
 import Layout from '@/components/Layout'
 import { Badge, EmptyState, NoticeCard, Skeleton, StatusButton, type UiTone } from '@/components/ui'
 import api from '@/lib/api/client'
-import type { SaasAlert, SaasAlertsResponse } from '@/lib/types'
+import type { NotificationTemplate, SaasAdminStats, SaasAlert, SaasAlertsResponse } from '@/lib/types'
 
 function formatNumber(value?: number | null) {
   return Number(value || 0).toLocaleString('ru-RU')
@@ -55,6 +55,10 @@ export default function ResourceAlertsPage() {
   const [filter, setFilter] = useState<'all' | 'new' | 'critical'>('new')
   const [error, setError] = useState('')
   const [message, setMessage] = useState('')
+  const [stats, setStats] = useState<SaasAdminStats | null>(null)
+  const [templates, setTemplates] = useState<NotificationTemplate[]>([])
+  const [messageForm, setMessageForm] = useState({ companyId: '', recipientUserId: '', templateId: '', title: '', message: '' })
+  const [templateForm, setTemplateForm] = useState({ code: '', title: '', body: '', category: 'system' })
 
   const alerts = useMemo(() => data?.alerts || [], [data?.alerts])
   const filteredAlerts = useMemo(() => {
@@ -67,9 +71,18 @@ export default function ResourceAlertsPage() {
 
   const loadData = async () => {
     setError('')
-    const result = await api.getResourceAlerts()
+    const [result, statsResult, templatesResult] = await Promise.all([
+      api.getResourceAlerts(),
+      api.getSaasAdminStats(),
+      api.getNotificationTemplates(),
+    ])
     if (result.data) {
       setData(result.data)
+      if (statsResult.data) {
+        setStats(statsResult.data)
+        setMessageForm((current) => ({ ...current, companyId: current.companyId || statsResult.data?.companies[0]?.id || '' }))
+      }
+      if (templatesResult.data) setTemplates(templatesResult.data.templates)
     } else {
       setError(result.error || 'Не удалось загрузить уведомления')
     }
@@ -113,6 +126,37 @@ export default function ResourceAlertsPage() {
     setSaving(false)
   }
 
+  const selectTemplate = (templateId: string) => {
+    const template = templates.find((item) => item.id === templateId)
+    setMessageForm((current) => ({
+      ...current,
+      templateId,
+      title: template?.title || current.title,
+      message: template?.body || current.message,
+    }))
+  }
+
+  const createMessage = async () => {
+    setSaving(true)
+    const result = await api.createResourceMessage(messageForm)
+    if (result.data) {
+      setMessage(`Сообщение создано для получателей: ${result.data.created}`)
+      setMessageForm((current) => ({ ...current, recipientUserId: '', templateId: '', title: '', message: '' }))
+    } else setError(result.error || 'Не удалось создать сообщение')
+    setSaving(false)
+  }
+
+  const createTemplate = async () => {
+    setSaving(true)
+    const result = await api.createNotificationTemplate(templateForm)
+    if (result.data) {
+      setMessage('Шаблон создан')
+      setTemplateForm({ code: '', title: '', body: '', category: 'system' })
+      await loadData()
+    } else setError(result.error || 'Не удалось создать шаблон')
+    setSaving(false)
+  }
+
   return (
     <Layout currentPage="resource-alerts">
       <div className="resource-admin-page mx-auto max-w-[1500px] space-y-8 px-6 py-6">
@@ -148,6 +192,37 @@ export default function ResourceAlertsPage() {
               <MetricCard label="Новые" value={formatNumber(data.summary.unread)} hint="Ожидают реакции администратора ресурса" />
               <MetricCard label="Истекают" value={formatNumber(data.summary.expiring)} hint="Порог 14 / 7 / 3 / 1 день" />
               <MetricCard label="Критичные" value={formatNumber(data.summary.critical)} hint="Grace, просрочка или приостановка" />
+            </div>
+
+            <div className="grid gap-4 xl:grid-cols-2">
+              <section className="rounded-lg border bg-white p-4">
+                <h2 className="font-semibold">Сервисное сообщение</h2>
+                <div className="mt-4 grid gap-3">
+                  <select className="rounded-lg border px-3 py-2" value={messageForm.companyId} onChange={(e) => setMessageForm({ ...messageForm, companyId: e.target.value, recipientUserId: '' })}>
+                    {(stats?.companies || []).map((company) => <option key={company.id} value={company.id}>{company.name}</option>)}
+                  </select>
+                  <select className="rounded-lg border px-3 py-2" value={messageForm.recipientUserId} onChange={(e) => setMessageForm({ ...messageForm, recipientUserId: e.target.value })}>
+                    <option value="">Вся компания</option>
+                    {(stats?.companies.find((company) => company.id === messageForm.companyId)?.ownerUsers || []).map((owner) => <option key={owner.id} value={owner.id}>{owner.name} ({owner.email})</option>)}
+                  </select>
+                  <select className="rounded-lg border px-3 py-2" value={messageForm.templateId} onChange={(e) => selectTemplate(e.target.value)}>
+                    <option value="">Без шаблона</option>
+                    {templates.filter((item) => item.is_active).map((template) => <option key={template.id} value={template.id}>{template.title}</option>)}
+                  </select>
+                  <input className="rounded-lg border px-3 py-2" placeholder="Тема" value={messageForm.title} onChange={(e) => setMessageForm({ ...messageForm, title: e.target.value })} />
+                  <textarea className="min-h-28 rounded-lg border px-3 py-2" placeholder="Текст сообщения" value={messageForm.message} onChange={(e) => setMessageForm({ ...messageForm, message: e.target.value })} />
+                  <button type="button" disabled={saving || !messageForm.companyId || !messageForm.title || !messageForm.message} onClick={() => void createMessage()} className="rounded-lg bg-blue-600 px-4 py-2 font-semibold text-white disabled:opacity-50">Создать сообщение</button>
+                </div>
+              </section>
+              <section className="rounded-lg border bg-white p-4">
+                <h2 className="font-semibold">Новый шаблон</h2>
+                <div className="mt-4 grid gap-3">
+                  <input className="rounded-lg border px-3 py-2" placeholder="Код шаблона" value={templateForm.code} onChange={(e) => setTemplateForm({ ...templateForm, code: e.target.value })} />
+                  <input className="rounded-lg border px-3 py-2" placeholder="Название" value={templateForm.title} onChange={(e) => setTemplateForm({ ...templateForm, title: e.target.value })} />
+                  <textarea className="min-h-28 rounded-lg border px-3 py-2" placeholder="Текст" value={templateForm.body} onChange={(e) => setTemplateForm({ ...templateForm, body: e.target.value })} />
+                  <button type="button" disabled={saving || !templateForm.code || !templateForm.title || !templateForm.body} onClick={() => void createTemplate()} className="rounded-lg border border-blue-200 px-4 py-2 font-semibold text-blue-700 disabled:opacity-50">Сохранить шаблон</button>
+                </div>
+              </section>
             </div>
 
             <section className="rounded-lg border border-gray-200 bg-white p-4 shadow-sm">

@@ -144,7 +144,7 @@ export function createAuthenticateMiddleware({ getDb, getApiMessages, sendError,
         access_mode: user.access_mode || 'standard',
       }
 
-      if (req.user.role === 'admin' && isTenantUserEndpoint(req.path)) {
+      if (['admin', 'resource_manager'].includes(req.user.role) && isTenantUserEndpoint(req.path)) {
         return sendError(res, 403, apiMessages.accessDenied)
       }
 

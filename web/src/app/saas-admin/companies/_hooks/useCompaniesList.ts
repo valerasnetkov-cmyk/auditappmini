@@ -12,13 +12,21 @@ export function useCompaniesList() {
   const [message, setMessage] = useState('')
   const [ownerSetupLinks, setOwnerSetupLinks] = useState<Record<string, string>>({})
 
-  const loadStats = useCallback(async () => {
+  const loadStats = useCallback(async (query = '') => {
     setLoading(true)
     setError('')
-    const result = await api.getSaasAdminStats()
+    const [result, registryResult] = await Promise.all([
+      api.getSaasAdminStats(),
+      api.getResourceCompanyRegistry(query),
+    ])
     const data = result.data
     if (data) {
-      setStats(data)
+      const detailedById = new Map(data.companies.map((company) => [company.id, company]))
+      const companies = (registryResult.data?.companies || data.companies).map((company) => ({
+        ...detailedById.get(company.id),
+        ...company,
+      }))
+      setStats({ ...data, companies })
     } else {
       setError(result.error || 'Не удалось загрузить реестр компаний')
     }
