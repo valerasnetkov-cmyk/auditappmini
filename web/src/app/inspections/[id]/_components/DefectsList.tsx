@@ -1,5 +1,6 @@
 'use client'
 
+import Image from 'next/image'
 import Link from 'next/link'
 import { buildApiUrl } from '@/lib/api/client'
 import { formatDateTime, getPhotoPreviewUrl, getPhotoThumbUrl } from '../_lib/checklist'
@@ -44,9 +45,12 @@ export default function DefectsList({ inspection }: { inspection: InspectionDeta
                     type="button"
                     onClick={() => window.open(buildApiUrl(getPhotoPreviewUrl(photo)), '_blank')}
                   >
-                    <img
+                    <Image
                       src={buildApiUrl(getPhotoThumbUrl(photo))}
                       alt="Фото дефекта"
+                      width={96}
+                      height={96}
+                      unoptimized
                       className="h-24 w-24 rounded border object-cover hover:opacity-80"
                     />
                   </button>

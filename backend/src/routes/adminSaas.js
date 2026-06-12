@@ -1433,7 +1433,6 @@ function createNotificationOnce(db, {
   type,
   title,
   message,
-  periodEnd = null,
 }) {
   const exists = db.prepare(`
     SELECT id
@@ -1621,7 +1620,7 @@ export default function registerSaasAdminRoutes({ app, db, authenticate, ensureA
         delete stats.billing
         delete stats.recent_payments
         delete stats.expiring_subscriptions
-        stats.companies = stats.companies.map(({ billing, ...company }) => company)
+        stats.companies = stats.companies.map(({ billing: _billing, ...company }) => company)
       }
       res.json(stats)
     } catch (error) {

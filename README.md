@@ -186,7 +186,8 @@ auditappmini/
 - `REDIS_URL` рекомендуется для multi-replica/blue-green deployments.
 - `backup:local` копирует SQLite и uploads, `backup:verify` проверяет последний
   backup read-only через `better-sqlite3`.
-- `docs/SECURITY.md` описывает security policy и disclosure process.
+- `SECURITY.md` описывает публичный disclosure process, а
+  `docs/SECURITY.md` — подробные runtime-контроли и security backlog.
 - `CODEOWNERS` назначает reviewers по backend/web/mobile/ops/security контурам.
 
 ## Документация

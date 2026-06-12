@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from 'react'
 import Layout from '@/components/Layout'
 import { Badge, EmptyState, NoticeCard, Skeleton, StatusButton, type UiTone } from '@/components/ui'
 import api from '@/lib/api/client'
-import type { NotificationTemplate, SaasAdminStats, SaasAlert, SaasAlertsResponse } from '@/lib/types'
+import type { NotificationTemplate, SaasAdminStats, SaasAlert, SaasAlertsResponse, ServiceNotificationRecipient } from '@/lib/types'
 
 function formatNumber(value?: number | null) {
   return Number(value || 0).toLocaleString('ru-RU')
@@ -57,6 +57,7 @@ export default function ResourceAlertsPage() {
   const [message, setMessage] = useState('')
   const [stats, setStats] = useState<SaasAdminStats | null>(null)
   const [templates, setTemplates] = useState<NotificationTemplate[]>([])
+  const [recipients, setRecipients] = useState<ServiceNotificationRecipient[]>([])
   const [messageForm, setMessageForm] = useState({ companyId: '', recipientUserId: '', templateId: '', title: '', message: '' })
   const [templateForm, setTemplateForm] = useState({ code: '', title: '', body: '', category: 'system' })
 
@@ -96,6 +97,15 @@ export default function ResourceAlertsPage() {
 
     return () => window.clearTimeout(timer)
   }, [])
+
+  useEffect(() => {
+    if (!messageForm.companyId) return
+    let cancelled = false
+    void api.getResourceCompanyNotificationRecipients(messageForm.companyId).then((result) => {
+      if (!cancelled) setRecipients(result.data?.recipients || [])
+    })
+    return () => { cancelled = true }
+  }, [messageForm.companyId])
 
   const handleScan = async () => {
     setSaving(true)
@@ -203,7 +213,7 @@ export default function ResourceAlertsPage() {
                   </select>
                   <select className="rounded-lg border px-3 py-2" value={messageForm.recipientUserId} onChange={(e) => setMessageForm({ ...messageForm, recipientUserId: e.target.value })}>
                     <option value="">Вся компания</option>
-                    {(stats?.companies.find((company) => company.id === messageForm.companyId)?.ownerUsers || []).map((owner) => <option key={owner.id} value={owner.id}>{owner.name} ({owner.email})</option>)}
+                    {recipients.map((recipient) => <option key={recipient.id} value={recipient.id}>{recipient.name} ({recipient.email}, {recipient.role === 'owner' ? 'владелец' : 'ответственный администратор'})</option>)}
                   </select>
                   <select className="rounded-lg border px-3 py-2" value={messageForm.templateId} onChange={(e) => selectTemplate(e.target.value)}>
                     <option value="">Без шаблона</option>

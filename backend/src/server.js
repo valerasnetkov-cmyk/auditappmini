@@ -4,11 +4,13 @@ import { GRACEFUL_SHUTDOWN_TIMEOUT_MS, PUBLIC_DEMO_ENABLED } from './config.js'
 import { isRedisConfigured, shutdownRedis } from './services/redisClient.js'
 import { createApp } from './app.js'
 import { provisionPublicDemo } from './seed/publicDemo.js'
+import { anonymizeExpiredPilotRequests } from './services/pilotRequests.js'
 
 const PORT = process.env.PORT || 3001
 
 let isShuttingDown = false
 let server = null
+let pilotRequestRetentionTimer = null
 const openSockets = new Set()
 
 const app = createApp({
@@ -23,6 +25,10 @@ function forceCloseOpenSockets() {
 }
 
 function exitAfterStorageShutdown(code) {
+  if (pilotRequestRetentionTimer) {
+    clearInterval(pilotRequestRetentionTimer)
+    pilotRequestRetentionTimer = null
+  }
   closeDatabase()
   process.exit(code)
 }
@@ -88,6 +94,20 @@ if (typeof process.send === 'function') {
 }
 
 initDatabase().then(async () => {
+  const runPilotRequestRetention = () => {
+    try {
+      const result = anonymizeExpiredPilotRequests(getDb())
+      if (result.anonymized > 0) {
+        console.log(`[pilot-requests] anonymized ${result.anonymized} expired requests`)
+      }
+    } catch (error) {
+      console.error('[pilot-requests] retention job failed:', error)
+    }
+  }
+  runPilotRequestRetention()
+  pilotRequestRetentionTimer = setInterval(runPilotRequestRetention, 24 * 60 * 60 * 1000)
+  pilotRequestRetentionTimer.unref?.()
+
   if (PUBLIC_DEMO_ENABLED) {
     await provisionPublicDemo({
       db: getDb(),

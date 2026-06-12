@@ -18,6 +18,7 @@ import {
 } from '@heroicons/react/24/outline'
 import LoginForm from './login/LoginForm'
 import { Accordion } from '@/components/ui'
+import { PilotRequestButton, PilotRequestProvider } from './_components/PilotRequestModal'
 import styles from './landing.module.css'
 
 export const metadata: Metadata = {
@@ -49,7 +50,6 @@ export const metadata: Metadata = {
 
 export const dynamic = 'force-dynamic'
 
-const contactHref = 'mailto:info@auditavto.ru?subject=Запустить пилот AuditAvto'
 const dateFormatter = new Intl.DateTimeFormat('ru-RU', {
   day: '2-digit',
   month: '2-digit',
@@ -146,7 +146,7 @@ const tariffs = [
     description: 'Для тестового внедрения на небольшой группе техники.',
     features: ['До 10 единиц техники', 'До 3 пользователей', 'До 300 осмотров в месяц', '10 ГБ фото-хранилища', 'OCR и ДТП-осмотры'],
     action: 'Запросить пилот',
-    href: contactHref,
+    pilotSource: 'tariff-pilot',
   },
   {
     code: 'standard',
@@ -205,6 +205,7 @@ export default function LandingPage() {
   const inspectionPreview = getLandingInspectionPreview()
 
   return (
+    <PilotRequestProvider>
     <main className={styles.page}>
       <section className={styles.shell}>
         <div className={styles.panel}>
@@ -225,10 +226,10 @@ export default function LandingPage() {
                 Фотоосмотр автомобиля до и после поездки. Фиксируйте дефекты, пробег, ДТП и историю состояния в одном отчёте.
               </p>
               <div className={styles.heroActions}>
-                <a href={contactHref} className={styles.primaryButton}>
+                <PilotRequestButton source="hero" className={styles.primaryButton}>
                   Запустить пилот
                   <ArrowRightIcon aria-hidden="true" />
-                </a>
+                </PilotRequestButton>
                 <Link href="/demo" className={styles.secondaryButton}>Посмотреть демо</Link>
               </div>
               <p className={styles.audience}>
@@ -426,7 +427,7 @@ export default function LandingPage() {
               Открыть демо
               <ArrowRightIcon aria-hidden="true" />
             </Link>
-            <a href={contactHref} className={styles.secondaryButton}>Запросить пилот</a>
+            <PilotRequestButton source="demo-section" className={styles.secondaryButton}>Запросить пилот</PilotRequestButton>
           </div>
           <small>Демо содержит только тестовые данные. Реальные компании и фото недоступны.</small>
         </div>
@@ -466,13 +467,19 @@ export default function LandingPage() {
                   <li key={feature}><CheckCircleIcon aria-hidden="true" />{feature}</li>
                 ))}
               </ul>
-              <a
-                href={tariff.href}
-                className={tariff.recommended ? styles.primaryButton : styles.secondaryButton}
-              >
-                {tariff.action}
-                {tariff.recommended ? <ArrowRightIcon aria-hidden="true" /> : null}
-              </a>
+              {tariff.pilotSource ? (
+                <PilotRequestButton source={tariff.pilotSource} className={styles.secondaryButton}>
+                  {tariff.action}
+                </PilotRequestButton>
+              ) : (
+                <a
+                  href={tariff.href}
+                  className={tariff.recommended ? styles.primaryButton : styles.secondaryButton}
+                >
+                  {tariff.action}
+                  {tariff.recommended ? <ArrowRightIcon aria-hidden="true" /> : null}
+                </a>
+              )}
             </article>
           ))}
         </div>
@@ -487,7 +494,7 @@ export default function LandingPage() {
           <p>Подключим компанию, добавим технику, настроим роли и базовые сценарии осмотров. После пилота вы увидите, где теряются данные и какие дефекты повторяются.</p>
         </div>
         <div className={styles.offerActions}>
-          <a href={contactHref} className={styles.primaryButton}>Запросить пилот <ArrowRightIcon aria-hidden="true" /></a>
+          <PilotRequestButton source="pilot-offer" className={styles.primaryButton}>Запросить пилот <ArrowRightIcon aria-hidden="true" /></PilotRequestButton>
           <a href="mailto:info@auditavto.ru?subject=Получить консультацию AuditAvto" className={styles.secondaryButton}>Получить консультацию</a>
         </div>
       </section>
@@ -506,7 +513,7 @@ export default function LandingPage() {
       <section className={styles.finalCta}>
         <h2>Хватит собирать осмотры из чатов и таблиц</h2>
         <p>Запустите AuditAvto на части автопарка и проверьте, насколько проще становится контроль техники, дефектов, пробега и ДТП.</p>
-        <a href={contactHref} className={styles.primaryButton}>Запросить пилот <ArrowRightIcon aria-hidden="true" /></a>
+        <PilotRequestButton source="final-cta" className={styles.primaryButton}>Запросить пилот <ArrowRightIcon aria-hidden="true" /></PilotRequestButton>
       </section>
 
       <footer className={styles.footer}>
@@ -520,5 +527,6 @@ export default function LandingPage() {
         <a href="mailto:info@auditavto.ru">info@auditavto.ru</a>
       </footer>
     </main>
+    </PilotRequestProvider>
   )
 }

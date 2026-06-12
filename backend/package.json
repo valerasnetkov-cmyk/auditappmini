@@ -6,6 +6,7 @@
   "type": "module",
   "scripts": {
     "start": "node src/server.js",
+    "lint": "eslint src scripts tests",
     "test": "node --test --test-reporter=spec tests/unit/*.test.mjs",
     "test:unit": "node --test --test-reporter=spec tests/unit/*.test.mjs",
     "test:integration": "node --test --test-reporter=spec tests/integration/*.test.mjs",
@@ -27,7 +28,7 @@
     "audit:launch": "npm audit --audit-level=moderate",
     "subscriptions:check": "node scripts/check-subscriptions.mjs",
     "billing:check": "node scripts/billing-status-job.mjs",
-    "smoke": "npm run smoke:health && npm run smoke:security && npm run smoke:observability && npm run smoke:shutdown && npm run smoke:production-guard && npm run smoke:auth && npm run smoke:mfa && npm run smoke:vehicles && npm run smoke:inspections && npm run smoke:isolation && npm run smoke:public-demo && npm run smoke:analytics && npm run smoke:saas-admin && npm run smoke:subscription-guard && npm run smoke:company-limits && npm run smoke:company-features && npm run smoke:billing-policy && npm run smoke:backup && npm run smoke:owner-setup",
+    "smoke": "npm run smoke:health && npm run smoke:security && npm run smoke:observability && npm run smoke:shutdown && npm run smoke:production-guard && npm run smoke:auth && npm run smoke:mfa && npm run smoke:vehicles && npm run smoke:inspections && npm run smoke:isolation && npm run smoke:public-demo && npm run smoke:analytics && npm run smoke:saas-admin && npm run smoke:pilot-requests && npm run smoke:subscription-guard && npm run smoke:company-limits && npm run smoke:company-features && npm run smoke:billing-policy && npm run smoke:backup && npm run smoke:owner-setup",
     "smoke:health": "node scripts/smoke-health.mjs",
     "smoke:auth": "node scripts/smoke-auth.mjs",
     "smoke:vehicles": "node scripts/smoke-vehicles.mjs",
@@ -36,6 +37,7 @@
     "smoke:public-demo": "node scripts/smoke-public-demo.mjs",
     "smoke:analytics": "node scripts/smoke-analytics.mjs",
     "smoke:saas-admin": "node scripts/smoke-saas-admin.mjs",
+    "smoke:pilot-requests": "node scripts/smoke-pilot-requests.mjs",
     "smoke:subscription-guard": "node scripts/smoke-subscription-guard.mjs",
     "smoke:company-limits": "node scripts/smoke-company-limits.mjs",
     "smoke:company-features": "node scripts/smoke-company-features.mjs",
@@ -60,5 +62,10 @@
     "sharp": "^0.34.5",
     "speakeasy": "^2.0.0",
     "uuid": "^11.1.1"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.39.4",
+    "eslint": "^9.39.4",
+    "globals": "^17.6.0"
   }
 }

@@ -19,4 +19,7 @@ test('resource permission presets contain only known permissions', () => {
   }
   assert.equal(RESOURCE_PERMISSION_PRESETS.finance.includes('payments.manage'), true)
   assert.equal(RESOURCE_PERMISSION_PRESETS.support.includes('payments.view'), false)
+  assert.equal(RESOURCE_PERMISSION_PRESETS.support.includes('pilot_requests.manage'), true)
+  assert.equal(RESOURCE_PERMISSION_PRESETS.marketing.includes('pilot_requests.view'), true)
+  assert.equal(RESOURCE_PERMISSION_PRESETS.finance.includes('pilot_requests.view'), false)
 })

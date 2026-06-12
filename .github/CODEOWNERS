@@ -1,0 +1,18 @@
+# Default repository owner
+* @valerasnetkov-cmyk
+
+# Security and deployment boundaries
+/SECURITY.md @valerasnetkov-cmyk
+/docs/SECURITY.md @valerasnetkov-cmyk
+/.github/ @valerasnetkov-cmyk
+/scripts/ @valerasnetkov-cmyk
+
+# Application contours
+/backend/ @valerasnetkov-cmyk
+/web/ @valerasnetkov-cmyk
+/mobile/ @valerasnetkov-cmyk
+
+# Release and data contracts
+/CHANGELOG.md @valerasnetkov-cmyk
+/docs/data-model.md @valerasnetkov-cmyk
+/docs/production-env.md @valerasnetkov-cmyk

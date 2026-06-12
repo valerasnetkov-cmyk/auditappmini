@@ -2,7 +2,7 @@
 // Run via: `npm --prefix backend run test:integration`
 // Skip via: `SKIP_INTEGRATION_TESTS=1 npm --prefix backend run test`
 
-import { test, before, after } from 'node:test'
+import { test, before } from 'node:test'
 import assert from 'node:assert/strict'
 
 const SKIP = process.env.SKIP_INTEGRATION_TESTS === '1'

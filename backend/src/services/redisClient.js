@@ -15,7 +15,6 @@
 import { Redis } from 'ioredis'
 
 let client = null
-let configured = false
 let connected = false
 let lastConnectErrorAt = 0
 let lastConnectErrorMessage = null
@@ -30,12 +29,7 @@ export function getRedisClient() {
   if (client) return client
 
   const url = process.env.REDIS_URL
-  if (!url) {
-    configured = false
-    return null
-  }
-
-  configured = true
+  if (!url) return null
 
   try {
     client = new Redis(url, {
@@ -150,7 +144,6 @@ export function resetRedisForTests() {
     client.disconnect()
     client = null
   }
-  configured = false
   connected = false
   lastConnectErrorAt = 0
   lastConnectErrorMessage = null

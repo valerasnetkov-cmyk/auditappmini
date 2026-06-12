@@ -81,6 +81,97 @@ export type NotificationTemplate = {
   is_active: number
 }
 
+export type PilotRequestSubmission = {
+  companyName: string
+  contactName: string
+  contactEmail: string
+  contactPhone: string
+  vehicleCount: number
+  region?: string
+  comment?: string
+  website?: string
+  consentGiven: boolean
+  source?: string
+  utmSource?: string
+  utmMedium?: string
+  utmCampaign?: string
+  utmContent?: string
+  utmTerm?: string
+}
+
+export type PilotRequestStatus = 'new' | 'in_progress' | 'approved' | 'rejected' | 'converted'
+
+export type PilotRequest = {
+  id: string
+  companyName: string
+  contactName: string | null
+  contactEmail: string | null
+  contactPhone: string | null
+  vehicleCount: number
+  region: string | null
+  comment: string | null
+  status: PilotRequestStatus
+  assignedUserId: string | null
+  assignedUserName: string | null
+  internalComment: string | null
+  rejectionReason: string | null
+  source: string | null
+  utmSource: string | null
+  utmMedium: string | null
+  utmCampaign: string | null
+  utmContent: string | null
+  utmTerm: string | null
+  consentGiven: boolean
+  consentAt: string | null
+  linkedCompanyId: string | null
+  convertedAt: string | null
+  anonymizedAt: string | null
+  createdAt: string
+  updatedAt: string
+}
+
+export type PilotRequestSummary = {
+  total: number
+  new: number
+  inProgress: number
+  approved: number
+  rejected: number
+  converted: number
+}
+
+export type PilotRequestAssignee = {
+  id: string
+  name: string
+  email: string
+  role: string
+}
+
+export type PilotConversionPayload = {
+  companyName: string
+  slug: string
+  regionCode?: string
+  dataResidency?: string
+  ownerName: string
+  ownerEmail: string
+  planCode: string
+  limits: {
+    maxVehicles: number | null
+    maxUsers: number | null
+    maxInspectionsPerMonth: number | null
+    maxStorageMb: number | null
+    storageLimitGb: number | null
+    ocrEnabled: boolean
+    ocrMonthlyLimit: number | null
+    accidentModuleEnabled: boolean
+    analyticsEnabled: boolean
+    exportEnabled: boolean
+    apiAccessEnabled: boolean
+    customBrandingEnabled: boolean
+    regionalStorageEnabled: boolean
+    supportLevel: string
+  }
+}
+
 export type LoginResponse = {
   token?: string
   user?: AuthUser

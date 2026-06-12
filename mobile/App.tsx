@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { ThemeProvider } from './src/theme'
 import { api, setAuthSessionHandler } from './src/api'
 import type { Company, User } from './src/types'
@@ -23,13 +23,13 @@ function Main() {
   const [selectedCompany, setSelectedCompany] = useState<Company | null>(null)
   const [sessionMessage, setSessionMessage] = useState('')
 
-  const resetSessionState = () => {
+  const resetSessionState = useCallback(() => {
     setUser(null)
     setCompanies([])
     setSelectedCompany(null)
-  }
+  }, [])
 
-  const checkAuth = async () => {
+  const checkAuth = useCallback(async () => {
     try {
       const me = await api.getMe()
       setUser(me)
@@ -47,7 +47,7 @@ function Main() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [resetSessionState])
 
   useEffect(() => {
     setAuthSessionHandler((error) => {
@@ -55,9 +55,9 @@ function Main() {
       resetSessionState()
       setLoading(false)
     })
-    checkAuth()
+    queueMicrotask(() => { void checkAuth() })
     return () => setAuthSessionHandler(null)
-  }, [])
+  }, [checkAuth, resetSessionState])
 
   if (loading) return <LoadingScreen />
   if (!user) return <LoginScreen onLogin={checkAuth} initialMessage={sessionMessage} />

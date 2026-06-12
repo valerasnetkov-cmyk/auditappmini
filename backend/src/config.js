@@ -47,6 +47,13 @@ export const SENSITIVE_RATE_LIMIT_MAX = parsePositiveIntegerEnv('SENSITIVE_RATE_
 
 export const AUTH_ACCOUNT_RATE_LIMIT_MAX = parsePositiveIntegerEnv('AUTH_ACCOUNT_RATE_LIMIT_MAX', isProduction ? 20 : 500)
 
+export const PILOT_REQUEST_RATE_LIMIT_WINDOW_MS = parsePositiveIntegerEnv(
+  'PILOT_REQUEST_RATE_LIMIT_WINDOW_MS',
+  30 * 60 * 1000,
+)
+
+export const PILOT_REQUEST_RATE_LIMIT_MAX = parsePositiveIntegerEnv('PILOT_REQUEST_RATE_LIMIT_MAX', 5)
+
 export const MFA_LOGIN_TOKEN_TTL = process.env.MFA_LOGIN_TOKEN_TTL || '5m'
 
 export const AUTH_COOKIE_NAME = process.env.AUTH_COOKIE_NAME || 'audit_session'
@@ -169,6 +176,8 @@ export function assertProductionConfig() {
   assertPositiveInteger(SENSITIVE_RATE_LIMIT_WINDOW_MS, 'SENSITIVE_RATE_LIMIT_WINDOW_MS')
   assertPositiveInteger(SENSITIVE_RATE_LIMIT_MAX, 'SENSITIVE_RATE_LIMIT_MAX')
   assertPositiveInteger(AUTH_ACCOUNT_RATE_LIMIT_MAX, 'AUTH_ACCOUNT_RATE_LIMIT_MAX')
+  assertPositiveInteger(PILOT_REQUEST_RATE_LIMIT_WINDOW_MS, 'PILOT_REQUEST_RATE_LIMIT_WINDOW_MS')
+  assertPositiveInteger(PILOT_REQUEST_RATE_LIMIT_MAX, 'PILOT_REQUEST_RATE_LIMIT_MAX')
   assertPositiveInteger(AUTH_COOKIE_MAX_AGE_SECONDS, 'AUTH_COOKIE_MAX_AGE_SECONDS')
   assertPositiveInteger(MAX_IMAGE_PIXELS, 'MAX_IMAGE_PIXELS')
   assertPositiveInteger(GRACEFUL_SHUTDOWN_TIMEOUT_MS, 'GRACEFUL_SHUTDOWN_TIMEOUT_MS')

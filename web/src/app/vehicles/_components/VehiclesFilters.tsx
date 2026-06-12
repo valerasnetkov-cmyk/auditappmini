@@ -62,7 +62,7 @@ export function VehiclesFilters({
             Столбцы
           </button>
           {showColumnMenu ? (
-            <div className="popover absolute right-0 top-full z-10 mt-2 min-w-[180px] p-2">
+            <div className="popover absolute right-0 top-full z-40 mt-2 min-w-[180px] p-2">
               {COLUMNS.map((column) => (
                 <label key={column.key} className="flex cursor-pointer items-center rounded-control px-3 py-2 text-sm text-foreground-secondary hover:bg-surface-hover">
                   <input

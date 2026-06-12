@@ -32,6 +32,11 @@ import type {
   CompanyBillingDetails,
   ServiceProfile,
   NotificationTemplate,
+  PilotRequestSubmission,
+  PilotRequest,
+  PilotRequestAssignee,
+  PilotRequestSummary,
+  PilotConversionPayload,
   SaasAlertsResponse,
   SaasAdminStats,
   SaasCompanyDetailsResponse,
@@ -247,6 +252,61 @@ class ApiClient {
     }
 
     return result
+  }
+
+  async createPilotRequest(data: PilotRequestSubmission) {
+    return this.request<{ accepted: true }>('/public/pilot-requests', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    })
+  }
+
+  async getPilotRequests(query = '') {
+    return this.request<{ requests: PilotRequest[]; summary: PilotRequestSummary }>(
+      `/admin/resource/pilot-requests${query ? `?${query}` : ''}`,
+    )
+  }
+
+  async getPilotRequest(id: string) {
+    return this.request<PilotRequest>(`/admin/resource/pilot-requests/${id}`)
+  }
+
+  async getPilotRequestSummary() {
+    return this.request<PilotRequestSummary>('/admin/resource/pilot-requests/summary')
+  }
+
+  async getPilotRequestAssignees() {
+    return this.request<{ users: PilotRequestAssignee[] }>('/admin/resource/pilot-requests/assignees')
+  }
+
+  async updatePilotRequest(id: string, data: Partial<PilotRequest>) {
+    return this.request<PilotRequest>(`/admin/resource/pilot-requests/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    })
+  }
+
+  async getPilotConversionPreview(id: string) {
+    return this.request<PilotConversionPayload>(`/admin/resource/pilot-requests/${id}/conversion-preview`)
+  }
+
+  async convertPilotRequest(id: string, data: PilotConversionPayload) {
+    return this.request<{
+      request: PilotRequest
+      company: { id: string; slug: string; name: string; planCode: string }
+      owner: { id: string; name: string; email: string }
+      setup: { setup_url: string; expires_at: string }
+    }>(`/admin/resource/pilot-requests/${id}/convert`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    })
+  }
+
+  async anonymizePilotRequest(id: string) {
+    return this.request<PilotRequest>(`/admin/resource/pilot-requests/${id}/anonymize`, {
+      method: 'POST',
+      body: JSON.stringify({}),
+    })
   }
 
   async loginDemo() {
@@ -597,6 +657,10 @@ class ApiClient {
 
   async getResourceCompanyRegistry(query = '') {
     return this.request<{ companies: SaasAdminStats['companies'] }>(`/admin/resource/companies-list${query ? `?${query}` : ''}`)
+  }
+
+  async getResourceCompanyNotificationRecipients(companyId: string) {
+    return this.request<{ recipients: ServiceNotificationRecipient[] }>(`/admin/resource/companies/${companyId}/notification-recipients`)
   }
 
   async getCompanyBillingDetails(companyId: string) {

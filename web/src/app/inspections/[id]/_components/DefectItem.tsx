@@ -1,5 +1,6 @@
 'use client'
 
+import Image from 'next/image'
 import Link from 'next/link'
 import { buildApiUrl } from '@/lib/api/client'
 import { getPhotoPreviewUrl, getPhotoThumbUrl, type ChecklistItem } from '../_lib/checklist'
@@ -100,9 +101,12 @@ export default function DefectItem({
                         window.open(buildApiUrl(getPhotoPreviewUrl(photo)), '_blank')
                       }
                     >
-                      <img
+                      <Image
                         src={buildApiUrl(getPhotoThumbUrl(photo))}
                         alt="Дефект"
+                        width={80}
+                        height={80}
+                        unoptimized
                         className="h-20 w-20 rounded border object-cover"
                       />
                     </button>

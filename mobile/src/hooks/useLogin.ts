@@ -1,5 +1,4 @@
 import { useCallback, useState } from 'react'
-import { Alert } from 'react-native'
 import { api } from '../api'
 
 export function useLogin() {

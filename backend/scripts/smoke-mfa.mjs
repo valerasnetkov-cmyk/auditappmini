@@ -11,7 +11,6 @@ const DATABASE_PATH = `./.tmp-smoke/smoke-mfa-${process.pid}.sqlite`
 const JWT_SECRET = crypto.randomBytes(32).toString('hex')
 const BASE_URL = `http://${HOST}:${PORT}`
 const LOGIN_URL = `${BASE_URL}/api/auth/login`
-const USERS_URL = `${BASE_URL}/api/users`
 const MFA_SETUP_URL = (id) => `${BASE_URL}/api/users/${id}/mfa/setup`
 const MFA_ENABLE_URL = (id) => `${BASE_URL}/api/users/${id}/mfa/enable`
 const MFA_VERIFY_URL = (id) => `${BASE_URL}/api/users/${id}/mfa/verify`

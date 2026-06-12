@@ -70,19 +70,24 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
   const [mode, setModeState] = useState<ThemeMode>('system')
 
   useEffect(() => {
-    loadTheme()
-  }, [])
+    let cancelled = false
 
-  const loadTheme = async () => {
-    try {
-      const saved = isWeb 
-        ? await AsyncStorage.getItem('theme_mode')
-        : await SecureStore.getItemAsync('theme_mode')
-      if (saved === 'light' || saved === 'dark' || saved === 'system') {
-        setModeState(saved)
+    async function loadTheme() {
+      try {
+        const saved = isWeb
+          ? await AsyncStorage.getItem('theme_mode')
+          : await SecureStore.getItemAsync('theme_mode')
+        if (!cancelled && (saved === 'light' || saved === 'dark' || saved === 'system')) {
+          setModeState(saved)
+        }
+      } catch {
+        // Keep the system theme when storage is unavailable.
       }
-    } catch {}
-  }
+    }
+
+    void loadTheme()
+    return () => { cancelled = true }
+  }, [])
 
   const setMode = async (newMode: ThemeMode) => {
     setModeState(newMode)

@@ -113,21 +113,6 @@ const DEFAULT_REGIONS = [
   'Сахалинская область',
 ]
 
-const LICENSE_PLATE_LATIN_TO_CYRILLIC = {
-  A: 'А',
-  B: 'В',
-  E: 'Е',
-  K: 'К',
-  M: 'М',
-  H: 'Н',
-  O: 'О',
-  P: 'Р',
-  C: 'С',
-  T: 'Т',
-  Y: 'У',
-  X: 'Х',
-}
-
 const LICENSE_PLATE_ALLOWED_LETTERS = ['А', 'В', 'Е', 'К', 'М', 'Н', 'О', 'Р', 'С', 'Т', 'У', 'Х']
 const LICENSE_PLATE_PATTERN = /^[АВЕКМНОРСТУХ]\d{3}[АВЕКМНОРСТУХ]{2}\d{2,3}$/
 
@@ -836,6 +821,66 @@ function applySchemaMigrations() {
   db.run(`INSERT OR IGNORE INTO service_profile (id, service_name) VALUES ('default', 'AuditAvto')`)
 
   db.run(`
+    CREATE TABLE IF NOT EXISTS pilot_requests (
+      id TEXT PRIMARY KEY,
+      company_name TEXT NOT NULL,
+      contact_name TEXT,
+      contact_email TEXT,
+      contact_phone TEXT,
+      vehicle_count INTEGER NOT NULL,
+      region TEXT,
+      comment TEXT,
+      status TEXT NOT NULL DEFAULT 'new'
+        CHECK (status IN ('new', 'in_progress', 'approved', 'rejected', 'converted')),
+      assigned_user_id TEXT,
+      internal_comment TEXT,
+      rejection_reason TEXT,
+      source TEXT,
+      utm_source TEXT,
+      utm_medium TEXT,
+      utm_campaign TEXT,
+      utm_content TEXT,
+      utm_term TEXT,
+      consent_given INTEGER NOT NULL DEFAULT 0,
+      consent_at TEXT,
+      linked_company_id TEXT,
+      converted_at TEXT,
+      anonymized_at TEXT,
+      created_at TEXT DEFAULT (datetime('now')),
+      updated_at TEXT DEFAULT (datetime('now')),
+      FOREIGN KEY (assigned_user_id) REFERENCES users(id),
+      FOREIGN KEY (linked_company_id) REFERENCES companies(id)
+    )
+  `)
+  ensureColumn('pilot_requests', 'contact_name', 'TEXT')
+  ensureColumn('pilot_requests', 'contact_email', 'TEXT')
+  ensureColumn('pilot_requests', 'contact_phone', 'TEXT')
+  ensureColumn('pilot_requests', 'vehicle_count', 'INTEGER')
+  ensureColumn('pilot_requests', 'region', 'TEXT')
+  ensureColumn('pilot_requests', 'comment', 'TEXT')
+  ensureColumn('pilot_requests', 'status', "TEXT NOT NULL DEFAULT 'new'")
+  ensureColumn('pilot_requests', 'assigned_user_id', 'TEXT')
+  ensureColumn('pilot_requests', 'internal_comment', 'TEXT')
+  ensureColumn('pilot_requests', 'rejection_reason', 'TEXT')
+  ensureColumn('pilot_requests', 'source', 'TEXT')
+  ensureColumn('pilot_requests', 'utm_source', 'TEXT')
+  ensureColumn('pilot_requests', 'utm_medium', 'TEXT')
+  ensureColumn('pilot_requests', 'utm_campaign', 'TEXT')
+  ensureColumn('pilot_requests', 'utm_content', 'TEXT')
+  ensureColumn('pilot_requests', 'utm_term', 'TEXT')
+  ensureColumn('pilot_requests', 'consent_given', 'INTEGER NOT NULL DEFAULT 0')
+  ensureColumn('pilot_requests', 'consent_at', 'TEXT')
+  ensureColumn('pilot_requests', 'linked_company_id', 'TEXT')
+  ensureColumn('pilot_requests', 'converted_at', 'TEXT')
+  ensureColumn('pilot_requests', 'anonymized_at', 'TEXT')
+  ensureColumn('pilot_requests', 'created_at', 'TEXT')
+  ensureColumn('pilot_requests', 'updated_at', 'TEXT')
+  db.run('CREATE INDEX IF NOT EXISTS idx_pilot_requests_status_created ON pilot_requests(status, created_at DESC)')
+  db.run('CREATE INDEX IF NOT EXISTS idx_pilot_requests_assigned_created ON pilot_requests(assigned_user_id, created_at DESC)')
+  db.run('CREATE INDEX IF NOT EXISTS idx_pilot_requests_region_created ON pilot_requests(region, created_at DESC)')
+  db.run('CREATE INDEX IF NOT EXISTS idx_pilot_requests_linked_company ON pilot_requests(linked_company_id)')
+
+  db.run(`
     CREATE TABLE IF NOT EXISTS audit_logs (
       id TEXT PRIMARY KEY,
       company_id TEXT,
@@ -892,6 +937,10 @@ function applySchemaMigrations() {
   db.run('UPDATE photos SET original_url = url WHERE original_url IS NULL AND url IS NOT NULL')
   db.run('UPDATE photos SET webp_url = url WHERE webp_url IS NULL AND url IS NOT NULL')
   db.run('UPDATE photos SET thumb_url = url WHERE thumb_url IS NULL AND url IS NOT NULL')
+  db.run('CREATE INDEX IF NOT EXISTS idx_vehicles_company_status_created ON vehicles(company_id, status, created_at DESC)')
+  db.run('CREATE INDEX IF NOT EXISTS idx_vehicles_company_number ON vehicles(company_id, number)')
+  db.run('CREATE INDEX IF NOT EXISTS idx_inspections_company_vehicle_created ON inspections(company_id, vehicle_id, created_at DESC, id DESC)')
+  db.run('CREATE INDEX IF NOT EXISTS idx_defects_inspection ON defects(inspection_id)')
   seedDefaultPlans()
 }
 

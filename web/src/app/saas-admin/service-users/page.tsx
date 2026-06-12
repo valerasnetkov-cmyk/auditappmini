@@ -17,6 +17,8 @@ const permissionLabels: Record<string, string> = {
   'payments.manage': 'Платежи: управление',
   'notifications.view': 'Уведомления: просмотр',
   'notifications.manage': 'Уведомления: управление',
+  'pilot_requests.view': 'Заявки на пилот: просмотр',
+  'pilot_requests.manage': 'Заявки на пилот: управление',
   'templates.view': 'Шаблоны: просмотр',
   'templates.manage': 'Шаблоны: управление',
   'service_users.view': 'Команда: просмотр',
@@ -40,6 +42,9 @@ export default function ServiceUsersPage() {
       setUsers(result.data.users)
       setPresets(result.data.presets)
       setPermissions(result.data.permissions)
+      setForm((current) => current.permissions.length
+        ? current
+        : { ...current, permissions: [...(result.data?.presets[current.preset] || [])] })
     } else setError(result.error || 'Не удалось загрузить команду')
   }
 

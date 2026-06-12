@@ -1,7 +1,7 @@
 import crypto from 'node:crypto'
 
 // Audit logging utility
-export function createAuditLogger({ db, getCurrentUser }) {
+export function createAuditLogger({ db, getCurrentUser: _getCurrentUser }) {
   return function logAudit({ action, entityType, entityId, oldValue, newValue, req }) {
     try {
       const userId = req?.user?.id || null

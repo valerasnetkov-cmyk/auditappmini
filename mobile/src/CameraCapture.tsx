@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
-import { View, Text, TouchableOpacity, StyleSheet, Alert, Image } from 'react-native'
-import { CameraView, CameraType, useCameraPermissions } from 'expo-camera'
+import { View, Text, TouchableOpacity, StyleSheet, Alert } from 'react-native'
+import { CameraView, useCameraPermissions } from 'expo-camera'
 import { useTheme } from './theme'
 
 type CameraCaptureProps = {
@@ -18,9 +18,9 @@ export default function CameraCapture({ onCapture, onClose, title }: CameraCaptu
 
   useEffect(() => {
     if (!permission?.granted) {
-      requestPermission()
+      void requestPermission()
     }
-  }, [])
+  }, [permission?.granted, requestPermission])
 
   const handleCapture = async () => {
     if (!cameraRef.current) return
@@ -35,7 +35,7 @@ export default function CameraCapture({ onCapture, onClose, title }: CameraCaptu
       if (photo?.base64) {
         onCapture({ base64: photo.base64, uri: photo.uri })
       }
-    } catch (error) {
+    } catch {
       Alert.alert('Ошибка', 'Не удалось сделать фото')
     }
   }

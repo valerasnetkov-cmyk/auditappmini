@@ -41,7 +41,7 @@ function logWarn(message) {
   console.warn(message)
 }
 
-function createInMemoryLimiter({ name, windowMs, max, keyGenerator }) {
+function createInMemoryLimiter({ windowMs, max, keyGenerator }) {
   const hits = new Map()
   let lastSweepAt = 0
 

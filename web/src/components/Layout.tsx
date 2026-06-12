@@ -13,6 +13,7 @@ import {
   Cog6ToothIcon,
   CreditCardIcon,
   ExclamationTriangleIcon,
+  InboxArrowDownIcon,
   MagnifyingGlassIcon,
   RectangleGroupIcon,
   TagIcon,
@@ -24,7 +25,7 @@ import {
 import api from '@/lib/api/client'
 import { getAuthToken, hasAuthSession, isCompanyOwnerRole, isManagerRole, isResourceRole } from '@/lib/auth'
 
-const PILOT_HREF = 'mailto:info@auditavto.ru?subject=Запустить пилот AuditAvto'
+const PILOT_HREF = '/?pilot=1&source=demo-banner'
 
 interface LayoutProps {
   children: React.ReactNode
@@ -40,6 +41,7 @@ type MenuItem = {
   managerOnly?: boolean
   ownerOnly?: boolean
   permission?: string
+  badge?: number
 }
 
 function readStoredRole() {
@@ -60,6 +62,7 @@ export default function Layout({ children, currentPage }: LayoutProps) {
   const [currentRole, setCurrentRole] = useState<string | null>(null)
   const [accessMode, setAccessMode] = useState<string>('standard')
   const [resourcePermissions, setResourcePermissions] = useState<string[]>([])
+  const [newPilotRequests, setNewPilotRequests] = useState(0)
 
   useEffect(() => {
     if (!hasAuthSession()) return
@@ -72,8 +75,12 @@ export default function Layout({ children, currentPage }: LayoutProps) {
         setCurrentRole(result.data.role)
         setAccessMode(result.data.access_mode || 'standard')
         if (isResourceRole(result.data.role)) {
-          const access = await api.getResourceAccess()
+          const [access, pilotSummary] = await Promise.all([
+            api.getResourceAccess(),
+            api.getPilotRequestSummary(),
+          ])
           if (!cancelled && access.data) setResourcePermissions(access.data.permissions)
+          if (!cancelled && pilotSummary.data) setNewPilotRequests(pilotSummary.data.new)
         }
       } else if (!cancelled) {
         setCurrentRole(readStoredRole())
@@ -86,6 +93,16 @@ export default function Layout({ children, currentPage }: LayoutProps) {
       cancelled = true
     }
   }, [])
+
+  useEffect(() => {
+    if (!isResourceRole(currentRole)) return
+    const refreshPilotRequestBadge = async () => {
+      const result = await api.getPilotRequestSummary()
+      if (result.data) setNewPilotRequests(result.data.new)
+    }
+    window.addEventListener('pilot-requests-updated', refreshPilotRequestBadge)
+    return () => window.removeEventListener('pilot-requests-updated', refreshPilotRequestBadge)
+  }, [currentRole])
 
   const handleQuickSearch = (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault()
@@ -107,6 +124,7 @@ export default function Layout({ children, currentPage }: LayoutProps) {
     { href: '/saas-admin', label: 'Обзор', icon: RectangleGroupIcon, key: 'saas-admin', adminOnly: true, permission: 'dashboard.view' },
     { href: '/saas-admin/dashboard', label: 'Дашборд', icon: ChartBarSquareIcon, key: 'resource-dashboard', adminOnly: true, permission: 'dashboard.view' },
     { href: '/saas-admin/companies', label: 'Компании', icon: BuildingOffice2Icon, key: 'resource-companies', adminOnly: true, permission: 'companies.view' },
+    { href: '/saas-admin/pilot-requests', label: 'Заявки на пилот', icon: InboxArrowDownIcon, key: 'resource-pilot-requests', adminOnly: true, permission: 'pilot_requests.view', badge: newPilotRequests },
     { href: '/saas-admin/plans', label: 'Тарифы', icon: TagIcon, key: 'resource-plans', adminOnly: true, permission: 'plans.view' },
     { href: '/saas-admin/payments', label: 'Платежи', icon: CreditCardIcon, key: 'resource-payments', adminOnly: true, permission: 'payments.view' },
     { href: '/saas-admin/alerts', label: 'Уведомления', icon: BellAlertIcon, key: 'resource-alerts', adminOnly: true, permission: 'notifications.view' },
@@ -115,7 +133,7 @@ export default function Layout({ children, currentPage }: LayoutProps) {
     { href: '/settings', label: 'Настройки', icon: Cog6ToothIcon, key: 'settings', managerOnly: true },
   ]
 
-  const resourceAdminContext = ['saas-admin', 'resource-dashboard', 'resource-companies', 'resource-plans', 'resource-payments', 'resource-alerts', 'resource-service-users'].includes(currentPage || '') || isResourceRole(currentRole)
+  const resourceAdminContext = ['saas-admin', 'resource-dashboard', 'resource-companies', 'resource-pilot-requests', 'resource-plans', 'resource-payments', 'resource-alerts', 'resource-service-users'].includes(currentPage || '') || isResourceRole(currentRole)
   const isDemo = accessMode === 'demo_readonly'
 
   const visibleMenuItems = menuItems.filter((item) => {
@@ -180,6 +198,11 @@ export default function Layout({ children, currentPage }: LayoutProps) {
                       <Icon aria-hidden="true" className="h-[18px] w-[18px]" />
                     </span>
                     <span className="font-medium">{item.label}</span>
+                    {item.badge ? (
+                      <span className={`ml-auto rounded-full px-2 py-0.5 text-xs font-semibold ${isActive ? 'bg-white/20 text-white' : 'bg-orange-100 text-orange-800'}`}>
+                        {item.badge > 99 ? '99+' : item.badge}
+                      </span>
+                    ) : null}
                   </Link>
                 </li>
               )

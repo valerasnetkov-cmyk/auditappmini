@@ -1,5 +1,6 @@
 'use client'
 
+import Image from 'next/image'
 import { buildApiUrl } from '@/lib/api/client'
 import { getPhotoPreviewUrl, getPhotoThumbUrl } from '../_lib/checklist'
 import type { PhotoRecord, PhotoRequirementsResponse } from '@/lib/types'
@@ -60,9 +61,12 @@ export default function PhotoRequirementsSection({
                       type="button"
                       onClick={() => window.open(buildApiUrl(getPhotoPreviewUrl(photo)), '_blank')}
                     >
-                      <img
+                      <Image
                         src={buildApiUrl(getPhotoThumbUrl(photo))}
                         alt={label}
+                        width={80}
+                        height={80}
+                        unoptimized
                         className="h-20 w-20 rounded border object-cover"
                       />
                     </button>

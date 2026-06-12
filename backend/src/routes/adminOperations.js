@@ -213,9 +213,12 @@ export default function registerAdminOperationsRoutes({ app, db, authenticate })
     const user = db.prepare("SELECT * FROM users WHERE id = ? AND role = 'resource_manager'").get(req.params.id)
     if (!user) return res.status(404).json({ error: 'Сотрудник не найден' })
     const preset = RESOURCE_PERMISSION_PRESETS[req.body?.preset] ? req.body.preset : (user.resource_permission_preset || 'custom')
+    const status = req.body?.status === undefined
+      ? user.status
+      : (req.body.status === 'inactive' ? 'inactive' : 'active')
     db.prepare(`
       UPDATE users SET name = ?, status = ?, resource_permission_preset = ? WHERE id = ?
-    `).run(text(req.body?.name) || user.name, req.body?.status === 'inactive' ? 'inactive' : 'active', preset, user.id)
+    `).run(text(req.body?.name) || user.name, status, preset, user.id)
     if (Array.isArray(req.body?.permissions)) replaceResourcePermissions(db, user.id, req.body.permissions)
     else if (req.body?.preset) replaceResourcePermissions(db, user.id, RESOURCE_PERMISSION_PRESETS[preset])
     writeAudit(db, req, 'service_user.updated', 'user', user.id, { preset, status: req.body?.status })
@@ -302,5 +305,26 @@ export default function registerAdminOperationsRoutes({ app, db, authenticate })
     ))
     writeAudit(db, req, 'notification.created', 'company', companyId, { recipientUserId, recipients: recipients.length }, companyId)
     res.status(201).json({ created: recipients.length })
+  })
+
+  app.get('/api/admin/resource/companies/:id/notification-recipients', authenticate, requirePermission(db, 'notifications.view'), (req, res) => {
+    if (!db.prepare('SELECT id FROM companies WHERE id = ?').get(req.params.id)) {
+      return res.status(404).json({ error: 'Компания не найдена' })
+    }
+    const recipients = db.prepare(`
+      SELECT id, email, name, role, status, service_notifications_enabled
+      FROM users
+      WHERE company_id = ? AND status = 'active'
+        AND (role = 'owner' OR (role = 'manager' AND service_notifications_enabled = 1))
+      ORDER BY CASE role WHEN 'owner' THEN 0 ELSE 1 END, name COLLATE NOCASE
+    `).all(req.params.id).map((recipient) => ({
+      id: recipient.id,
+      email: recipient.email,
+      name: recipient.name,
+      role: recipient.role,
+      status: recipient.status,
+      serviceNotificationsEnabled: Boolean(recipient.service_notifications_enabled),
+    }))
+    res.json({ recipients })
   })
 }

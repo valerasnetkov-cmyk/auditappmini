@@ -5,6 +5,7 @@ import Link from 'next/link'
 import Layout from '@/components/Layout'
 import api from '@/lib/api/client'
 import type { SaasAdminStats } from '@/lib/types'
+import type { PilotRequestSummary } from '@/lib/types'
 
 function formatNumber(value?: number | null) {
   return Number(value || 0).toLocaleString('ru-RU')
@@ -44,15 +45,20 @@ export default function SaasAdminOverviewPage() {
   const [stats, setStats] = useState<SaasAdminStats | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
+  const [pilotSummary, setPilotSummary] = useState<PilotRequestSummary | null>(null)
 
   useEffect(() => {
     const timer = window.setTimeout(async () => {
-      const result = await api.getSaasAdminStats()
+      const [result, requestsResult] = await Promise.all([
+        api.getSaasAdminStats(),
+        api.getPilotRequestSummary(),
+      ])
       if (result.data) {
         setStats(result.data)
       } else {
         setError(result.error || 'Не удалось загрузить обзор ресурса')
       }
+      if (requestsResult.data) setPilotSummary(requestsResult.data)
       setLoading(false)
     }, 0)
 
@@ -76,7 +82,8 @@ export default function SaasAdminOverviewPage() {
           <div className="rounded-lg border bg-white p-6 text-sm text-gray-600">Загрузка обзора...</div>
         ) : stats ? (
           <>
-            <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-6">
+            <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-7">
+              <MetricCard label="Новые заявки" value={formatNumber(pilotSummary?.new)} hint={`Всего заявок: ${formatNumber(pilotSummary?.total)}`} />
               <MetricCard label="Компаний всего" value={formatNumber(stats.totals.companies)} hint={`Активные: ${formatNumber(stats.totals.activeCompanies)}`} />
               <MetricCard label="Платные" value={formatNumber(stats.billing?.paidCompanies)} hint={`Free/trial: ${formatNumber(stats.billing?.freeCompanies)}`} />
               <MetricCard label="MRR" value={formatCurrency(stats.billing?.monthlyRevenueRub)} hint={`ARR: ${formatCurrency(stats.billing?.annualRevenueRub)}`} />
@@ -87,7 +94,8 @@ export default function SaasAdminOverviewPage() {
 
             <section>
               <h2 className="text-base font-semibold text-gray-950">Быстрые действия</h2>
-              <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-5">
+              <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-6">
+                <QuickAction href="/saas-admin/pilot-requests" label="Открыть заявки" hint="Новые обращения, квалификация и запуск пилотной компании." />
                 <QuickAction href="/saas-admin/companies" label="+ Создать компанию" hint="Реестр компаний, владельцы, статусы и лимиты." />
                 <QuickAction href="/saas-admin/payments" label="+ Добавить платеж" hint="Фиксация оффлайн-оплаты и пересчет подписки." />
                 <QuickAction href="/saas-admin/plans" label="+ Создать тариф" hint="Шаблоны тарифов, лимиты и feature flags." />

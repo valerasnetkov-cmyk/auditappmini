@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useState } from 'react'
+import { useCallback, useRef, useState } from 'react'
 import api from '@/lib/api/client'
 import type { SaasAdminStats } from '@/lib/types'
 
@@ -11,8 +11,10 @@ export function useCompaniesList() {
   const [error, setError] = useState('')
   const [message, setMessage] = useState('')
   const [ownerSetupLinks, setOwnerSetupLinks] = useState<Record<string, string>>({})
+  const currentQuery = useRef('')
 
   const loadStats = useCallback(async (query = '') => {
+    currentQuery.current = query
     setLoading(true)
     setError('')
     const [result, registryResult] = await Promise.all([
@@ -39,7 +41,7 @@ export function useCompaniesList() {
     setError('')
     setMessage('')
     const ok = await action()
-    if (ok) await loadStats()
+    if (ok) await loadStats(currentQuery.current)
     setSaving(false)
   }, [loadStats])
 

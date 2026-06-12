@@ -24,7 +24,7 @@ export const metadata: Metadata = {
   },
 }
 
-const pilotHref = 'mailto:info@auditavto.ru?subject=Запустить пилот AuditAvto'
+const pilotHref = '/?pilot=1&source=demo'
 
 const demoItems = [
   [TruckIcon, 'Тестовый автопарк', '12 единиц техники с разными статусами и историей.'],

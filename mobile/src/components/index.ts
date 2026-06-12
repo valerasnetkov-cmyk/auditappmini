@@ -1,4 +1,3 @@
-import { useTheme } from '../theme'
 import { styles } from '../styles'
 
 export { Button, Card } from './Button'

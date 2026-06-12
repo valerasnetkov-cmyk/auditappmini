@@ -10,6 +10,8 @@ export const RESOURCE_PERMISSIONS = [
   'payments.manage',
   'notifications.view',
   'notifications.manage',
+  'pilot_requests.view',
+  'pilot_requests.manage',
   'templates.view',
   'templates.manage',
   'service_users.view',
@@ -21,6 +23,7 @@ export const RESOURCE_PERMISSIONS = [
 export const RESOURCE_PERMISSION_PRESETS = {
   support: [
     'dashboard.view', 'companies.view', 'notifications.view', 'notifications.manage',
+    'pilot_requests.view', 'pilot_requests.manage',
     'templates.view', 'templates.manage',
   ],
   finance: [
@@ -30,6 +33,7 @@ export const RESOURCE_PERMISSION_PRESETS = {
   ],
   marketing: [
     'dashboard.view', 'companies.view', 'notifications.view', 'notifications.manage',
+    'pilot_requests.view', 'pilot_requests.manage',
     'templates.view', 'templates.manage',
   ],
   custom: [],

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { api, isAuthSessionError, setAuthSessionHandler } from '../api'
 import type { User } from '../types'
 
@@ -7,7 +7,7 @@ export function useAuth() {
   const [loading, setLoading] = useState(true)
   const [sessionMessage, setSessionMessage] = useState('')
 
-  const checkAuth = async () => {
+  const checkAuth = useCallback(async () => {
     try {
       const u = await api.getMe()
       setUser(u)
@@ -20,7 +20,7 @@ export function useAuth() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [])
 
   useEffect(() => {
     setAuthSessionHandler((error) => {
@@ -28,9 +28,9 @@ export function useAuth() {
       setUser(null)
       setLoading(false)
     })
-    checkAuth()
+    queueMicrotask(() => { void checkAuth() })
     return () => setAuthSessionHandler(null)
-  }, [])
+  }, [checkAuth])
 
   const reset = () => {
     setUser(null)
