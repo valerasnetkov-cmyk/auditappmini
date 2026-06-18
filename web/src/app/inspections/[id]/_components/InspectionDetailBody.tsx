@@ -24,7 +24,7 @@ import PhotoRequirementsSection from './PhotoRequirementsSection'
 import StatusBanner from './StatusBanner'
 import WarningsBanner from './WarningsBanner'
 import type { ChecklistItem, StatusTone } from '../_lib/checklist'
-import { NoticeCard, StatusButton, Stepper, type StepItem } from '@/components/ui'
+import { NoticeCard, Stepper, type StepItem } from '@/components/ui'
 
 export type InspectionBodyProps = {
   inspection: InspectionDetail
@@ -94,6 +94,7 @@ export type InspectionBodyProps = {
 
 export default function InspectionDetailBody(props: InspectionBodyProps) {
   const mutationsDisabled = Boolean(props.writeRestrictionMessage)
+  const inspectionEditingDisabled = true
   const warnings: string[] = props.readiness?.missing.map((item) => item.label) || []
   if (props.inspection.type === 'accident') {
     if (!props.accidentOccurredAt.trim()) warnings.push('Укажите время ДТП')
@@ -120,7 +121,6 @@ export default function InspectionDetailBody(props: InspectionBodyProps) {
     })
 
   const uniqueWarnings = [...new Set(warnings)]
-  const showError = (message: string) => props.onError('error', message)
   const requiredPhotosComplete = Boolean(
     props.photoRequirements &&
     props.photoRequirements.requirements.required.every(
@@ -186,6 +186,13 @@ export default function InspectionDetailBody(props: InspectionBodyProps) {
           <div className="mb-4"><NoticeCard title="Редактирование ограничено" tone="warning" compact>{props.writeRestrictionMessage}</NoticeCard></div>
         ) : null}
 
+        <div className="mb-4">
+          <NoticeCard title="Осмотр проводится только с мобильного устройства" tone="info" compact>
+            Веб-панель показывает историю, доказательства, readiness и отчёты. Проведение осмотра,
+            изменение чек-листа, фиксация пробега и добавление живых фото доступны только в мобильном приложении.
+          </NoticeCard>
+        </div>
+
         {uniqueWarnings.length > 0 && !props.inspection.completed ? (
           <WarningsBanner warnings={uniqueWarnings} />
         ) : null}
@@ -217,7 +224,7 @@ export default function InspectionDetailBody(props: InspectionBodyProps) {
               setAccidentLocation={props.setAccidentLocation}
               odometerUnavailableReason={props.odometerUnavailableReason}
               setOdometerUnavailableReason={props.setOdometerUnavailableReason}
-              disabled={mutationsDisabled}
+              disabled={inspectionEditingDisabled}
             />
           ) : props.inspection.type === 'quick' || props.inspection.type === 'scheduled' ? (
             <OdometerCard
@@ -225,7 +232,7 @@ export default function InspectionDetailBody(props: InspectionBodyProps) {
               setOdometerValue={props.setOdometerValue}
               odometerUnit={props.odometerUnit}
               setOdometerUnit={props.setOdometerUnit}
-              disabled={mutationsDisabled}
+              disabled={inspectionEditingDisabled}
             />
           ) : null}
 
@@ -233,16 +240,6 @@ export default function InspectionDetailBody(props: InspectionBodyProps) {
             <PhotoRequirementsSection
               requirements={props.photoRequirements}
               inspectionPhotos={props.inspectionPhotos}
-              uploadingPhoto={props.uploadingPhoto}
-              deletingPhoto={props.deletingPhoto}
-              onUpload={(photoType, file) =>
-                void props.onInspectionPhotoUpload(photoType, file, showError)
-              }
-              onDelete={(photoType, photoIndex) => {
-                const photo = props.inspectionPhotos[photoType]?.[photoIndex]
-                void props.onInspectionPhotoDelete(photoType, photo?.id, photoIndex, showError)
-              }}
-              disabled={mutationsDisabled}
             />
           ) : null}
 
@@ -251,24 +248,16 @@ export default function InspectionDetailBody(props: InspectionBodyProps) {
             checklist={props.checklist}
             inspection={props.inspection}
             defectPhotos={props.defectPhotos}
-            uploadingPhoto={props.uploadingPhoto}
-            deletingPhoto={props.deletingPhoto}
             disabled={mutationsDisabled}
             onResultChange={props.onResultChange}
             onCommentChange={props.onCommentChange}
-            onPhotoUpload={(defectTitle, file) =>
-              void props.onPhotoUpload(defectTitle, file, showError)
-            }
-            onPhotoDelete={(defectTitle, photoIndex) => {
-              const photo = props.defectPhotos[defectTitle]?.[photoIndex]
-              void props.onPhotoDelete(defectTitle, photo?.id, photoIndex, showError)
-            }}
+            readOnly={inspectionEditingDisabled}
           />
         </div>
 
         <DefectsList
           inspection={props.inspection}
-          disabled={mutationsDisabled || Boolean(props.inspection.completed)}
+          disabled={inspectionEditingDisabled || mutationsDisabled || Boolean(props.inspection.completed)}
           saving={props.saving}
           onCreateDefect={props.onCreateDefect}
         />
@@ -277,28 +266,6 @@ export default function InspectionDetailBody(props: InspectionBodyProps) {
           <Link href="/inspections" className="rounded-lg border px-6 py-2 hover:bg-slate-50">
             Назад
           </Link>
-          <StatusButton
-            onClick={props.onSave}
-            disabled={props.saving || mutationsDisabled}
-            status={props.saving ? 'loading' : 'idle'}
-            loadingLabel="Сохраняем осмотр…"
-          >
-            Сохранить осмотр
-          </StatusButton>
-          {!props.inspection.completed ? (
-            <button
-              onClick={props.onComplete}
-              disabled={
-                props.saving ||
-                !props.readiness?.ready ||
-                !props.photoRequirements ||
-                mutationsDisabled
-              }
-              className="rounded-lg bg-green-600 px-6 py-2 text-white hover:bg-green-700 disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              Завершить осмотр
-            </button>
-          ) : null}
         </div>
       </div>
     </Layout>

@@ -7,7 +7,7 @@ import Layout from '@/components/Layout'
 import api from '@/lib/api/client'
 import { getCompanyOperationRestriction } from '@/lib/companyAccess'
 import { useCompanyUsage } from '@/lib/useCompanyUsage'
-import type { InspectionReport, InspectionType } from '@/lib/types'
+import type { InspectionReport } from '@/lib/types'
 import type { AuthUser, InspectionApproval } from '@/lib/types'
 import { isManagerRole } from '@/lib/auth'
 
@@ -18,14 +18,12 @@ import { useAccidentFields } from './_hooks/useAccidentFields'
 import { useOdometer } from './_hooks/useOdometer'
 import { usePhotoUpload } from './_hooks/usePhotoUpload'
 
-import NewInspectionForm from './_components/NewInspectionForm'
 import InspectionDetailBody from './_components/InspectionDetailBody'
 
 export default function InspectionDetailPage() {
   const params = useParams<{ id: string }>()
   const inspectionId = params.id
   const { usage: companyUsage, loading: companyUsageLoading } = useCompanyUsage()
-  const createRestriction = getCompanyOperationRestriction(companyUsage, 'create')
   const writeRestriction = getCompanyOperationRestriction(companyUsage, 'write')
   const writeRestrictionMessage = companyUsageLoading
     ? 'Проверяем статус тарифа компании. Изменения станут доступны после проверки.'
@@ -92,46 +90,6 @@ export default function InspectionDetailPage() {
       return false
     }
     return true
-  }
-
-  const handleCreate = async (
-    vehicleId: string,
-    type: InspectionType,
-    accidentData?: { occurredAt?: string; location?: string },
-  ) => {
-    clearStatus()
-    if (companyUsageLoading) {
-      showStatus('error', 'Проверяем статус тарифа компании. Повторите действие через несколько секунд.')
-      return
-    }
-    if (createRestriction) {
-      showStatus('error', `${createRestriction.title}: ${createRestriction.message}`)
-      return
-    }
-    try {
-      const result = await api.createInspection({
-        vehicle_id: vehicleId,
-        type,
-        checklist: [],
-        accident_occurred_at:
-          type === 'accident' && accidentData?.occurredAt
-            ? new Date(accidentData.occurredAt).toISOString()
-            : undefined,
-        accident_location:
-          type === 'accident' ? accidentData?.location?.trim() : undefined,
-      })
-      if (result.error) {
-        showStatus('error', result.error)
-        return
-      }
-      if (result.data?.id) {
-        window.location.href = `/inspections/${result.data.id}`
-        return
-      }
-      showStatus('error', 'Не удалось создать осмотр')
-    } catch {
-      showStatus('error', 'Ошибка создания осмотра')
-    }
   }
 
   const handleSave = async () => {
@@ -328,11 +286,20 @@ export default function InspectionDetailPage() {
 
   if (isNewInspection) {
     return (
-      <NewInspectionForm
-        onCreate={handleCreate}
-        statusMessage={statusMessage}
-        statusTone={statusTone}
-      />
+      <Layout currentPage="inspections">
+        <div className="flex min-h-[60vh] items-center justify-center p-6">
+          <div className="card max-w-xl p-8 text-center">
+            <h1 className="text-xl font-semibold text-foreground">Осмотр проводится только в мобильном приложении</h1>
+            <p className="mt-3 text-sm leading-6 text-foreground-secondary">
+              Web-панель не создаёт и не проводит осмотры. Используйте мобильное приложение AuditAvto:
+              инспектор, менеджер или владелец компании фиксирует живые фото камерой устройства.
+            </p>
+            <Link href="/inspections" className="btn btn-primary mt-6">
+              Вернуться к журналу осмотров
+            </Link>
+          </div>
+        </div>
+      </Layout>
     )
   }
 

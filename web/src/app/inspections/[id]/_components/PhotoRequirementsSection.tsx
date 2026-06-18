@@ -9,19 +9,9 @@ import { Badge, ProgressBar } from '@/components/ui'
 export default function PhotoRequirementsSection({
   requirements,
   inspectionPhotos,
-  uploadingPhoto,
-  deletingPhoto,
-  onUpload,
-  onDelete,
-  disabled,
 }: {
   requirements: PhotoRequirementsResponse
   inspectionPhotos: Record<string, PhotoRecord[]>
-  uploadingPhoto: string | null
-  deletingPhoto: string | null
-  onUpload: (photoType: string, file: File) => void
-  onDelete: (photoType: string, photoIndex: number) => void
-  disabled: boolean
 }) {
   const required = requirements.requirements.required
   const completedCount = required.filter((photoType) => (inspectionPhotos[photoType] || []).length > 0).length
@@ -73,35 +63,11 @@ export default function PhotoRequirementsSection({
                         className="h-20 w-20 rounded border object-cover"
                       />
                     </button>
-                    <button
-                      type="button"
-                      onClick={() => onDelete(photoType, photoIndex)}
-                      disabled={deletingPhoto === `${photoType}-${photoIndex}` || disabled}
-                      className="absolute -right-2 -top-2 flex h-6 w-6 items-center justify-center rounded-full bg-red-500 text-xs text-white opacity-0 transition-opacity group-hover:opacity-100"
-                    >
-                      {deletingPhoto === `${photoType}-${photoIndex}` ? '...' : 'x'}
-                    </button>
                   </div>
                 ))}
-
-                <label className="flex h-20 w-20 cursor-pointer items-center justify-center rounded border-2 border-dashed border-slate-300 transition-colors hover:border-blue-400 hover:bg-blue-50">
-                  {uploadingPhoto === photoType ? (
-                    <span className="ui-inline-spinner" aria-label="Загрузка фото" />
-                  ) : (
-                    <span className="text-2xl text-slate-400">+</span>
-                  )}
-                  <input
-                    type="file"
-                    accept="image/jpeg,image/png,image/webp"
-                    disabled={disabled}
-                    className="hidden"
-                    onChange={(event) => {
-                      if (event.target.files?.[0]) {
-                        onUpload(photoType, event.target.files[0])
-                      }
-                    }}
-                  />
-                </label>
+                {!photos.length ? (
+                  <span className="text-xs text-slate-400">Фото пока не загружено из мобильного осмотра</span>
+                ) : null}
               </div>
             </div>
           )

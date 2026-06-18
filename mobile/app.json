@@ -17,9 +17,7 @@
       "supportsTablet": true,
       "infoPlist": {
         "NSCameraUsageDescription": "Камера нужна для фотофиксации осмотров, дефектов и госномера.",
-        "NSLocationWhenInUseUsageDescription": "Геолокация нужна для фиксации места ДТП.",
-        "NSPhotoLibraryUsageDescription": "Доступ к медиатеке нужен для выбора фото осмотра при необходимости.",
-        "NSPhotoLibraryAddUsageDescription": "Доступ к сохранению фото нужен для материалов осмотра."
+        "NSLocationWhenInUseUsageDescription": "Геолокация нужна для фиксации места ДТП."
       },
       "bundleIdentifier": "com.vsnetkov.mobile"
     },
@@ -34,10 +32,7 @@
       "permissions": [
         "CAMERA",
         "ACCESS_COARSE_LOCATION",
-        "ACCESS_FINE_LOCATION",
-        "READ_MEDIA_IMAGES",
-        "READ_EXTERNAL_STORAGE",
-        "WRITE_EXTERNAL_STORAGE"
+        "ACCESS_FINE_LOCATION"
       ],
       "versionCode": 2
     },
@@ -56,13 +51,6 @@
         "expo-location",
         {
           "locationWhenInUsePermission": "Разрешите Аудит авто использовать геолокацию для фиксации места ДТП."
-        }
-      ],
-      [
-        "expo-media-library",
-        {
-          "photosPermission": "Разрешите Аудит авто выбирать фото из медиатеки.",
-          "savePhotosPermission": "Разрешите Аудит авто сохранять фото материалов осмотра."
         }
       ]
     ],

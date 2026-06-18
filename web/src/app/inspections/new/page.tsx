@@ -1,56 +1,21 @@
-"use client";
-
-import { useEffect, useState } from 'react'
-import { useRouter } from 'next/navigation'
 import Layout from '@/components/Layout'
-import NewInspectionModal from '@/components/NewInspectionModal'
-import { VehicleRecord } from '@/lib/types'
-import api from '@/lib/api/client'
+import Link from 'next/link'
 
-// Page that auto-opens a New Inspection modal when navigated to with a vehicle query param
 export default function InspectionsNewPage() {
-  const router = useRouter()
-  const [open, setOpen] = useState(false)
-  const [vehicleFromParam, setVehicleFromParam] = useState<VehicleRecord | null>(null)
-  const [vehicles] = useState<VehicleRecord[]>([]) // optional: could fetch list; keep empty to force preselected behaviour
-
-  useEffect(() => {
-    const vehParam = typeof window !== 'undefined' ? new URL(window.location.href).searchParams.get('vehicle') : null
-    if (!vehParam) return
-    // Fetch full vehicle details to prefill modal
-    ;(async () => {
-      try {
-        const res = await api.getVehicle(vehParam)
-        if (!res?.error && res?.data) {
-          setVehicleFromParam(res.data as VehicleRecord)
-        } else {
-          setVehicleFromParam({ id: vehParam, number: '', name: '', region: '' } as VehicleRecord)
-        }
-      } catch {
-        setVehicleFromParam({ id: vehParam, number: '', name: '', region: '' } as VehicleRecord)
-      } finally {
-        setOpen(true)
-      }
-    })()
-  }, [])
-
   return (
     <Layout currentPage="inspections">
-      {/* Auto-opened modal when vehicle param is present */}
-      {open && vehicleFromParam ? (
-        <NewInspectionModal
-          open={true}
-          vehicle={vehicleFromParam}
-          vehicles={vehicles}
-          onClose={() => {
-            // Navigate back to vehicle list on close
-            router.push('/vehicles')
-          }}
-        />
-      ) : null}
-      {!open ? (
-        <div className="p-6">Откройте осмотр на странице техники.</div>
-      ) : null}
+      <div className="flex min-h-[60vh] items-center justify-center p-6">
+        <div className="card max-w-xl p-8 text-center">
+          <h1 className="text-xl font-semibold text-foreground">Осмотр проводится только с мобильного устройства</h1>
+          <p className="mt-3 text-sm leading-6 text-foreground-secondary">
+            Веб-панель используется для контроля, истории, дефектов и отчётов. Новый осмотр нужно начать
+            в мобильном приложении AuditAvto: фото фиксируются камерой онлайн, без загрузки из галереи.
+          </p>
+          <Link href="/inspections" className="btn btn-primary mt-6">
+            Вернуться к журналу осмотров
+          </Link>
+        </div>
+      </div>
     </Layout>
   )
 }

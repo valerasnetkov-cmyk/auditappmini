@@ -85,13 +85,7 @@ export default function InspectionsPage() {
   const [sortConfig, setSortConfig] = useState<SortConfig>({ key: 'created_at', direction: 'desc' })
   const [toast, setToast] = useState<ToastMessage | null>(null)
   const { usage: companyUsage, loading: companyUsageLoading } = useCompanyUsage()
-  const createRestriction = getCompanyOperationRestriction(companyUsage, 'create')
   const writeRestriction = getCompanyOperationRestriction(companyUsage, 'write')
-  const createRestrictionMessage = companyUsageLoading
-    ? 'Проверяем статус тарифа компании. Создание осмотра станет доступно после проверки.'
-    : createRestriction
-      ? `${createRestriction.title}: ${createRestriction.message}`
-      : ''
   const writeRestrictionMessage = companyUsageLoading
     ? 'Проверяем статус тарифа компании. Изменения станут доступны после проверки.'
     : writeRestriction
@@ -233,22 +227,16 @@ export default function InspectionsPage() {
             <h1 className="page-title text-2xl">Осмотры</h1>
             <p className="mt-1 text-sm text-foreground-muted">Журнал осмотров, ДТП и зафиксированных дефектов.</p>
           </div>
-          {createRestrictionMessage ? (
-            <button type="button" disabled className="btn btn-primary disabled:opacity-50">
-              + Новый осмотр
-            </button>
-          ) : (
-            <Link href="/inspections/new" className="btn btn-primary">
-            + Новый осмотр
-            </Link>
-          )}
+          <div className="rounded-card border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-800">
+            Новые осмотры проводятся только в мобильном приложении.
+          </div>
         </header>
 
         <SubscriptionStatusBanner usage={companyUsage} compact />
 
-        {createRestrictionMessage || writeRestrictionMessage ? (
+        {writeRestrictionMessage ? (
           <div className="alert-danger mb-4 rounded-card px-4 py-3 text-sm">
-            {createRestrictionMessage || writeRestrictionMessage}
+            {writeRestrictionMessage}
           </div>
         ) : null}
 

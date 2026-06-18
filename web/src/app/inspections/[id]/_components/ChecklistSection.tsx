@@ -9,25 +9,19 @@ export default function ChecklistSection({
   checklist,
   inspection,
   defectPhotos,
-  uploadingPhoto,
-  deletingPhoto,
   disabled,
   onResultChange,
   onCommentChange,
-  onPhotoUpload,
-  onPhotoDelete,
+  readOnly = false,
 }: {
   type: InspectionType
   checklist: ChecklistItem[]
   inspection: InspectionDetail
   defectPhotos: Record<string, PhotoRecord[]>
-  uploadingPhoto: string | null
-  deletingPhoto: string | null
   disabled: boolean
   onResultChange: (index: number, result: boolean) => void
   onCommentChange: (index: number, comment: string) => void
-  onPhotoUpload: (defectTitle: string, file: File) => void
-  onPhotoDelete: (defectTitle: string, photoIndex: number) => void
+  readOnly?: boolean
 }) {
   const grouped = groupChecklist(type, checklist)
   const defectsCount = checklist.filter((item) => !item.result).length
@@ -58,13 +52,10 @@ export default function ChecklistSection({
                     item={item}
                     existingDefect={existingDefect}
                     photos={photos}
-                    uploading={uploadingPhoto === item.title}
-                    deletingPhotoKey={deletingPhoto}
                     disabled={disabled}
+                    readOnly={readOnly}
                     onResultChange={onResultChange}
                     onCommentChange={onCommentChange}
-                    onPhotoUpload={onPhotoUpload}
-                    onPhotoDelete={onPhotoDelete}
                   />
                 )
               })}

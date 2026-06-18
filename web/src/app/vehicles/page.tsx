@@ -5,7 +5,6 @@ import type { FormEvent } from 'react'
 import Link from 'next/link'
 import { useSearchParams } from 'next/navigation'
 import Layout from '@/components/Layout'
-import NewInspectionModal from '@/components/NewInspectionModal'
 import SubscriptionStatusBanner from '@/components/SubscriptionStatusBanner'
 import { NoticeCard, Skeleton, StatusButton } from '@/components/ui'
 import api from '@/lib/api/client'
@@ -23,8 +22,6 @@ import { VehicleForm } from './_components/VehicleForm'
 export default function VehiclesPage() {
   const searchParams = useSearchParams()
   const [showAddModal, setShowAddModal] = useState(false)
-  const [showNewInspectionModal, setShowNewInspectionModal] = useState(false)
-  const [selectedVehicleForInspection, setSelectedVehicleForInspection] = useState<VehicleRecord | null>(null)
   const [editingVehicle, setEditingVehicle] = useState<VehicleRecord | null>(null)
   const [formData, setFormData] = useState<VehicleFormData>(INITIAL_FORM)
   const [formError, setFormError] = useState('')
@@ -64,25 +61,6 @@ export default function VehiclesPage() {
     setStatusFilter(searchParams.get('status') || '')
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
-
-  useEffect(() => {
-    const vehicleId = searchParams.get('vehicle')
-    if (!vehicleId) return
-
-    const found = vehicles.find((vehicle) => vehicle.id === vehicleId)
-    if (found) {
-      setSelectedVehicleForInspection(found)
-      setShowNewInspectionModal(true)
-      return
-    }
-
-    void api.getVehicle(vehicleId).then((result) => {
-      if (!result.error && result.data) {
-        setSelectedVehicleForInspection(result.data as VehicleRecord)
-        setShowNewInspectionModal(true)
-      }
-    })
-  }, [vehicles, searchParams])
 
   useEffect(() => {
     const availableIds = new Set(vehicles.map((vehicle) => vehicle.id))
@@ -339,17 +317,11 @@ export default function VehiclesPage() {
             selectedIds={selectedVehicleIdsSet}
             allVisibleSelected={allVisibleSelected}
             actionsDisabled={Boolean(writeRestrictionMessage)}
-            createActionsDisabled={Boolean(createRestrictionMessage)}
             onSort={handleSort}
             onEdit={handleEdit}
             onArchive={(id) => void handleArchiveVehicles([id])}
             onToggleSelected={toggleVehicleSelection}
             onToggleAllVisible={toggleVisibleSelection}
-            onInspect={(vehicle) => {
-              if (createRestrictionMessage) return
-              setSelectedVehicleForInspection(vehicle)
-              setShowNewInspectionModal(true)
-            }}
           />
         )}
 
@@ -396,17 +368,6 @@ export default function VehiclesPage() {
           </VehicleModal>
         ) : null}
 
-        {showNewInspectionModal && selectedVehicleForInspection ? (
-          <NewInspectionModal
-            open
-            vehicle={selectedVehicleForInspection}
-            vehicles={vehicles}
-            onClose={() => {
-              setShowNewInspectionModal(false)
-              setSelectedVehicleForInspection(null)
-            }}
-          />
-        ) : null}
       </div>
     </Layout>
   )

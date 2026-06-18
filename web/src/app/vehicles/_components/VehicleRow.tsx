@@ -23,8 +23,6 @@ export function VehicleRow({
   hiddenColumns,
   selected,
   actionsDisabled,
-  createActionsDisabled,
-  onInspect,
   onEdit,
   onArchive,
   onToggleSelected,
@@ -33,8 +31,6 @@ export function VehicleRow({
   hiddenColumns: string[]
   selected: boolean
   actionsDisabled: boolean
-  createActionsDisabled: boolean
-  onInspect: (vehicle: VehicleRecord) => void
   onEdit: (vehicle: VehicleRecord) => void
   onArchive: (id: string) => void
   onToggleSelected: (id: string) => void
@@ -89,9 +85,9 @@ export function VehicleRow({
       ) : null}
       <td className="px-6 py-4 text-center">
         {!isArchived ? (
-          <button onClick={() => onInspect(vehicle)} disabled={createActionsDisabled} className="mr-3 text-status-success hover:underline disabled:cursor-not-allowed disabled:opacity-50">
-            Осмотр
-          </button>
+          <span className="mr-3 text-xs text-foreground-muted" title="Осмотр проводится только в мобильном приложении">
+            Осмотр: mobile
+          </span>
         ) : null}
         <button onClick={() => onEdit(vehicle)} disabled={actionsDisabled} className="mr-3 text-primary hover:underline disabled:cursor-not-allowed disabled:opacity-50">
           Изменить

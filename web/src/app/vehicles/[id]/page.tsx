@@ -25,13 +25,7 @@ export default function VehicleDetailPage() {
   const data = useVehicleDetailData(vehicleId)
   const { toast, showToast } = useToast()
   const { usage: companyUsage, loading: companyUsageLoading } = useCompanyUsage()
-  const createRestriction = getCompanyOperationRestriction(companyUsage, 'create')
   const writeRestriction = getCompanyOperationRestriction(companyUsage, 'write')
-  const createRestrictionMessage = companyUsageLoading
-    ? 'Проверяем статус тарифа компании. Новый осмотр станет доступен после проверки.'
-    : createRestriction
-      ? `${createRestriction.title}: ${createRestriction.message}`
-      : ''
   const writeRestrictionMessage = companyUsageLoading
     ? 'Проверяем статус тарифа компании. Изменения станут доступны после проверки.'
     : writeRestriction
@@ -105,15 +99,9 @@ export default function VehicleDetailPage() {
           </div>
 
           <div className="flex flex-wrap gap-3">
-            {createRestrictionMessage ? (
-              <button type="button" disabled className="btn btn-primary disabled:opacity-50">
-                Провести осмотр
-              </button>
-            ) : (
-              <Link href={`/inspections/new?vehicle=${data.vehicle.id}`} className="btn btn-primary">
-                Провести осмотр
-              </Link>
-            )}
+            <div className="rounded-card border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-800">
+              Осмотр проводится только в мобильном приложении с камеры устройства.
+            </div>
             <button
               onClick={() => statusModal.openStatusModal(data.vehicle?.status || '')}
               disabled={Boolean(writeRestrictionMessage)}
@@ -126,9 +114,9 @@ export default function VehicleDetailPage() {
 
         <SubscriptionStatusBanner usage={companyUsage} compact />
 
-        {createRestrictionMessage || writeRestrictionMessage ? (
+        {writeRestrictionMessage ? (
           <div className="alert-danger mb-4 rounded-card px-4 py-3 text-sm">
-            {createRestrictionMessage || writeRestrictionMessage}
+            {writeRestrictionMessage}
           </div>
         ) : null}
 

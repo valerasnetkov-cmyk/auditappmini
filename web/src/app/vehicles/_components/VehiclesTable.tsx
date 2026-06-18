@@ -11,13 +11,11 @@ export function VehiclesTable({
   selectedIds,
   allVisibleSelected,
   actionsDisabled,
-  createActionsDisabled,
   onSort,
   onEdit,
   onArchive,
   onToggleSelected,
   onToggleAllVisible,
-  onInspect,
 }: {
   vehicles: VehicleRecord[]
   hiddenColumns: string[]
@@ -25,13 +23,11 @@ export function VehiclesTable({
   selectedIds: Set<string>
   allVisibleSelected: boolean
   actionsDisabled: boolean
-  createActionsDisabled: boolean
   onSort: (key: SortableVehicleKey) => void
   onEdit: (vehicle: VehicleRecord) => void
   onArchive: (id: string) => void
   onToggleSelected: (id: string) => void
   onToggleAllVisible: () => void
-  onInspect: (vehicle: VehicleRecord) => void
 }) {
   return (
     <div className="table-card">
@@ -75,8 +71,6 @@ export function VehiclesTable({
                   hiddenColumns={hiddenColumns}
                   selected={selectedIds.has(vehicle.id)}
                   actionsDisabled={actionsDisabled}
-                  createActionsDisabled={createActionsDisabled}
-                  onInspect={onInspect}
                   onEdit={onEdit}
                   onArchive={onArchive}
                   onToggleSelected={onToggleSelected}

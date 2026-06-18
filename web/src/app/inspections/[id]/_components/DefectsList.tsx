@@ -38,12 +38,11 @@ export default function DefectsList({
         <h2 className="text-lg font-semibold text-slate-900">
           Все дефекты осмотра ({inspection.defects.length})
         </h2>
-        {!inspection.completed ? (
+        {!inspection.completed && !disabled ? (
           <button
             type="button"
-            disabled={disabled}
             onClick={() => setShowForm((value) => !value)}
-            className="btn btn-secondary btn-sm disabled:opacity-50"
+            className="btn btn-secondary btn-sm"
           >
             Добавить вручную
           </button>
