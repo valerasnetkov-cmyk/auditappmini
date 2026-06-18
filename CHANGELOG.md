@@ -3,6 +3,11 @@
 ## Unreleased
 
 ### Changed
+- **Vehicle number edit hotfix**: web API client now disables fetch caching for
+  authenticated JSON requests, so vehicle detail/list data is refetched after
+  `PUT /vehicles/:id`. `smoke:vehicles` covers the production regression
+  `К002МК265` -> `К002МК65` across update, detail, list search and
+  resolve-number lookup.
 - **RC readiness freeze**: функциональные изменения зафиксированы на уровне
   pilot-ready RC; дальнейшая работа до pilot/staging ограничена release gates,
   точечными исправлениями failures и документированием рисков. Крупная

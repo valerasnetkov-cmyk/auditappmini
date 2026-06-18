@@ -193,6 +193,77 @@ async function run() {
       throw new Error('Vehicle inspection schedule overrides were not applied')
     }
 
+    const incorrectPlate = 'К002МК265'
+    const correctedPlate = 'К002МК65'
+    const incorrectNumberUpdate = await request(`/api/vehicles/${created.id}`, {
+      method: 'PUT',
+      headers,
+      body: JSON.stringify({
+        ...createPayload,
+        number: incorrectPlate,
+        status: 'repair',
+        quick_inspection_interval_days: 3,
+        planned_inspection_interval_days: 14,
+      }),
+    })
+    if (incorrectNumberUpdate.number !== incorrectPlate) {
+      throw new Error(`Vehicle number update to incorrect plate was not persisted: ${incorrectNumberUpdate.number}`)
+    }
+
+    const correctedNumberUpdate = await request(`/api/vehicles/${created.id}`, {
+      method: 'PUT',
+      headers,
+      body: JSON.stringify({
+        ...createPayload,
+        number: correctedPlate,
+        status: 'repair',
+        quick_inspection_interval_days: 3,
+        planned_inspection_interval_days: 14,
+      }),
+    })
+    if (correctedNumberUpdate.number !== correctedPlate) {
+      throw new Error(`Vehicle number correction was not persisted: ${correctedNumberUpdate.number}`)
+    }
+
+    const correctedVehicleDetail = await request(`/api/vehicles/${created.id}`, {
+      headers: { Authorization: `Bearer ${login.token}` },
+    })
+    if (correctedVehicleDetail.number !== correctedPlate) {
+      throw new Error(`Vehicle detail returned stale number: ${correctedVehicleDetail.number}`)
+    }
+
+    const correctedVehicleList = await request(`/api/vehicles?search=${encodeURIComponent(correctedPlate)}&limit=100`, {
+      headers: { Authorization: `Bearer ${login.token}` },
+    })
+    if (!correctedVehicleList.data.some((vehicle) => vehicle.id === created.id && vehicle.number === correctedPlate)) {
+      throw new Error('Vehicle list did not return the corrected number')
+    }
+
+    const staleVehicleList = await request(`/api/vehicles?search=${encodeURIComponent(incorrectPlate)}&limit=100`, {
+      headers: { Authorization: `Bearer ${login.token}` },
+    })
+    if (staleVehicleList.data.some((vehicle) => vehicle.id === created.id)) {
+      throw new Error('Vehicle list still matches the stale incorrect number')
+    }
+
+    const resolvedCorrected = await request('/api/vehicles/resolve-number', {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ number: correctedPlate }),
+    })
+    if (!resolvedCorrected.found || resolvedCorrected.data?.id !== created.id || resolvedCorrected.data?.number !== correctedPlate) {
+      throw new Error(`Corrected vehicle number was not resolvable: ${JSON.stringify(resolvedCorrected)}`)
+    }
+
+    const resolvedStale = await request('/api/vehicles/resolve-number', {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ number: incorrectPlate }),
+    })
+    if (resolvedStale.found) {
+      throw new Error(`Stale incorrect vehicle number is still resolvable: ${JSON.stringify(resolvedStale)}`)
+    }
+
     const inspection = await request('/api/inspections', {
       method: 'POST',
       headers,
@@ -309,6 +380,7 @@ async function run() {
           ok: true,
           createdId: created.id,
           createdNumber: created.number,
+          correctedNumber: correctedNumberUpdate.number,
           createdRegion: created.region,
           updatedStatus: updated.status,
           duplicateError: duplicateCreate.error ?? null,
