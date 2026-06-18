@@ -1,4 +1,5 @@
 import { v4 as uuidv4 } from 'uuid'
+import { sendInspectionCompletedError } from '../services/inspectionReadiness.js'
 
 function validateAccidentDetails(API_MESSAGES, type, accidentOccurredAt, accidentLocation) {
   if (type !== 'accident') {
@@ -70,6 +71,7 @@ export default function registerInspectionRoutes({
   ensureCompanyResourceAvailable,
   ensureCompanyOperationalWriteAllowed,
   removePhotoFilesForRows,
+  inspectionReadiness,
 }) {
   app.get('/api/inspections', authenticate, (req, res) => {
     const { page = 1, limit = 20, type = '', vehicle = '', from = '', to = '' } = req.query
@@ -166,10 +168,28 @@ export default function registerInspectionRoutes({
 
   app.post('/api/inspections', authenticate, (req, res) => {
     if (!ensureCompanyOperationalWriteAllowed(req, res, { mode: 'create' })) return
-    if (!ensureCompanyResourceAvailable(req, res, 'inspections_month')) return
 
-    const { vehicle_id, type = 'quick', checklist = [], accident_occurred_at = null, accident_location = null } = req.body
+    const {
+      vehicle_id,
+      type = 'quick',
+      checklist = [],
+      accident_occurred_at = null,
+      accident_location = null,
+      client_inspection_id = null,
+      sync_source = 'web',
+    } = req.body
     const companyId = req.user.company_id || 'default'
+
+    if (client_inspection_id) {
+      const existing = db.prepare(`
+        SELECT *
+        FROM inspections
+        WHERE company_id = ? AND client_inspection_id = ?
+      `).get(companyId, String(client_inspection_id))
+      if (existing) return res.json(existing)
+    }
+
+    if (!ensureCompanyResourceAvailable(req, res, 'inspections_month')) return
 
     if (type === 'accident' && !ensureCompanyFeatureEnabled(req, res, 'accident_module_enabled', API_MESSAGES.accidentModuleDisabled)) {
       return
@@ -187,13 +207,22 @@ export default function registerInspectionRoutes({
     const id = uuidv4()
 
     db.prepare(`
-      INSERT INTO inspections (id, vehicle_id, inspector_id, type, completed, accident_occurred_at, accident_location, company_id)
-      VALUES (?, ?, ?, ?, 0, ?, ?, ?)
-    `).run(id, vehicle_id, req.user.id, type, accidentValidation.accidentOccurredAt, accidentValidation.accidentLocation, companyId)
-
-    if (type === 'scheduled') {
-      db.prepare("UPDATE vehicles SET last_scheduled_inspection = datetime('now') WHERE id = ? AND company_id = ?").run(vehicle_id, companyId)
-    }
+      INSERT INTO inspections (
+        id, vehicle_id, inspector_id, type, completed, accident_occurred_at,
+        accident_location, company_id, client_inspection_id, sync_source
+      )
+      VALUES (?, ?, ?, ?, 0, ?, ?, ?, ?, ?)
+    `).run(
+      id,
+      vehicle_id,
+      req.user.id,
+      type,
+      accidentValidation.accidentOccurredAt,
+      accidentValidation.accidentLocation,
+      companyId,
+      client_inspection_id ? String(client_inspection_id) : null,
+      String(sync_source || 'web'),
+    )
 
     const insertChecklist = db.prepare(`
       INSERT INTO checklist_items (id, inspection_id, title, result, comment)
@@ -202,7 +231,8 @@ export default function registerInspectionRoutes({
 
     checklist.forEach(item => {
       const itemId = uuidv4()
-      insertChecklist.run(itemId, id, item.title, item.result ? 1 : 0, item.comment || null)
+      const result = item.result === null || item.result === undefined ? null : item.result ? 1 : 0
+      insertChecklist.run(itemId, id, item.title, result, item.comment || null)
     })
 
     const inspection = getInspectionById(id, companyId)
@@ -230,6 +260,13 @@ export default function registerInspectionRoutes({
     res.json({ ...inspection, checklist_items: checklist, defects, photos })
   })
 
+  app.get('/api/inspections/:id/readiness', authenticate, (req, res) => {
+    const companyId = req.user.company_id || 'default'
+    const readiness = inspectionReadiness.getReadiness(req.params.id, companyId)
+    if (!readiness) return sendError(res, 404, API_MESSAGES.inspectionNotFound)
+    res.json(readiness)
+  })
+
   app.put('/api/inspections/:id', authenticate, async (req, res) => {
     if (!ensureCompanyOperationalWriteAllowed(req, res, { mode: 'write' })) return
 
@@ -238,6 +275,7 @@ export default function registerInspectionRoutes({
     if (!inspection) {
       return sendError(res, 404, API_MESSAGES.inspectionNotFound)
     }
+    if (inspection.completed) return sendInspectionCompletedError(res)
 
     const { checklist = [], accident_occurred_at = null, accident_location = null } = req.body
     const accidentValidation = validateAccidentDetails(API_MESSAGES, inspection.type, accident_occurred_at, accident_location)
@@ -247,13 +285,24 @@ export default function registerInspectionRoutes({
 
     db.prepare(`
       UPDATE inspections
-      SET accident_occurred_at = ?, accident_location = ?, odometer_value = ?, odometer_unit = ?
+      SET accident_occurred_at = ?,
+          accident_location = ?,
+          odometer_value = ?,
+          odometer_unit = ?,
+          odometer_confirmed_at = ?,
+          odometer_unavailable_reason = ?
       WHERE id = ? AND company_id = ?
     `).run(
       accidentValidation.accidentOccurredAt,
       accidentValidation.accidentLocation,
       req.body.odometer_value ?? inspection.odometer_value ?? null,
       req.body.odometer_unit ?? inspection.odometer_unit ?? 'km',
+      req.body.odometer_value !== undefined
+        ? new Date().toISOString()
+        : inspection.odometer_confirmed_at ?? null,
+      req.body.odometer_unavailable_reason !== undefined
+        ? String(req.body.odometer_unavailable_reason || '').trim() || null
+        : inspection.odometer_unavailable_reason ?? null,
       req.params.id,
       companyId,
     )
@@ -316,13 +365,15 @@ export default function registerInspectionRoutes({
       retainedChecklistItemIds.add(checklistItemId)
 
       if (existingChecklistItem) {
-        updateChecklist.run(item.result ? 1 : 0, item.comment || null, existingChecklistItem.id)
+        const result = item.result === null || item.result === undefined ? null : item.result ? 1 : 0
+        updateChecklist.run(result, item.comment || null, existingChecklistItem.id)
       } else {
-        insertChecklist.run(checklistItemId, req.params.id, item.title, item.result ? 1 : 0, item.comment || null)
+        const result = item.result === null || item.result === undefined ? null : item.result ? 1 : 0
+        insertChecklist.run(checklistItemId, req.params.id, item.title, result, item.comment || null)
       }
 
       const existingDefect = existingDefectsByChecklistItemId.get(checklistItemId) || existingDefectsByTitle.get(item.title)
-      if (!item.result) {
+      if (item.result === false || item.result === 0) {
         if (existingDefect) {
           updateDefect.run(checklistItemId, item.title, item.comment || null, existingDefect.id, companyId)
         } else {
@@ -379,6 +430,7 @@ export default function registerInspectionRoutes({
     if (!inspection) {
       return sendError(res, 404, API_MESSAGES.inspectionNotFound)
     }
+    if (inspection.completed) return sendInspectionCompletedError(res)
 
     const photos = db.prepare(`SELECT ${PHOTO_SELECT_COLUMNS} FROM photos WHERE inspection_id = ? AND company_id = ?`).all(id, companyId)
     db.prepare('DELETE FROM checklist_items WHERE inspection_id = ?').run(id)

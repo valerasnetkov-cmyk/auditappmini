@@ -8,7 +8,7 @@ import {
   WEB_BASE,
 } from './helpers'
 
-test('Defect detail UI: close defect via UI button', async ({ page, request }) => {
+test('Defect detail UI: close defect with a lifecycle comment', async ({ page, request }) => {
   await loginAsAdmin(page)
 
   const adminToken = await getAdminToken(request)
@@ -18,10 +18,15 @@ test('Defect detail UI: close defect via UI button', async ({ page, request }) =
   try {
     await page.goto(`${WEB_BASE}/defects/${defect.id}`)
 
-    await page.getByRole('button', { name: 'Закрыть дефект' }).click()
+    const saveButton = page.getByRole('button', { name: 'Сохранить статус' })
+    await page.getByLabel('Новый статус').selectOption('closed')
+    await expect(saveButton).toBeDisabled()
+    await page.getByLabel('Комментарий руководителя').fill('Результат проверен в E2E')
+    await saveButton.click()
 
-    await expect(page.getByText('Дефект закрыт')).toBeVisible({ timeout: 6000 })
-    await expect(page.getByRole('button', { name: 'Вернуть в работу' })).toBeVisible()
+    await expect(page.getByText('Статус дефекта обновлён')).toBeVisible({ timeout: 6000 })
+    await expect(page.getByText('Закрыт').first()).toBeVisible()
+    await expect(page.getByLabel('Новый статус')).toHaveValue('reopened')
   } finally {
     await archiveVehicle(request, adminToken, vehicle.id)
   }

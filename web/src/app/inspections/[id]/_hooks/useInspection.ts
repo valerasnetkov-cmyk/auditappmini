@@ -6,6 +6,7 @@ import { requireAuthToken } from '@/lib/auth'
 import type {
   ChecklistItemResponse,
   InspectionDetail,
+  InspectionReadiness,
   PhotoRequirementsResponse,
 } from '@/lib/types'
 import { buildChecklistFromExisting } from '../_lib/checklist'
@@ -16,6 +17,7 @@ export function useInspection(inspectionId: string) {
   const [error, setError] = useState('')
   const [isNewInspection, setIsNewInspection] = useState(false)
   const [photoRequirements, setPhotoRequirements] = useState<PhotoRequirementsResponse | null>(null)
+  const [readiness, setReadiness] = useState<InspectionReadiness | null>(null)
 
   const load = async () => {
     try {
@@ -34,8 +36,12 @@ export function useInspection(inspectionId: string) {
       }
 
       setInspection(result.data)
-      const requirementsResult = await api.getPhotoRequirements(result.data.type)
+      const [requirementsResult, readinessResult] = await Promise.all([
+        api.getPhotoRequirements(result.data.type),
+        api.getInspectionReadiness(result.data.id),
+      ])
       setPhotoRequirements(requirementsResult.data || null)
+      setReadiness(readinessResult.data || null)
     } catch {
       setError('Ошибка загрузки осмотра')
     } finally {
@@ -56,6 +62,7 @@ export function useInspection(inspectionId: string) {
     error,
     isNewInspection,
     photoRequirements,
+    readiness,
     reload: load,
   }
 }

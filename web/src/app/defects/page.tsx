@@ -27,12 +27,31 @@ function getTypeBadgeTone(type?: string): UiTone {
 
 function getStatusBadgeTone(status?: string): UiTone {
   if (status === 'closed') return 'success'
+  if (status === 'resolved') return 'info'
+  if (status === 'reopened') return 'danger'
   return 'warning'
 }
 
 function getStatusLabel(status?: string) {
   if (status === 'closed') return 'Закрыт'
+  if (status === 'in_progress') return 'В работе'
+  if (status === 'resolved') return 'Устранён'
+  if (status === 'reopened') return 'Открыт повторно'
   return 'Открыт'
+}
+
+function getSeverityLabel(severity?: string) {
+  if (severity === 'low') return 'Низкая'
+  if (severity === 'high') return 'Высокая'
+  if (severity === 'critical') return 'Критическая'
+  return 'Средняя'
+}
+
+function getSeverityTone(severity?: string): UiTone {
+  if (severity === 'critical') return 'danger'
+  if (severity === 'high') return 'warning'
+  if (severity === 'low') return 'neutral'
+  return 'info'
 }
 
 function formatDateTime(value?: string | null) {
@@ -66,6 +85,8 @@ export default function DefectsPage() {
   const [regionFilter, setRegionFilter] = useState('')
   const [visibleRows, setVisibleRows] = useState<VisibleRowsFilter>('all')
   const [typeFilter, setTypeFilter] = useState<InspectionType | ''>('')
+  const [statusFilter, setStatusFilter] = useState('')
+  const [severityFilter, setSeverityFilter] = useState('')
 
   useEffect(() => {
     if (!requireAuthToken()) return
@@ -115,6 +136,8 @@ export default function DefectsPage() {
     if (typeFilter) {
       items = items.filter((defect) => defect.inspection_type === typeFilter)
     }
+    if (statusFilter) items = items.filter((defect) => defect.status === statusFilter)
+    if (severityFilter) items = items.filter((defect) => defect.severity === severityFilter)
 
     switch (visibleRows) {
       case 'withPhotos':
@@ -134,11 +157,11 @@ export default function DefectsPage() {
     }
 
     return items
-  }, [defects, regionFilter, visibleRows, typeFilter])
+  }, [defects, regionFilter, visibleRows, typeFilter, statusFilter, severityFilter])
 
   const openDefects = defects.filter((defect) => defect.status !== 'closed').length
   const accidentDefects = defects.filter((defect) => defect.inspection_type === 'accident').length
-  const defectsWithPhotos = defects.filter((defect) => (defect.photos?.length || 0) > 0).length
+  const criticalDefects = defects.filter((defect) => defect.severity === 'critical' && defect.status !== 'closed').length
 
   return (
     <Layout currentPage="defects">
@@ -158,12 +181,12 @@ export default function DefectsPage() {
         <section className="mb-6 grid grid-cols-1 gap-4 md:grid-cols-4">
           <StatCard label="Всего дефектов" value={defects.length} tone="info" />
           <StatCard label="Открытые" value={openDefects} tone="warning" />
+          <StatCard label="Критические" value={criticalDefects} tone="danger" />
           <StatCard label="После ДТП" value={accidentDefects} tone="danger" />
-          <StatCard label="С фото" value={defectsWithPhotos} tone="success" />
         </section>
 
         <section className="card mb-6 p-4">
-          <div className="grid gap-3 md:grid-cols-4">
+          <div className="grid gap-3 md:grid-cols-3">
             <label className="block">
               <span className="label">Техника</span>
               <select value={vehicleFilter} onChange={(event) => setVehicleFilter(event.target.value)} className="select">
@@ -174,6 +197,29 @@ export default function DefectsPage() {
                     {vehicle.number} · {vehicle.name}
                   </option>
                 ))}
+              </select>
+            </label>
+
+            <label className="block">
+              <span className="label">Статус дефекта</span>
+              <select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)} className="select">
+                <option value="">Все статусы</option>
+                <option value="open">Открыт</option>
+                <option value="in_progress">В работе</option>
+                <option value="resolved">Устранён</option>
+                <option value="reopened">Открыт повторно</option>
+                <option value="closed">Закрыт</option>
+              </select>
+            </label>
+
+            <label className="block">
+              <span className="label">Критичность</span>
+              <select value={severityFilter} onChange={(event) => setSeverityFilter(event.target.value)} className="select">
+                <option value="">Любая критичность</option>
+                <option value="low">Низкая</option>
+                <option value="medium">Средняя</option>
+                <option value="high">Высокая</option>
+                <option value="critical">Критическая</option>
               </select>
             </label>
 
@@ -250,6 +296,7 @@ export default function DefectsPage() {
                     <th className="px-4 py-3 text-left text-xs font-medium text-foreground-muted">Выявлен</th>
                     <th className="px-4 py-3 text-left text-xs font-medium text-foreground-muted">Осмотр</th>
                     <th className="px-4 py-3 text-left text-xs font-medium text-foreground-muted">Статус</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-foreground-muted">Критичность</th>
                     <th className="px-4 py-3 text-left text-xs font-medium text-foreground-muted">Фото</th>
                     <th className="px-4 py-3 text-left text-xs font-medium text-foreground-muted">Действия</th>
                   </tr>
@@ -257,7 +304,7 @@ export default function DefectsPage() {
                 <tbody className="divide-y divide-line">
                   {filtered.length === 0 ? (
                     <tr>
-                      <td colSpan={9} className="px-4 py-8 text-center text-foreground-muted">
+                      <td colSpan={10} className="px-4 py-8 text-center text-foreground-muted">
                         Дефекты не найдены
                       </td>
                     </tr>
@@ -280,6 +327,9 @@ export default function DefectsPage() {
                         </td>
                         <td className="whitespace-nowrap px-4 py-3">
                           <Badge tone={getStatusBadgeTone(defect.status)}>{getStatusLabel(defect.status)}</Badge>
+                        </td>
+                        <td className="whitespace-nowrap px-4 py-3">
+                          <Badge tone={getSeverityTone(defect.severity)}>{getSeverityLabel(defect.severity)}</Badge>
                         </td>
                         <td className="whitespace-nowrap px-4 py-3 text-foreground-secondary">{defect.photos?.length ?? 0}</td>
                         <td className="whitespace-nowrap px-4 py-3">

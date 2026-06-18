@@ -149,6 +149,25 @@ async function run() {
       headers,
       body: JSON.stringify(createPayload),
     })
+    if (created.inspection_schedule?.status !== 'never_inspected') {
+      throw new Error(`New vehicle expected never_inspected schedule, got ${created.inspection_schedule?.status}`)
+    }
+
+    const updatedSettings = await request('/api/settings', {
+      method: 'PUT',
+      headers,
+      body: JSON.stringify({
+        default_quick_inspection_interval_days: 5,
+        default_planned_inspection_interval_days: 21,
+        notification_days_before: 4,
+      }),
+    })
+    if (
+      updatedSettings.default_quick_inspection_interval_days !== 5
+      || updatedSettings.default_planned_inspection_interval_days !== 21
+    ) {
+      throw new Error('Company inspection schedule settings were not persisted')
+    }
 
     const duplicateCreate = await expectStatus('/api/vehicles', 400, {
       method: 'POST',
@@ -163,8 +182,16 @@ async function run() {
         ...createPayload,
         status: 'repair',
         reason: 'Smoke test transition',
+        quick_inspection_interval_days: 3,
+        planned_inspection_interval_days: 14,
       }),
     })
+    if (
+      updated.inspection_schedule?.quick?.interval_days !== 3
+      || updated.inspection_schedule?.planned?.interval_days !== 14
+    ) {
+      throw new Error('Vehicle inspection schedule overrides were not applied')
+    }
 
     const inspection = await request('/api/inspections', {
       method: 'POST',
@@ -254,6 +281,9 @@ async function run() {
     const vehiclesDefaultList = await request('/api/vehicles?limit=100', {
       headers: { Authorization: `Bearer ${login.token}` },
     })
+    const neverInspectedVehicles = await request('/api/vehicles?inspection_status=never_inspected&limit=100', {
+      headers: { Authorization: `Bearer ${login.token}` },
+    })
     const createdVehicleListItem = vehiclesDefaultList.data.find((vehicle) => vehicle.id === created.id)
     if (!createdVehicleListItem) {
       throw new Error('Created vehicle is missing from default vehicle list')
@@ -291,6 +321,11 @@ async function run() {
           archivedVisibleInArchiveFilter: archiveResult.ids.every((id) => vehiclesArchiveList.data.some((vehicle) => vehicle.id === id && vehicle.status === 'archived')),
           listLastInspectionId: createdVehicleListItem.lastInspection?.id ?? null,
           listDefectsCount: createdVehicleListItem.defectsCount,
+          scheduleStatus: createdVehicleListItem.inspection_schedule?.status ?? null,
+          scheduleOverridesApplied:
+            updated.inspection_schedule?.quick?.interval_days === 3
+            && updated.inspection_schedule?.planned?.interval_days === 14,
+          neverInspectedFilterMatched: neverInspectedVehicles.data.some((vehicle) => vehicle.id === created.id),
           staleRegionIdFallbackUpdated: fallbackUpdatedRegion.name === fallbackRenamedRegionName,
           staleRegionIdOldNameRemoved: !regionsAfterFallbackUpdate.some((region) => region.name === fallbackRegionName),
           inspectionId: inspection.id,

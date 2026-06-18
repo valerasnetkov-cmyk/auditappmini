@@ -203,6 +203,7 @@ export async function getVehicleDefects(request: APIRequestContext, token: strin
 export async function closeDefectByApi(request: APIRequestContext, token: string, defectId: string) {
   const response = await request.post(`${API_BASE}/api/defects/${defectId}/close`, {
     headers: apiHeaders(token),
+    data: { comment: 'Closed by E2E' },
   })
   await expectOk(response, 'Defect close')
 }
@@ -210,6 +211,7 @@ export async function closeDefectByApi(request: APIRequestContext, token: string
 export async function reopenDefectByApi(request: APIRequestContext, token: string, defectId: string) {
   const response = await request.post(`${API_BASE}/api/defects/${defectId}/reopen`, {
     headers: apiHeaders(token),
+    data: { comment: 'Reopened by E2E' },
   })
   await expectOk(response, 'Defect reopen')
 }

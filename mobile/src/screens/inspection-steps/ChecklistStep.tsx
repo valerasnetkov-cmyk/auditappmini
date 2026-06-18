@@ -10,6 +10,7 @@ export function ChecklistStep({
   onSetResult,
   onSetComment,
   onOpenDefectCamera,
+  onRetryDefectPhoto,
   onFinish,
 }: {
   checklist: Record<string, ChecklistEntry>
@@ -18,6 +19,7 @@ export function ChecklistStep({
   onSetResult: (title: string, result: boolean | null) => void
   onSetComment: (title: string, comment: string) => void
   onOpenDefectCamera: (title: string) => void
+  onRetryDefectPhoto: (title: string) => void
   onFinish: () => void
 }) {
   const { colors } = useTheme()
@@ -62,7 +64,18 @@ export function ChecklistStep({
                     <PhotoThumb
                       uri={entry.photo}
                       label="Фото дефекта выбрано"
+                      status={entry.photoStatus || 'local_pending'}
                       onPress={() => onOpenDefectCamera(title)}
+                    />
+                  ) : null}
+                  {entry.photoError ? (
+                    <Text style={{ color: colors.danger, marginBottom: 8 }}>{entry.photoError}</Text>
+                  ) : null}
+                  {entry.photoStatus === 'failed' ? (
+                    <Button
+                      title="Повторить отправку"
+                      variant="secondary"
+                      onPress={() => onRetryDefectPhoto(title)}
                     />
                   ) : null}
                   <Button

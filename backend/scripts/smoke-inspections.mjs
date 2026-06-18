@@ -93,16 +93,20 @@ async function assertPhotoFilesRemoved(photo, label) {
   }
 }
 
-async function uploadInspectionPhoto(inspectionId, photoType, headers) {
+async function uploadInspectionPhoto(inspectionId, photoType, headers, clientPhotoId = null, expectedStatus = 201) {
   const formData = new FormData()
   formData.append('photo', new Blob([VALID_PNG_BYTES], { type: 'image/png' }), `${photoType}.png`)
   formData.append('photo_type', photoType)
+  if (clientPhotoId) formData.append('client_photo_id', clientPhotoId)
+  formData.append('captured_at', '2026-05-01T10:20:00.000Z')
+  formData.append('captured_lat', '46.9591')
+  formData.append('captured_lng', '142.7380')
 
   return request(`/api/inspections/${inspectionId}/photos`, {
     method: 'POST',
     headers,
     body: formData,
-  }, 201)
+  }, expectedStatus)
 }
 
 async function uploadInvalidInspectionPhoto(inspectionId, headers) {
@@ -137,6 +141,13 @@ async function uploadDefectPhoto(defectId, headers) {
 
 async function run() {
   const owner = await seedSmokeTenantOwner({ databasePath: DATABASE_PATH })
+  const otherOwner = await seedSmokeTenantOwner({
+    databasePath: DATABASE_PATH,
+    email: 'other-owner@example.com',
+    password: 'other-owner123',
+    companyId: 'other-company',
+    name: 'Other Owner',
+  })
 
   const server = spawn(process.execPath, ['src/server.js'], {
     cwd: process.cwd(),
@@ -165,6 +176,29 @@ async function run() {
     const authHeaders = { Authorization: `Bearer ${login.token}` }
     const jsonHeaders = { ...authHeaders, 'Content-Type': 'application/json' }
     const suffix = Date.now()
+    const inspectorEmail = `inspection-approver-${suffix}@example.com`
+    await request('/api/users', {
+      method: 'POST',
+      headers: jsonHeaders,
+      body: JSON.stringify({
+        email: inspectorEmail,
+        password: 'inspection-smoke-123',
+        name: 'Inspection approval smoke inspector',
+        role: 'inspector',
+      }),
+    }, 201)
+    const inspectorLogin = await request('/api/auth/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        email: inspectorEmail,
+        password: 'inspection-smoke-123',
+      }),
+    })
+    const inspectorHeaders = {
+      Authorization: `Bearer ${inspectorLogin.token}`,
+      'Content-Type': 'application/json',
+    }
     const plateNumber = `А${String(suffix % 1000).padStart(3, '0')}КМ${String((suffix % 900) + 100)}`
     const regionName = `Inspection Smoke Region ${suffix}`
 
@@ -272,6 +306,22 @@ async function run() {
       throw new Error('Defect comment was not updated on repeated save')
     }
 
+    const criticalDefect = await request(`/api/inspections/${inspection.id}/defects`, {
+      method: 'POST',
+      headers: jsonHeaders,
+      body: JSON.stringify({
+        title: 'Smoke critical defect',
+        comment: 'Requires manager attention',
+        severity: 'critical',
+      }),
+    }, 201)
+    const usageWithCriticalAlert = await request('/api/company/usage', {
+      headers: authHeaders,
+    })
+    if (!usageWithCriticalAlert.alerts?.some((item) => item.type === 'critical_defect_created')) {
+      throw new Error('Critical defect notification was not delivered to company owner')
+    }
+
     const quickInspection = await request('/api/inspections', {
       method: 'POST',
       headers: jsonHeaders,
@@ -279,24 +329,62 @@ async function run() {
         vehicle_id: vehicle.id,
         type: 'quick',
         checklist: [],
+        client_inspection_id: `quick-${suffix}`,
+        sync_source: 'mobile',
       }),
     }, 201)
+
+    const repeatedQuickInspection = await request('/api/inspections', {
+      method: 'POST',
+      headers: jsonHeaders,
+      body: JSON.stringify({
+        vehicle_id: vehicle.id,
+        type: 'quick',
+        checklist: [],
+        client_inspection_id: `quick-${suffix}`,
+        sync_source: 'mobile',
+      }),
+    })
+    if (repeatedQuickInspection.id !== quickInspection.id) {
+      throw new Error('Repeated client_inspection_id created a duplicate inspection')
+    }
 
     await request(`/api/inspections/${quickInspection.id}`, {
       method: 'PUT',
       headers: jsonHeaders,
       body: JSON.stringify({
-        checklist: [],
+        checklist: [
+          { title: 'Внешний вид', result: true, comment: '' },
+          { title: 'Повреждения кузова', result: true, comment: '' },
+          { title: 'Колёса', result: true, comment: '' },
+          { title: 'Стёкла', result: true, comment: '' },
+          { title: 'Госномер', result: true, comment: '' },
+        ],
         odometer_value: 123456,
         odometer_unit: 'km',
       }),
     })
 
-    const uploadedInspectionPhoto = await uploadInspectionPhoto(quickInspection.id, 'front', authHeaders)
+    const uploadedInspectionPhoto = await uploadInspectionPhoto(
+      quickInspection.id,
+      'front',
+      authHeaders,
+      `front-${suffix}`,
+    )
     if (!uploadedInspectionPhoto.webp_url?.endsWith('/main.webp') || !uploadedInspectionPhoto.thumb_url?.endsWith('/thumb.webp') || !uploadedInspectionPhoto.original_url?.endsWith('/original.png')) {
       throw new Error(`Inspection photo WebP metadata is incomplete: ${JSON.stringify(uploadedInspectionPhoto)}`)
     }
     await assertPhotoFilesExist(uploadedInspectionPhoto, 'uploaded inspection photo')
+    const repeatedInspectionPhoto = await uploadInspectionPhoto(
+      quickInspection.id,
+      'front',
+      authHeaders,
+      `front-${suffix}`,
+      200,
+    )
+    if (repeatedInspectionPhoto.id !== uploadedInspectionPhoto.id) {
+      throw new Error('Repeated client_photo_id created a duplicate photo')
+    }
     const invalidPhotoStatus = await uploadInvalidInspectionPhoto(quickInspection.id, authHeaders)
 
     const incompleteCompletion = await fetch(`${BASE_URL}/api/inspections/${quickInspection.id}/complete`, {
@@ -310,8 +398,12 @@ async function run() {
     }
 
     const incompleteBody = await incompleteCompletion.json()
-    if (!Array.isArray(incompleteBody.missingPhotos) || !incompleteBody.missingPhotos.includes('odometer')) {
-      throw new Error(`Required photo validation did not return missing photo types: ${JSON.stringify(incompleteBody)}`)
+    if (
+      incompleteBody.error !== 'INSPECTION_COMPLETION_BLOCKED'
+      || !Array.isArray(incompleteBody.missing)
+      || !incompleteBody.missing.some((item) => item.code === 'missing_required_photo' && item.field === 'odometer')
+    ) {
+      throw new Error(`Structured completion validation is incomplete: ${JSON.stringify(incompleteBody)}`)
     }
 
     for (const photoType of ['left', 'right', 'rear', 'overview', 'odometer']) {
@@ -322,6 +414,157 @@ async function run() {
       method: 'POST',
       headers: authHeaders,
     })
+    const completedMutation = await fetch(`${BASE_URL}/api/inspections/${quickInspection.id}`, {
+      method: 'PUT',
+      headers: jsonHeaders,
+      body: JSON.stringify({ checklist: [] }),
+    })
+    if (completedMutation.status !== 409) {
+      throw new Error(`Completed inspection mutation expected 409, got ${completedMutation.status}`)
+    }
+    const report = await request(`/api/inspections/${quickInspection.id}/report`, {
+      method: 'POST',
+      headers: authHeaders,
+    }, 201)
+    if (report.status !== 'ready' || !report.sha256) {
+      throw new Error(`Inspection report was not generated: ${JSON.stringify(report)}`)
+    }
+    const verifiedReport = await request(`/api/inspections/${quickInspection.id}/report`, {
+      headers: authHeaders,
+    })
+    if (verifiedReport.integrity_status !== 'valid' || verifiedReport.file_size < 1000) {
+      throw new Error(`Inspection report integrity was not verified: ${JSON.stringify(verifiedReport)}`)
+    }
+    const reportPdf = await fetch(`${BASE_URL}/api/inspections/${quickInspection.id}/report.pdf`, {
+      headers: authHeaders,
+    })
+    if (reportPdf.status !== 200 || reportPdf.headers.get('content-type') !== 'application/pdf') {
+      throw new Error(`Inspection PDF expected 200 application/pdf, got ${reportPdf.status}`)
+    }
+    const reportBytes = new Uint8Array(await reportPdf.arrayBuffer())
+    if (reportBytes.length < 1000) {
+      throw new Error(`Inspection PDF is unexpectedly small: ${reportBytes.length}`)
+    }
+    const reportFilePath = path.resolve(
+      process.cwd(),
+      UPLOAD_DIR,
+      'reports',
+      'default',
+      quickInspection.id,
+      'report.pdf',
+    )
+    await fs.appendFile(reportFilePath, Buffer.from('tampered'))
+    const corruptedReport = await request(`/api/inspections/${quickInspection.id}/report`, {
+      headers: authHeaders,
+    })
+    if (corruptedReport.status !== 'corrupted' || corruptedReport.integrity_status !== 'mismatch') {
+      throw new Error(`Tampered report was not detected: ${JSON.stringify(corruptedReport)}`)
+    }
+    const corruptedDownload = await fetch(`${BASE_URL}/api/inspections/${quickInspection.id}/report.pdf`, {
+      headers: authHeaders,
+    })
+    if (corruptedDownload.status !== 409) {
+      throw new Error(`Tampered report download expected 409, got ${corruptedDownload.status}`)
+    }
+    const regeneratedReports = await Promise.all([
+      request(`/api/inspections/${quickInspection.id}/report`, {
+        method: 'POST',
+        headers: authHeaders,
+      }, 201),
+      request(`/api/inspections/${quickInspection.id}/report`, {
+        method: 'POST',
+        headers: authHeaders,
+      }, 201),
+    ])
+    if (regeneratedReports.some((item) => item.integrity_status !== 'valid')) {
+      throw new Error(`Concurrent report regeneration failed: ${JSON.stringify(regeneratedReports)}`)
+    }
+    const regeneratedReport = await request(`/api/inspections/${quickInspection.id}/report`, {
+      headers: authHeaders,
+    })
+    if (regeneratedReport.integrity_status !== 'valid' || regeneratedReport.status !== 'ready') {
+      throw new Error(`Regenerated report integrity failed: ${JSON.stringify(regeneratedReport)}`)
+    }
+    const submittedApproval = await request(`/api/inspections/${quickInspection.id}/submit`, {
+      method: 'POST',
+      headers: jsonHeaders,
+      body: JSON.stringify({ comment: 'Готово к проверке' }),
+    })
+    if (submittedApproval.status !== 'submitted' || submittedApproval.history.length !== 1) {
+      throw new Error(`Inspection was not submitted for approval: ${JSON.stringify(submittedApproval)}`)
+    }
+    const usageAfterSubmission = await request('/api/company/usage', {
+      headers: authHeaders,
+    })
+    if (!usageAfterSubmission.alerts?.some((item) => item.type === 'inspection_submitted')) {
+      throw new Error(`Approval notification was not delivered: ${JSON.stringify(usageAfterSubmission)}`)
+    }
+    const inspectorDecision = await fetch(`${BASE_URL}/api/inspections/${quickInspection.id}/approval`, {
+      method: 'POST',
+      headers: inspectorHeaders,
+      body: JSON.stringify({ status: 'approved' }),
+    })
+    if (inspectorDecision.status !== 403) {
+      throw new Error(`Inspector approval decision expected 403, got ${inspectorDecision.status}`)
+    }
+    const missingRevisionReason = await fetch(`${BASE_URL}/api/inspections/${quickInspection.id}/approval`, {
+      method: 'POST',
+      headers: jsonHeaders,
+      body: JSON.stringify({ status: 'revision_required' }),
+    })
+    if (missingRevisionReason.status !== 400) {
+      throw new Error(`Revision without reason expected 400, got ${missingRevisionReason.status}`)
+    }
+    const revisionApproval = await request(`/api/inspections/${quickInspection.id}/approval`, {
+      method: 'POST',
+      headers: jsonHeaders,
+      body: JSON.stringify({
+        status: 'revision_required',
+        comment: 'Требуется повторная фиксация спорного ракурса новым осмотром',
+      }),
+    })
+    if (revisionApproval.status !== 'revision_required' || revisionApproval.history.length !== 2) {
+      throw new Error(`Inspection revision decision failed: ${JSON.stringify(revisionApproval)}`)
+    }
+    await request(`/api/inspections/${quickInspection.id}/submit`, {
+      method: 'POST',
+      headers: jsonHeaders,
+      body: JSON.stringify({ comment: 'Повторно направлено после проверки материалов' }),
+    })
+    const approvedInspection = await request(`/api/inspections/${quickInspection.id}/approval`, {
+      method: 'POST',
+      headers: jsonHeaders,
+      body: JSON.stringify({ status: 'approved', comment: 'Материалы приняты' }),
+    })
+    if (approvedInspection.status !== 'approved' || approvedInspection.history.length !== 4) {
+      throw new Error(`Inspection approval failed: ${JSON.stringify(approvedInspection)}`)
+    }
+    const approvalDetails = await request(`/api/inspections/${quickInspection.id}/approval`, {
+      headers: authHeaders,
+    })
+    if (approvalDetails.status !== 'approved' || approvalDetails.history.length !== 4) {
+      throw new Error(`Inspection approval history is incomplete: ${JSON.stringify(approvalDetails)}`)
+    }
+    const otherLogin = await request('/api/auth/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        email: otherOwner.email,
+        password: otherOwner.password,
+      }),
+    })
+    const crossTenantReport = await fetch(`${BASE_URL}/api/inspections/${quickInspection.id}/report.pdf`, {
+      headers: { Authorization: `Bearer ${otherLogin.token}` },
+    })
+    if (crossTenantReport.status !== 404) {
+      throw new Error(`Cross-tenant report access expected 404, got ${crossTenantReport.status}`)
+    }
+    const crossTenantApproval = await fetch(`${BASE_URL}/api/inspections/${quickInspection.id}/approval`, {
+      headers: { Authorization: `Bearer ${otherLogin.token}` },
+    })
+    if (crossTenantApproval.status !== 404) {
+      throw new Error(`Cross-tenant approval access expected 404, got ${crossTenantApproval.status}`)
+    }
 
     const firstDefectId = repeatedInspectionDetails.defects?.[0]?.id
     const defectDetails = firstDefectId
@@ -344,6 +587,30 @@ async function run() {
 
     const closeDefectResult = await request(`/api/defects/${originalDefect.id}/close`, {
       method: 'POST',
+      headers: jsonHeaders,
+      body: JSON.stringify({ comment: 'Smoke defect closed' }),
+    })
+    await request(`/api/defects/${originalDefect.id}/reopen`, {
+      method: 'POST',
+      headers: jsonHeaders,
+      body: JSON.stringify({ comment: 'Smoke defect returned' }),
+    })
+    await request(`/api/defects/${originalDefect.id}/status`, {
+      method: 'POST',
+      headers: jsonHeaders,
+      body: JSON.stringify({ status: 'in_progress', comment: 'Smoke repair started' }),
+    })
+    await request(`/api/defects/${originalDefect.id}/status`, {
+      method: 'POST',
+      headers: jsonHeaders,
+      body: JSON.stringify({ status: 'resolved', comment: 'Smoke repair completed' }),
+    })
+    const lifecycleClosedDefect = await request(`/api/defects/${originalDefect.id}/status`, {
+      method: 'POST',
+      headers: jsonHeaders,
+      body: JSON.stringify({ status: 'closed', comment: 'Smoke result verified' }),
+    })
+    const defectLifecycleHistory = await request(`/api/defects/${originalDefect.id}/history`, {
       headers: authHeaders,
     })
 
@@ -357,8 +624,11 @@ async function run() {
       ? vehicleDefectsAfterClose.find((defect) => defect.id === originalDefect.id)
       : null
 
-    if (closeDefectResult.status !== 'closed' || closedVehicleDefect?.status !== 'closed' || !closedVehicleDefect?.closed_at) {
+    if (closeDefectResult.status !== 'closed' || lifecycleClosedDefect.status !== 'closed' || closedVehicleDefect?.status !== 'closed' || !closedVehicleDefect?.closed_at) {
       throw new Error(`Vehicle defect endpoint did not return closed status after close: ${JSON.stringify(closedVehicleDefect)}`)
+    }
+    if (defectLifecycleHistory.length !== 5 || !defectLifecycleHistory.every((item) => item.comment)) {
+      throw new Error(`Defect lifecycle history is incomplete: ${JSON.stringify(defectLifecycleHistory)}`)
     }
 
     if (defectDetailsAfterClose.status !== 'closed' || !defectDetailsAfterClose.closed_at) {
@@ -398,10 +668,28 @@ async function run() {
           vehicleDefectsListed: Array.isArray(vehicleDefects) ? vehicleDefects.length : 0,
           vehicleDefectCloseReflected: closedVehicleDefect?.status === 'closed',
           defectDetailCloseReflected: defectDetailsAfterClose.status === 'closed',
+          defectLifecycleCompleted: lifecycleClosedDefect.status === 'closed',
+          defectLifecycleHistoryEntries: defectLifecycleHistory.length,
+          criticalDefectNotificationDelivered: Boolean(
+            criticalDefect.id
+            && usageWithCriticalAlert.alerts?.some((item) => item.type === 'critical_defect_created')
+          ),
           accidentValidationStatus: invalidAccidentInspectionResponse.status,
-          requiredPhotoMissingCount: incompleteBody.missingPhotos.length,
+          requiredPhotoMissingCount: incompleteBody.missing.filter((item) => item.code === 'missing_required_photo').length,
           invalidPhotoRejected: invalidPhotoStatus === 400,
           quickInspectionCompleted: Boolean(completedQuickInspection.completed),
+          idempotentInspection: repeatedQuickInspection.id === quickInspection.id,
+          idempotentPhoto: repeatedInspectionPhoto.id === uploadedInspectionPhoto.id,
+          completedMutationBlocked: completedMutation.status === 409,
+          reportGenerated: report.status === 'ready',
+          reportIntegrityVerified: regeneratedReport.integrity_status === 'valid',
+          reportTamperingDetected: corruptedReport.integrity_status === 'mismatch',
+          reportTenantIsolation: crossTenantReport.status === 404,
+          approvalWorkflowCompleted: approvalDetails.status === 'approved',
+          approvalNotificationDelivered: usageAfterSubmission.alerts.some(
+            (item) => item.type === 'inspection_submitted',
+          ),
+          approvalTenantIsolation: crossTenantApproval.status === 404,
           defectInspectionType: defectDetails?.inspection_type ?? null,
           defectAccidentLocation: defectDetails?.accident_location ?? null,
           repeatedSavePreservedDefectId: repeatedDefect.id === originalDefect.id,
@@ -416,6 +704,10 @@ async function run() {
     await sleep(300)
     await fs.rm(DATABASE_PATH, { force: true })
     await fs.rm(UPLOAD_DIR, { recursive: true, force: true })
+    if (stderr.trim()) {
+      console.error(stderr.trim())
+      stderr = ''
+    }
   }
 
   if (stderr.trim()) {

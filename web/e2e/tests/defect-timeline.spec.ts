@@ -22,6 +22,7 @@ test('Defect Timeline MVP: verify timeline updates with close/open actions (UI p
     await page.goto(`${WEB_BASE}/vehicles/${vehicle.id}`)
     await expect(card).toBeVisible({ timeout: 10000 })
 
+    page.once('dialog', (dialog) => dialog.accept('Закрыто в timeline E2E'))
     await card.getByRole('button', { name: 'Закрыть дефект' }).click()
     await expect(page.getByText('Дефект закрыт')).toBeVisible({ timeout: 6000 })
     await expect(statusBadge).toHaveText('Закрыт')
@@ -33,9 +34,10 @@ test('Defect Timeline MVP: verify timeline updates with close/open actions (UI p
     const afterCloseCount = await historyBlock.locator('div').count()
     expect(afterCloseCount).toBeGreaterThan(0)
 
+    page.once('dialog', (dialog) => dialog.accept('Повторно открыто в timeline E2E'))
     await card.getByRole('button', { name: 'Вернуть в работу' }).click()
     await expect(page.getByText('Дефект повторно открыт')).toBeVisible({ timeout: 6000 })
-    await expect(statusBadge).toHaveText('Открыт')
+    await expect(statusBadge).toHaveText('Открыт повторно')
 
     await page.reload()
     await expect(card).toBeVisible({ timeout: 10000 })

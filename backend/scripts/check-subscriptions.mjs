@@ -1,6 +1,6 @@
 import process from 'node:process'
 import { initDatabase, getDb } from '../src/db.js'
-import { scanSubscriptionAlerts } from '../src/routes/adminSaas.js'
+import { scanSubscriptionAlerts } from '../src/services/subscriptionAlerts.js'
 
 try {
   await initDatabase()

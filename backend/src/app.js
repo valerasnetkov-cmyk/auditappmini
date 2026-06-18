@@ -15,6 +15,8 @@ import registerVehicleRoutes from './routes/vehicles.js'
 import registerInspectionRoutes from './routes/inspections.js'
 import registerDefectRoutes from './routes/defects.js'
 import registerPhotoRoutes from './routes/photos.js'
+import registerInspectionReportRoutes from './routes/reports.js'
+import registerInspectionApprovalRoutes from './routes/inspectionApproval.js'
 import registerDashboardRoutes from './routes/dashboard.js'
 import registerAnalyticsRoutes from './routes/analytics.js'
 import registerUserRoutes from './routes/users.js'
@@ -22,8 +24,10 @@ import registerSettingsRoutes from './routes/settings.js'
 import registerProtectedUploadRoutes from './routes/uploads.js'
 import registerDemoDataSeedRoutes from './seed/demoData.js'
 import { registerOdometerRoutes, registerVehicleNumberRecognitionRoutes } from './routes/odometer.js'
-import { photoRequirements, registerPhotoRequirementRoutes } from './routes/photo-requirements.js'
+import { photoRequirements, photoTypeLabels, registerPhotoRequirementRoutes } from './routes/photo-requirements.js'
 import { createCompanyPolicy } from './services/companyPolicy.js'
+import { createInspectionReadinessService } from './services/inspectionReadiness.js'
+import { createInspectionScheduleService } from './services/inspectionSchedule.js'
 import { createRoleGuards } from './services/roleGuards.js'
 import { createUserStore } from './services/users.js'
 import {
@@ -121,7 +125,8 @@ const authenticate = createAuthenticateMiddleware({
 const PHOTO_SELECT_COLUMNS = `
   id, inspection_id, defect_id, company_id, photo_type, url, original_url, webp_url, thumb_url,
   original_mime, original_name, width, height, size_original, size_webp, size_thumb, hash,
-  geo, is_required, created_at
+  geo, is_required, client_photo_id, upload_status, captured_at, captured_lat, captured_lng,
+  watermark_url, watermark_generated_at, created_at
 `
 
 registerProtectedUploadRoutes({
@@ -148,17 +153,48 @@ function readSettings() {
 function getVehicleById(id, companyId = null) {
   const query = companyId
     ? db.prepare(`
-      SELECT id, number, name, status, region, company_id, created_at, last_scheduled_inspection
-      FROM vehicles
-      WHERE id = ? AND company_id = ?
+      SELECT v.id, v.number, v.name, v.status, v.region, v.company_id, v.created_at,
+             v.last_scheduled_inspection, v.quick_inspection_interval_days,
+             v.planned_inspection_interval_days,
+             (
+               SELECT COALESCE(i.completed_at, i.created_at) FROM inspections i
+               WHERE i.vehicle_id = v.id AND i.company_id = v.company_id
+                 AND i.type = 'quick' AND i.completed = 1
+               ORDER BY COALESCE(i.completed_at, i.created_at) DESC, i.id DESC LIMIT 1
+             ) AS last_quick_inspection_at,
+             (
+               SELECT COALESCE(i.completed_at, i.created_at) FROM inspections i
+               WHERE i.vehicle_id = v.id AND i.company_id = v.company_id
+                 AND i.type = 'scheduled' AND i.completed = 1
+               ORDER BY COALESCE(i.completed_at, i.created_at) DESC, i.id DESC LIMIT 1
+             ) AS last_planned_inspection_at
+      FROM vehicles v
+      WHERE v.id = ? AND v.company_id = ?
     `)
     : db.prepare(`
-    SELECT id, number, name, status, region, company_id, created_at, last_scheduled_inspection
-    FROM vehicles
-    WHERE id = ?
+    SELECT v.id, v.number, v.name, v.status, v.region, v.company_id, v.created_at,
+           v.last_scheduled_inspection, v.quick_inspection_interval_days,
+           v.planned_inspection_interval_days,
+           (
+             SELECT COALESCE(i.completed_at, i.created_at) FROM inspections i
+             WHERE i.vehicle_id = v.id AND i.company_id = v.company_id
+               AND i.type = 'quick' AND i.completed = 1
+             ORDER BY COALESCE(i.completed_at, i.created_at) DESC, i.id DESC LIMIT 1
+           ) AS last_quick_inspection_at,
+           (
+             SELECT COALESCE(i.completed_at, i.created_at) FROM inspections i
+             WHERE i.vehicle_id = v.id AND i.company_id = v.company_id
+               AND i.type = 'scheduled' AND i.completed = 1
+             ORDER BY COALESCE(i.completed_at, i.created_at) DESC, i.id DESC LIMIT 1
+           ) AS last_planned_inspection_at
+    FROM vehicles v
+    WHERE v.id = ?
   `)
 
-  return companyId ? query.get(id, companyId) : query.get(id)
+  const vehicle = companyId ? query.get(id, companyId) : query.get(id)
+  return vehicle
+    ? inspectionSchedule.enrichVehicle(vehicle, companyId || vehicle.company_id || 'default')
+    : vehicle
 }
 
 function getInspectionById(id, companyId = null) {
@@ -258,9 +294,23 @@ const {
   ensureCompanyOperationalWriteAllowed,
   planLimits,
 } = companyPolicy
+const inspectionReadiness = createInspectionReadinessService({
+  db,
+  photoRequirements,
+  photoTypeLabels,
+})
+const inspectionSchedule = createInspectionScheduleService({ db, readSettings })
 
 // Register the complete-inspection route after API_MESSAGES is defined
-registerCompleteInspectionRoutes({ app, db, API_MESSAGES, getInspectionById, authenticate, photoRequirements, ensureOperationalWriteAllowed: ensureCompanyOperationalWriteAllowed })
+registerCompleteInspectionRoutes({
+  app,
+  db,
+  API_MESSAGES,
+  getInspectionById,
+  authenticate,
+  inspectionReadiness,
+  ensureOperationalWriteAllowed: ensureCompanyOperationalWriteAllowed,
+})
 
 // Register company routes
 registerCompanyRoutes({ app, db, authenticate, isAdmin })
@@ -383,6 +433,7 @@ registerVehicleRoutes({
   getCompanyResourceLimitState,
   ensureManager,
   ensureCompanyOperationalWriteAllowed,
+  inspectionSchedule,
 })
 
 // ============ INSPECTIONS ============
@@ -400,6 +451,7 @@ registerInspectionRoutes({
   ensureCompanyResourceAvailable,
   ensureCompanyOperationalWriteAllowed,
   removePhotoFilesForRows,
+  inspectionReadiness,
 })
 
 // ============ DEFECTS ============
@@ -413,6 +465,7 @@ registerDefectRoutes({
   PHOTO_SELECT_COLUMNS,
   ensureCompanyOperationalWriteAllowed,
   removePhotoFilesForRows,
+  ensureManager,
 })
 
 // ============ PHOTOS ============
@@ -432,6 +485,22 @@ registerPhotoRoutes({
   ensureCompanyOperationalWriteAllowed,
 })
 
+registerInspectionReportRoutes({
+  app,
+  db,
+  authenticate,
+  inspectionReadiness,
+  PHOTO_SELECT_COLUMNS,
+})
+
+registerInspectionApprovalRoutes({
+  app,
+  db,
+  authenticate,
+  ensureManager,
+  ensureCompanyOperationalWriteAllowed,
+})
+
 // ============ SETTINGS ============
 
 registerSettingsRoutes({
@@ -442,6 +511,7 @@ registerSettingsRoutes({
   ensureManager,
   ensureCompanyOperationalWriteAllowed,
   API_MESSAGES,
+  inspectionSchedule,
 })
 
 registerPhotoRequirementRoutes({ app, authenticate })
@@ -454,6 +524,7 @@ registerDashboardRoutes({
   authenticate,
   readSettings,
   sendInternalError,
+  inspectionSchedule,
 })
 
 // ============ SEED DATA ============

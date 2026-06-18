@@ -8,7 +8,7 @@ import {
   WEB_BASE,
 } from './helpers'
 
-test('Defect detail UI: reopen defect via UI button', async ({ page, request }) => {
+test('Defect detail UI: reopen a closed defect through lifecycle', async ({ page, request }) => {
   await loginAsAdmin(page)
 
   const adminToken = await getAdminToken(request)
@@ -18,13 +18,17 @@ test('Defect detail UI: reopen defect via UI button', async ({ page, request }) 
   try {
     await page.goto(`${WEB_BASE}/defects/${defect.id}`)
 
-    await page.getByRole('button', { name: 'Закрыть дефект' }).click()
-    await expect(page.getByRole('button', { name: 'Вернуть в работу' })).toBeVisible({ timeout: 6000 })
+    await page.getByLabel('Новый статус').selectOption('closed')
+    await page.getByLabel('Комментарий руководителя').fill('Первичное закрытие')
+    await page.getByRole('button', { name: 'Сохранить статус' }).click()
+    await expect(page.getByLabel('Новый статус')).toHaveValue('reopened')
 
-    await page.getByRole('button', { name: 'Вернуть в работу' }).click()
+    await page.getByLabel('Комментарий руководителя').fill('Проблема повторилась')
+    await page.getByRole('button', { name: 'Сохранить статус' }).click()
 
-    await expect(page.getByText('Дефект повторно открыт')).toBeVisible({ timeout: 6000 })
-    await expect(page.getByRole('button', { name: 'Закрыть дефект' })).toBeVisible()
+    await expect(page.getByText('Статус дефекта обновлён')).toBeVisible({ timeout: 6000 })
+    await expect(page.getByText('Открыт повторно').first()).toBeVisible()
+    await expect(page.getByLabel('Новый статус')).toHaveValue('in_progress')
   } finally {
     await archiveVehicle(request, adminToken, vehicle.id)
   }

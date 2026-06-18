@@ -6,6 +6,9 @@ type TimelineItem = {
   status?: string
   old_status?: string
   new_status?: string
+  from_status?: string | null
+  to_status?: string
+  comment?: string | null
   changed_by_name?: string | null
   changed_by?: string | null
 }
@@ -13,6 +16,9 @@ type TimelineItem = {
 function getStatusLabel(status?: string) {
   if (status === 'open') return 'Открыт'
   if (status === 'closed') return 'Закрыт'
+  if (status === 'in_progress') return 'В работе'
+  if (status === 'resolved') return 'Устранён'
+  if (status === 'reopened') return 'Открыт повторно'
   return status || 'Изменение'
 }
 
@@ -25,8 +31,10 @@ export default function Timeline({ items }: { items: TimelineItem[] }) {
     <div data-testid="defect-timeline" className="space-y-3">
       {items.map((item) => {
         const date = new Date(item.changed_at).toLocaleString('ru-RU')
-        const label = item.old_status && item.new_status
-          ? `${getStatusLabel(item.old_status)} -> ${getStatusLabel(item.new_status)}`
+        const fromStatus = item.old_status || item.from_status
+        const toStatus = item.new_status || item.to_status
+        const label = fromStatus && toStatus
+          ? `${getStatusLabel(fromStatus)} -> ${getStatusLabel(toStatus)}`
           : getStatusLabel(item.status)
 
         return (
@@ -39,6 +47,7 @@ export default function Timeline({ items }: { items: TimelineItem[] }) {
                 {item.changed_by_name ? ` · ${item.changed_by_name}` : ''}
                 {!item.changed_by_name && item.changed_by ? ` · ${item.changed_by}` : ''}
               </div>
+              {item.comment ? <div className="text-sm text-foreground-muted">{item.comment}</div> : null}
             </div>
           </div>
         )

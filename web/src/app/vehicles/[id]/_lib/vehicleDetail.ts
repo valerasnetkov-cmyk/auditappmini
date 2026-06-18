@@ -3,6 +3,9 @@ import type { VehicleStatus } from '@/lib/types'
 export type DefectHistoryEntry = {
   id: string
   status: string
+  from_status?: string | null
+  to_status?: string
+  comment?: string | null
   changed_at: string
   changed_by?: string | null
   changed_by_name?: string | null

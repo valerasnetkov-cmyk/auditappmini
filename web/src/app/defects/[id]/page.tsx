@@ -7,22 +7,15 @@ import { useParams } from 'next/navigation'
 import Layout from '@/components/Layout'
 import SubscriptionStatusBanner from '@/components/SubscriptionStatusBanner'
 import Timeline from '@/components/Timeline'
-import { Badge, NoticeCard, Skeleton, StatusButton, type UiTone } from '@/components/ui'
+import { Badge, NoticeCard, Skeleton, type UiTone } from '@/components/ui'
 import { useToast } from '@/app/contexts/ToastContext'
 import api, { buildApiUrl } from '@/lib/api/client'
 import { requireAuthToken } from '@/lib/auth'
 import { getCompanyOperationRestriction } from '@/lib/companyAccess'
 import { useCompanyUsage } from '@/lib/useCompanyUsage'
 import type { DefectRecord, InspectionDetail, VehicleDefectHistoryItem } from '@/lib/types'
-
-type DefectHistoryEntry = {
-  id: string
-  defect_id: string
-  status: string
-  changed_at: string
-  changed_by?: string | null
-  changed_by_name?: string | null
-}
+import type { DefectHistoryEntry } from '@/lib/types'
+import { DefectLifecyclePanel } from './_components/DefectLifecyclePanel'
 
 function getPhotoPreviewUrl(photo: { url: string; webp_url?: string | null }) {
   return photo.webp_url || photo.url
@@ -42,12 +35,31 @@ function getInspectionTypeLabel(type?: string) {
 function getStatusLabel(status?: string) {
   if (status === 'closed') return 'Закрыт'
   if (status === 'open') return 'Открыт'
+  if (status === 'in_progress') return 'В работе'
+  if (status === 'resolved') return 'Устранён'
+  if (status === 'reopened') return 'Открыт повторно'
   return status || 'Открыт'
 }
 
 function getStatusTone(status?: string): UiTone {
   if (status === 'closed') return 'success'
+  if (status === 'resolved') return 'info'
+  if (status === 'reopened') return 'danger'
   return 'warning'
+}
+
+function getSeverityLabel(severity?: string) {
+  if (severity === 'low') return 'Низкая'
+  if (severity === 'high') return 'Высокая'
+  if (severity === 'critical') return 'Критическая'
+  return 'Средняя'
+}
+
+function getSeverityTone(severity?: string): UiTone {
+  if (severity === 'critical') return 'danger'
+  if (severity === 'high') return 'warning'
+  if (severity === 'low') return 'neutral'
+  return 'info'
 }
 
 function getInspectionTypeTone(type?: string): UiTone {
@@ -122,7 +134,7 @@ export default function DefectDetailPage() {
     }
   }
 
-  const closeDefect = async () => {
+  const transitionDefect = async (status: string, comment: string) => {
     if (!defect?.id) return
     if (companyUsageLoading) {
       showToast('Проверяем статус тарифа компании. Повторите действие через несколько секунд.')
@@ -135,40 +147,14 @@ export default function DefectDetailPage() {
 
     try {
       setActionLoading(true)
-      const result = await api.closeDefect(defect.id)
+      const result = await api.setDefectStatus(defect.id, status, comment)
       if (result.error) {
         setError(result.error)
         return
       }
 
       await loadDefect()
-      showToast('Дефект закрыт')
-    } finally {
-      setActionLoading(false)
-    }
-  }
-
-  const reopenDefect = async () => {
-    if (!defect?.id) return
-    if (companyUsageLoading) {
-      showToast('Проверяем статус тарифа компании. Повторите действие через несколько секунд.')
-      return
-    }
-    if (writeRestriction) {
-      showToast(`${writeRestriction.title}: ${writeRestriction.message}`)
-      return
-    }
-
-    try {
-      setActionLoading(true)
-      const result = await api.reopenDefect(defect.id)
-      if (result.error) {
-        setError(result.error)
-        return
-      }
-
-      await loadDefect()
-      showToast('Дефект повторно открыт')
+      showToast('Статус дефекта обновлён')
     } finally {
       setActionLoading(false)
     }
@@ -227,33 +213,13 @@ export default function DefectDetailPage() {
             <div className="mt-2 flex flex-wrap items-center gap-3">
               <h1 className="page-title text-2xl">{defect.title}</h1>
               <Badge tone={getStatusTone(defect.status)}>{getStatusLabel(defect.status)}</Badge>
+              <Badge tone={getSeverityTone(defect.severity)}>{getSeverityLabel(defect.severity)}</Badge>
             </div>
             <p className="mt-1 text-foreground-muted">
               {defect.vehicle_number} · {defect.vehicle_name}
             </p>
           </div>
 
-          {defect.status === 'closed' ? (
-            <StatusButton
-              onClick={reopenDefect}
-              status={actionLoading ? 'loading' : 'idle'}
-              loadingLabel="Возвращаем…"
-              disabled={Boolean(writeRestrictionMessage)}
-              className="btn btn-success disabled:opacity-50"
-            >
-              Вернуть в работу
-            </StatusButton>
-          ) : (
-            <StatusButton
-              onClick={closeDefect}
-              status={actionLoading ? 'loading' : 'idle'}
-              loadingLabel="Закрываем…"
-              disabled={Boolean(writeRestrictionMessage)}
-              className="btn btn-danger disabled:opacity-50"
-            >
-              Закрыть дефект
-            </StatusButton>
-          )}
         </div>
 
         <SubscriptionStatusBanner usage={companyUsage} compact />
@@ -318,6 +284,14 @@ export default function DefectDetailPage() {
                 <div>
                   <div className="text-foreground-muted">Инспектор</div>
                   <div className="font-medium text-foreground">{defect.inspector_name || 'Не указано'}</div>
+                </div>
+                <div>
+                  <div className="text-foreground-muted">Критичность</div>
+                  <div className="mt-1"><Badge tone={getSeverityTone(defect.severity)}>{getSeverityLabel(defect.severity)}</Badge></div>
+                </div>
+                <div>
+                  <div className="text-foreground-muted">Последний комментарий руководителя</div>
+                  <div className="font-medium text-foreground">{defect.manager_comment || 'Не указан'}</div>
                 </div>
               </div>
 
@@ -475,6 +449,13 @@ export default function DefectDetailPage() {
           </div>
 
           <div className="space-y-6">
+            <DefectLifecyclePanel
+              key={defect.status}
+              defect={defect}
+              disabled={Boolean(writeRestrictionMessage)}
+              saving={actionLoading}
+              onTransition={transitionDefect}
+            />
             <section className="card p-6">
               <h2 className="mb-4 text-lg font-semibold text-foreground">Связанные записи</h2>
               <div className="space-y-4 text-sm">

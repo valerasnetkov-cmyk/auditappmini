@@ -4,6 +4,20 @@ import Link from 'next/link'
 import type { VehicleRecord } from '@/lib/types'
 import { getStatusBadgeClass, getStatusLabel } from '../_lib/vehicles'
 
+const scheduleLabels = {
+  inspection_actual: 'Актуален',
+  inspection_due_soon: 'Скоро',
+  inspection_overdue: 'Просрочен',
+  never_inspected: 'Не осматривался',
+}
+
+const scheduleClasses = {
+  inspection_actual: 'badge badge-success',
+  inspection_due_soon: 'badge badge-warning',
+  inspection_overdue: 'badge badge-danger',
+  never_inspected: 'badge badge-secondary',
+}
+
 export function VehicleRow({
   vehicle,
   hiddenColumns,
@@ -59,6 +73,17 @@ export function VehicleRow({
             <span className="font-medium text-status-danger">{vehicle.defectsCount}</span>
           ) : (
             <span className="font-medium text-status-success">Нет</span>
+          )}
+        </td>
+      ) : null}
+      {!hiddenColumns.includes('inspectionSchedule') ? (
+        <td className="px-6 py-4">
+          {vehicle.inspection_schedule ? (
+            <span className={scheduleClasses[vehicle.inspection_schedule.status]}>
+              {scheduleLabels[vehicle.inspection_schedule.status]}
+            </span>
+          ) : (
+            <span className="text-foreground-muted">Нет данных</span>
           )}
         </td>
       ) : null}

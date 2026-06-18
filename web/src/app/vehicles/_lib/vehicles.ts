@@ -5,9 +5,11 @@ export type VehicleFormData = {
   name: string
   status: VehicleStatus
   region: string
+  quickInspectionIntervalDays: string
+  plannedInspectionIntervalDays: string
 }
 
-export type SortableVehicleKey = 'number' | 'name' | 'region' | 'status' | 'defectsCount'
+export type SortableVehicleKey = 'number' | 'name' | 'region' | 'status' | 'defectsCount' | 'inspectionSchedule'
 
 export type SortConfig = {
   key: SortableVehicleKey
@@ -26,6 +28,8 @@ export const INITIAL_FORM: VehicleFormData = {
   name: '',
   status: 'active',
   region: '',
+  quickInspectionIntervalDays: '',
+  plannedInspectionIntervalDays: '',
 }
 
 export const COLUMNS: ColumnConfig[] = [
@@ -34,6 +38,7 @@ export const COLUMNS: ColumnConfig[] = [
   { key: 'region', label: 'Регион' },
   { key: 'status', label: 'Статус' },
   { key: 'defectsCount', label: 'Дефекты' },
+  { key: 'inspectionSchedule', label: 'График осмотров' },
 ]
 
 export function getStatusLabel(status: string) {

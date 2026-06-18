@@ -4,12 +4,20 @@ import Link from 'next/link'
 import Layout from '@/components/Layout'
 import SubscriptionStatusBanner from '@/components/SubscriptionStatusBanner'
 import { useCompanyUsage } from '@/lib/useCompanyUsage'
-import type { InspectionDetail, PhotoRecord, PhotoRequirementsResponse } from '@/lib/types'
+import type {
+  InspectionDetail,
+  InspectionApproval,
+  InspectionReadiness,
+  InspectionReport,
+  PhotoRecord,
+  PhotoRequirementsResponse,
+} from '@/lib/types'
 
 import AccidentCard from './AccidentCard'
 import ChecklistSection from './ChecklistSection'
 import DefectsList from './DefectsList'
 import InspectionHeader from './InspectionHeader'
+import InspectionApprovalCard from './InspectionApprovalCard'
 import InspectionStats from './InspectionStats'
 import OdometerCard from './OdometerCard'
 import PhotoRequirementsSection from './PhotoRequirementsSection'
@@ -24,6 +32,12 @@ export type InspectionBodyProps = {
   defectPhotos: Record<string, PhotoRecord[]>
   inspectionPhotos: Record<string, PhotoRecord[]>
   photoRequirements: PhotoRequirementsResponse | null
+  readiness: InspectionReadiness | null
+  report: InspectionReport | null
+  reportLoading: boolean
+  approval: InspectionApproval | null
+  approvalLoading: boolean
+  canReviewApproval: boolean
   accidentOccurredAt: string
   setAccidentOccurredAt: (value: string) => void
   accidentLocation: string
@@ -32,6 +46,8 @@ export type InspectionBodyProps = {
   setOdometerValue: (value: string) => void
   odometerUnit: string
   setOdometerUnit: (value: string) => void
+  odometerUnavailableReason: string
+  setOdometerUnavailableReason: (value: string) => void
   uploadingPhoto: string | null
   deletingPhoto: string | null
   saving: boolean
@@ -65,13 +81,20 @@ export type InspectionBodyProps = {
   ) => Promise<void>
   onSave: () => void
   onComplete: () => void
-  onPrint: () => void
+  onCreateDefect: (data: { title: string; comment: string; severity: string }) => Promise<void>
+  onGenerateReport: () => void
+  onDownloadReport: () => void
+  onSubmitApproval: (comment: string) => Promise<void>
+  onReviewApproval: (
+    status: 'approved' | 'rejected' | 'revision_required',
+    comment: string,
+  ) => Promise<void>
   onError: (tone: StatusTone, message: string) => void
 }
 
 export default function InspectionDetailBody(props: InspectionBodyProps) {
   const mutationsDisabled = Boolean(props.writeRestrictionMessage)
-  const warnings: string[] = []
+  const warnings: string[] = props.readiness?.missing.map((item) => item.label) || []
   if (props.inspection.type === 'accident') {
     if (!props.accidentOccurredAt.trim()) warnings.push('Укажите время ДТП')
     if (!props.accidentLocation.trim()) warnings.push('Укажите место ДТП')
@@ -96,6 +119,7 @@ export default function InspectionDetailBody(props: InspectionBodyProps) {
       if (photos.length === 0) warnings.push(`Добавьте фото дефекта: ${item.title}`)
     })
 
+  const uniqueWarnings = [...new Set(warnings)]
   const showError = (message: string) => props.onError('error', message)
   const requiredPhotosComplete = Boolean(
     props.photoRequirements &&
@@ -116,7 +140,7 @@ export default function InspectionDetailBody(props: InspectionBodyProps) {
     props.checklist.length > 0,
     defectEvidenceComplete,
     measurementComplete,
-    warnings.length === 0,
+    uniqueWarnings.length === 0,
   ]
   const firstIncompleteStep = readyStates.findIndex((ready) => !ready)
   const activeStep = props.inspection.completed
@@ -146,7 +170,13 @@ export default function InspectionDetailBody(props: InspectionBodyProps) {
   return (
     <Layout currentPage="inspections">
       <div className="p-6">
-        <InspectionHeader inspection={props.inspection} onPrint={props.onPrint} />
+        <InspectionHeader
+          inspection={props.inspection}
+          report={props.report}
+          reportLoading={props.reportLoading}
+          onGenerateReport={props.onGenerateReport}
+          onDownloadReport={props.onDownloadReport}
+        />
 
         <StatusBanner message={props.statusMessage} tone={props.statusTone} />
 
@@ -156,8 +186,19 @@ export default function InspectionDetailBody(props: InspectionBodyProps) {
           <div className="mb-4"><NoticeCard title="Редактирование ограничено" tone="warning" compact>{props.writeRestrictionMessage}</NoticeCard></div>
         ) : null}
 
-        {warnings.length > 0 && !props.inspection.completed ? (
-          <WarningsBanner warnings={warnings} />
+        {uniqueWarnings.length > 0 && !props.inspection.completed ? (
+          <WarningsBanner warnings={uniqueWarnings} />
+        ) : null}
+
+        {props.inspection.completed && props.approval ? (
+          <InspectionApprovalCard
+            approval={props.approval}
+            canReview={props.canReviewApproval}
+            loading={props.approvalLoading}
+            disabled={mutationsDisabled}
+            onSubmit={props.onSubmitApproval}
+            onReview={props.onReviewApproval}
+          />
         ) : null}
 
         <section className="card mb-6 p-5">
@@ -174,6 +215,8 @@ export default function InspectionDetailBody(props: InspectionBodyProps) {
               setAccidentOccurredAt={props.setAccidentOccurredAt}
               accidentLocation={props.accidentLocation}
               setAccidentLocation={props.setAccidentLocation}
+              odometerUnavailableReason={props.odometerUnavailableReason}
+              setOdometerUnavailableReason={props.setOdometerUnavailableReason}
               disabled={mutationsDisabled}
             />
           ) : props.inspection.type === 'quick' || props.inspection.type === 'scheduled' ? (
@@ -223,7 +266,12 @@ export default function InspectionDetailBody(props: InspectionBodyProps) {
           />
         </div>
 
-        <DefectsList inspection={props.inspection} />
+        <DefectsList
+          inspection={props.inspection}
+          disabled={mutationsDisabled || Boolean(props.inspection.completed)}
+          saving={props.saving}
+          onCreateDefect={props.onCreateDefect}
+        />
 
         <div className="flex justify-end gap-3">
           <Link href="/inspections" className="rounded-lg border px-6 py-2 hover:bg-slate-50">
@@ -242,7 +290,7 @@ export default function InspectionDetailBody(props: InspectionBodyProps) {
               onClick={props.onComplete}
               disabled={
                 props.saving ||
-                warnings.length > 0 ||
+                !props.readiness?.ready ||
                 !props.photoRequirements ||
                 mutationsDisabled
               }

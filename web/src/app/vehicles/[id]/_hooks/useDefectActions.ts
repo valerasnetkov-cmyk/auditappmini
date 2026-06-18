@@ -34,7 +34,9 @@ export function useDefectActions(guard: Guard) {
     showToast: (msg: string) => void,
   ) => {
     if (guardOrError()) return
-    const result = await api.closeDefect(defectId)
+    const comment = window.prompt('Комментарий к закрытию дефекта')
+    if (!comment?.trim()) return
+    const result = await api.closeDefect(defectId, comment.trim())
     if (result.error) {
       guard.setError(result.error)
       return
@@ -49,7 +51,9 @@ export function useDefectActions(guard: Guard) {
     showToast: (msg: string) => void,
   ) => {
     if (guardOrError()) return
-    const result = await api.reopenDefect(defectId)
+    const comment = window.prompt('Причина повторного открытия дефекта')
+    if (!comment?.trim()) return
+    const result = await api.reopenDefect(defectId, comment.trim())
     if (result.error) {
       guard.setError(result.error)
       return

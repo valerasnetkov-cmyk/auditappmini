@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import type { FormEvent } from 'react'
 import { useRouter } from 'next/navigation'
 import Layout from '@/components/Layout'
@@ -16,6 +16,7 @@ import { CompanyUsagePanel } from './_components/CompanyUsagePanel'
 import { ImportPanel } from './_components/ImportPanel'
 import { RegionsPanel } from './_components/RegionsPanel'
 import { ServiceNotificationRecipientsPanel } from './_components/ServiceNotificationRecipientsPanel'
+import { InspectionScheduleSettingsPanel } from './_components/InspectionScheduleSettingsPanel'
 import {
   buildWriteBlockedMessage,
   pickRestriction,
@@ -33,6 +34,9 @@ export default function SettingsPage() {
   const regions = useRegions()
   const serviceRecipients = useServiceRecipients()
   const vehicleImport = useVehicleImport()
+  const handleScheduleStatus = useCallback((tone: 'success' | 'danger', text: string) => {
+    setStatus({ tone, text })
+  }, [])
 
   const createRestriction = pickRestriction(companyUsage.usage, 'create')
   const writeRestriction = pickRestriction(companyUsage.usage, 'write')
@@ -140,6 +144,13 @@ export default function SettingsPage() {
             usage={companyUsage.usage}
             loading={companyUsage.loading}
             onRefresh={() => void companyUsage.load(setStatus)}
+          />
+        ) : null}
+
+        {isManager ? (
+          <InspectionScheduleSettingsPanel
+            disabled={Boolean(writeBlockedMessage)}
+            onStatus={handleScheduleStatus}
           />
         ) : null}
 

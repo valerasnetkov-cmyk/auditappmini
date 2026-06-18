@@ -34,6 +34,12 @@ export const photoRequirements = {
   },
   accident: {
     required: [
+      'front',
+      'left',
+      'right',
+      'rear',
+      'overview',
+      'accident_location',
       'accident_overview_1',
       'accident_overview_2',
       'accident_overview_3',

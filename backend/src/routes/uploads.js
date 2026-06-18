@@ -23,8 +23,8 @@ export default function registerProtectedUploadRoutes({
       SELECT id
       FROM photos
       WHERE company_id = ?
-        AND (url = ? OR original_url = ? OR webp_url = ? OR thumb_url = ?)
-    `).get(companyId, url, url, url, url)
+        AND (url = ? OR original_url = ? OR webp_url = ? OR thumb_url = ? OR watermark_url = ?)
+    `).get(companyId, url, url, url, url, url)
 
     if (!photo) {
       return sendError(res, 404, 'Photo not found')

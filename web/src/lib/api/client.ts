@@ -16,7 +16,10 @@ import type {
   ExportRow,
   ExportType,
   InspectionCreateResponse,
+  InspectionApproval,
   InspectionDetail,
+  InspectionReadiness,
+  InspectionReport,
   InspectionRecord,
   LoginResponse,
   MFAVerifyResponse,
@@ -76,6 +79,13 @@ type RawPhotoRecord = {
   photo_type?: string | null
   is_required?: number | boolean
   geo?: string | null
+  client_photo_id?: string | null
+  upload_status?: string | null
+  captured_at?: string | null
+  captured_lat?: number | null
+  captured_lng?: number | null
+  watermark_url?: string | null
+  watermark_generated_at?: string | null
 }
 
 type RawDefectRecord = Omit<DefectRecord, 'photos'> & {
@@ -120,6 +130,13 @@ function normalizePhotos(source: RawDefectRecord['photos']) {
         photo_type: item.photo_type,
         is_required: item.is_required,
         geo: item.geo,
+        client_photo_id: item.client_photo_id,
+        upload_status: item.upload_status,
+        captured_at: item.captured_at,
+        captured_lat: item.captured_lat,
+        captured_lng: item.captured_lng,
+        watermark_url: item.watermark_url,
+        watermark_generated_at: item.watermark_generated_at,
       }))
   }
 
@@ -215,7 +232,9 @@ class ApiClient {
         return {
           error: errorData.error === 'demo_read_only'
             ? (errorData.message || 'Это демо-режим. Изменение данных ограничено.')
-            : (errorData.error || `HTTP ${response.status}`),
+            : (errorData.message || errorData.error || `HTTP ${response.status}`),
+          code: errorData.error,
+          missing: Array.isArray(errorData.missing) ? errorData.missing : undefined,
         }
       }
 
@@ -365,12 +384,19 @@ class ApiClient {
     return this.request<{ status: string; version: string }>('/health')
   }
 
-  async getVehicles(params?: { page?: number; limit?: number; search?: string; status?: string }) {
+  async getVehicles(params?: {
+    page?: number
+    limit?: number
+    search?: string
+    status?: string
+    inspectionStatus?: string
+  }) {
     const query = new URLSearchParams()
     if (params?.page) query.set('page', String(params.page))
     if (params?.limit) query.set('limit', String(params.limit))
     if (params?.search) query.set('search', params.search)
     if (params?.status) query.set('status', params.status)
+    if (params?.inspectionStatus) query.set('inspection_status', params.inspectionStatus)
 
     return this.request<VehicleRecord[]>(`/vehicles?${query}`)
   }
@@ -651,6 +677,80 @@ class ApiClient {
     return this.request<SaasAdminStats>('/admin/resource/stats')
   }
 
+  async createDefect(
+    inspectionId: string,
+    data: { title: string; comment?: string; severity?: string },
+  ) {
+    return this.request<DefectRecord>(`/inspections/${inspectionId}/defects`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    })
+  }
+
+  async getInspectionApproval(id: string) {
+    return this.request<InspectionApproval>(`/inspections/${id}/approval`)
+  }
+
+  async submitInspection(id: string, comment?: string) {
+    return this.request<InspectionApproval>(`/inspections/${id}/submit`, {
+      method: 'POST',
+      body: JSON.stringify({ comment }),
+    })
+  }
+
+  async reviewInspection(
+    id: string,
+    status: 'approved' | 'rejected' | 'revision_required',
+    comment?: string,
+  ) {
+    return this.request<InspectionApproval>(`/inspections/${id}/approval`, {
+      method: 'POST',
+      body: JSON.stringify({ status, comment }),
+    })
+  }
+
+  async getInspectionReadiness(id: string) {
+    return this.request<InspectionReadiness>(`/inspections/${id}/readiness`)
+  }
+
+  async getInspectionReport(id: string) {
+    return this.request<InspectionReport>(`/inspections/${id}/report`)
+  }
+
+  async createInspectionReport(id: string) {
+    return this.request<InspectionReport>(`/inspections/${id}/report`, {
+      method: 'POST',
+    })
+  }
+
+  async downloadInspectionReport(id: string): Promise<ApiResponse<Blob>> {
+    const token = this.getToken()
+    try {
+      const response = await fetch(`${API_URL}/inspections/${id}/report.pdf`, {
+        headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+        credentials: 'include',
+      })
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}))
+        const sessionError = this.handleSessionFailure(
+          response.status,
+          `/inspections/${id}/report.pdf`,
+          token,
+          errorData.error,
+        )
+        if (sessionError) return { error: sessionError }
+        return {
+          error: errorData.message || errorData.error || `HTTP ${response.status}`,
+          code: errorData.error,
+          missing: Array.isArray(errorData.missing) ? errorData.missing : undefined,
+        }
+      }
+      return { data: await response.blob() }
+    } catch {
+      return { error: 'Ошибка соединения с сервером' }
+    }
+  }
+
   async getResourceAccess() {
     return this.request<ResourceAccess>('/admin/resource/access')
   }
@@ -880,15 +980,24 @@ class ApiClient {
     })
   }
 
-  async closeDefect(defectId: string) {
-    return this.request<DefectRecord>(`/defects/${defectId}/close`, {
+  async setDefectStatus(defectId: string, status: string, comment: string) {
+    return this.request<DefectRecord>(`/defects/${defectId}/status`, {
       method: 'POST',
+      body: JSON.stringify({ status, comment }),
     })
   }
 
-  async reopenDefect(defectId: string) {
+  async closeDefect(defectId: string, comment: string) {
+    return this.request<DefectRecord>(`/defects/${defectId}/close`, {
+      method: 'POST',
+      body: JSON.stringify({ comment }),
+    })
+  }
+
+  async reopenDefect(defectId: string, comment: string) {
     return this.request<DefectRecord>(`/defects/${defectId}/reopen`, {
       method: 'POST',
+      body: JSON.stringify({ comment }),
     })
   }
 

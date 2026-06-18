@@ -10,6 +10,21 @@ import {
 } from '../services/regions.js'
 
 const VEHICLE_STATUSES = new Set(['active', 'repair', 'archived'])
+const INSPECTION_SCHEDULE_STATUSES = new Set([
+  'inspection_actual',
+  'inspection_due_soon',
+  'inspection_overdue',
+  'never_inspected',
+])
+
+function normalizeOptionalInterval(value) {
+  if (value === undefined || value === null || value === '') return { value: null }
+  const parsed = Number(value)
+  if (!Number.isInteger(parsed) || parsed < 1 || parsed > 3650) {
+    return { error: 'Интервал осмотра должен быть целым числом от 1 до 3650' }
+  }
+  return { value: parsed }
+}
 
 function getVehicleByNumber(db, number, companyId = null) {
   const query = companyId
@@ -27,27 +42,77 @@ function getVehicleByNumber(db, number, companyId = null) {
   return companyId ? query.get(number, companyId) : query.get(number)
 }
 
-function createVehicleRecord(db, { id, number, name, status, region, companyId = 'default' }) {
+function createVehicleRecord(db, {
+  id,
+  number,
+  name,
+  status,
+  region,
+  companyId = 'default',
+  quickInspectionIntervalDays = null,
+  plannedInspectionIntervalDays = null,
+}) {
   return db.prepare(`
-    INSERT INTO vehicles (id, number, name, status, region, company_id)
-    VALUES (?, ?, ?, ?, ?, ?)
-  `).run(id, number, name, status, region, companyId)
+    INSERT INTO vehicles (
+      id, number, name, status, region, company_id,
+      quick_inspection_interval_days, planned_inspection_interval_days
+    )
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+  `).run(
+    id,
+    number,
+    name,
+    status,
+    region,
+    companyId,
+    quickInspectionIntervalDays,
+    plannedInspectionIntervalDays,
+  )
 }
 
-function updateVehicleRecord(db, id, { number, name, status, region, companyId = null }) {
+function updateVehicleRecord(db, id, {
+  number,
+  name,
+  status,
+  region,
+  companyId = null,
+  quickInspectionIntervalDays = null,
+  plannedInspectionIntervalDays = null,
+}) {
   const query = companyId
     ? db.prepare(`
-      UPDATE vehicles SET number = ?, name = ?, status = ?, region = ?
+      UPDATE vehicles
+      SET number = ?, name = ?, status = ?, region = ?,
+          quick_inspection_interval_days = ?, planned_inspection_interval_days = ?
       WHERE id = ? AND company_id = ?
     `)
     : db.prepare(`
-    UPDATE vehicles SET number = ?, name = ?, status = ?, region = ?
+    UPDATE vehicles
+    SET number = ?, name = ?, status = ?, region = ?,
+        quick_inspection_interval_days = ?, planned_inspection_interval_days = ?
     WHERE id = ?
   `)
 
   return companyId
-    ? query.run(number.toUpperCase(), name, status, region || null, id, companyId)
-    : query.run(number.toUpperCase(), name, status, region || null, id)
+    ? query.run(
+      number.toUpperCase(),
+      name,
+      status,
+      region || null,
+      quickInspectionIntervalDays,
+      plannedInspectionIntervalDays,
+      id,
+      companyId,
+    )
+    : query.run(
+      number.toUpperCase(),
+      name,
+      status,
+      region || null,
+      quickInspectionIntervalDays,
+      plannedInspectionIntervalDays,
+      id,
+    )
 }
 
 function recordVehicleStatusChange(db, { vehicleId, oldStatus, newStatus, reason, changedBy }) {
@@ -167,18 +232,23 @@ export default function registerVehicleRoutes({
   getCompanyResourceLimitState,
   ensureManager,
   ensureCompanyOperationalWriteAllowed,
+  inspectionSchedule,
 }) {
   app.get('/api/vehicles', authenticate, (req, res) => {
-    const { page = 1, limit = 20, search = '', status = 'all' } = req.query
+    const {
+      page = 1,
+      limit = 20,
+      search = '',
+      status = 'all',
+      inspection_status: inspectionStatus = 'all',
+    } = req.query
     const offset = (page - 1) * limit
     const companyId = req.user.company_id || 'default'
 
-    let countWhereClause = 'company_id = ?'
     let vehicleWhereClause = 'v.company_id = ?'
     const params = [companyId]
 
     if (search) {
-      countWhereClause += ' AND (number LIKE ? OR name LIKE ?)'
       vehicleWhereClause += ' AND (v.number LIKE ? OR v.name LIKE ?)'
       params.push(`%${search}%`, `%${search}%`)
     }
@@ -187,16 +257,15 @@ export default function registerVehicleRoutes({
       if (!VEHICLE_STATUSES.has(String(status))) {
         return sendError(res, 400, 'Неизвестный статус техники')
       }
-      countWhereClause += ' AND status = ?'
       vehicleWhereClause += ' AND v.status = ?'
       params.push(status)
     } else {
-      countWhereClause += " AND status != 'archived'"
       vehicleWhereClause += " AND v.status != 'archived'"
     }
 
-    const countQuery = db.prepare(`SELECT COUNT(*) as count FROM vehicles WHERE ${countWhereClause}`)
-    const { count } = countQuery.get(...params)
+    if (inspectionStatus !== 'all' && !INSPECTION_SCHEDULE_STATUSES.has(String(inspectionStatus))) {
+      return sendError(res, 400, 'Неизвестный статус графика осмотров')
+    }
 
     const query = db.prepare(`
       WITH latest_inspections AS (
@@ -221,6 +290,24 @@ export default function registerVehicleRoutes({
         v.company_id,
         v.created_at,
         v.last_scheduled_inspection,
+        v.quick_inspection_interval_days,
+        v.planned_inspection_interval_days,
+        (
+          SELECT COALESCE(si.completed_at, si.created_at)
+          FROM inspections si
+          WHERE si.vehicle_id = v.id AND si.company_id = v.company_id
+            AND si.type = 'quick' AND si.completed = 1
+          ORDER BY COALESCE(si.completed_at, si.created_at) DESC, si.id DESC
+          LIMIT 1
+        ) AS last_quick_inspection_at,
+        (
+          SELECT COALESCE(si.completed_at, si.created_at)
+          FROM inspections si
+          WHERE si.vehicle_id = v.id AND si.company_id = v.company_id
+            AND si.type = 'scheduled' AND si.completed = 1
+          ORDER BY COALESCE(si.completed_at, si.created_at) DESC, si.id DESC
+          LIMIT 1
+        ) AS last_planned_inspection_at,
         li.id AS last_inspection_id,
         li.created_at AS last_inspection_created_at,
         COALESCE(dc.count, 0) AS defects_count
@@ -229,9 +316,8 @@ export default function registerVehicleRoutes({
       LEFT JOIN defect_counts dc ON dc.vehicle_id = v.id
       WHERE ${vehicleWhereClause}
       ORDER BY v.created_at DESC
-      LIMIT ? OFFSET ?
     `)
-    const vehicles = query.all(companyId, companyId, ...params, Number(limit), offset)
+    const vehicles = query.all(companyId, companyId, ...params)
 
     const vehiclesWithStats = vehicles.map(({
       last_inspection_id,
@@ -245,14 +331,19 @@ export default function registerVehicleRoutes({
 
       return { ...vehicle, lastInspection, defectsCount: Number(defects_count || 0) }
     })
+    const scheduledVehicles = inspectionSchedule.enrichVehicles(vehiclesWithStats, companyId)
+    const filteredVehicles = inspectionStatus === 'all'
+      ? scheduledVehicles
+      : scheduledVehicles.filter((vehicle) => vehicle.inspection_schedule.status === inspectionStatus)
+    const paginatedVehicles = filteredVehicles.slice(offset, offset + Number(limit))
 
     res.json({
-      data: vehiclesWithStats,
+      data: paginatedVehicles,
       pagination: {
         page: Number(page),
         limit: Number(limit),
-        total: count,
-        pages: Math.ceil(count / limit),
+        total: filteredVehicles.length,
+        pages: Math.ceil(filteredVehicles.length / Number(limit)),
       },
     })
   })
@@ -299,7 +390,8 @@ export default function registerVehicleRoutes({
 
     const limit = Number(req.query.limit || 20)
     const defects = db.prepare(`
-      SELECT d.id, d.inspection_id, d.title, d.comment, d.created_at, d.status, d.closed_at,
+      SELECT d.id, d.inspection_id, d.title, d.comment, d.created_at,
+             d.status, d.severity, d.resolved_at, d.closed_at, d.closed_by, d.manager_comment,
              i.type as inspection_type, i.created_at as inspection_date, i.created_at as inspection_time,
              i.accident_occurred_at, i.accident_location,
              v.id as vehicle_id, v.number as vehicle_number, v.name as vehicle_name, v.region as vehicle_region,
@@ -333,7 +425,14 @@ export default function registerVehicleRoutes({
   app.post('/api/vehicles', authenticate, (req, res) => {
     if (!ensureCompanyOperationalWriteAllowed(req, res, { mode: 'create' })) return
 
-    const { number, name, status = 'active', region } = req.body
+    const {
+      number,
+      name,
+      status = 'active',
+      region,
+      quick_inspection_interval_days,
+      planned_inspection_interval_days,
+    } = req.body
     const companyId = req.user.company_id || 'default'
     if (!VEHICLE_STATUSES.has(String(status))) {
       return sendError(res, 400, 'Неизвестный статус техники')
@@ -347,6 +446,11 @@ export default function registerVehicleRoutes({
     const duplicateError = ensureVehicleNumberAvailable(db, API_MESSAGES, validated.number, null, companyId)
     if (duplicateError) {
       return sendError(res, 400, duplicateError)
+    }
+    const quickInterval = normalizeOptionalInterval(quick_inspection_interval_days)
+    const plannedInterval = normalizeOptionalInterval(planned_inspection_interval_days)
+    if (quickInterval.error || plannedInterval.error) {
+      return sendError(res, 400, quickInterval.error || plannedInterval.error)
     }
 
     const limitViolation = getCompanyLimitViolation(companyId, 'vehicles')
@@ -363,6 +467,8 @@ export default function registerVehicleRoutes({
       status,
       region: validated.region,
       companyId,
+      quickInspectionIntervalDays: quickInterval.value,
+      plannedInspectionIntervalDays: plannedInterval.value,
     })
 
     const vehicle = getVehicleById(id, companyId)
@@ -476,7 +582,15 @@ export default function registerVehicleRoutes({
   app.put('/api/vehicles/:id', authenticate, (req, res) => {
     if (!ensureCompanyOperationalWriteAllowed(req, res, { mode: 'write' })) return
 
-    const { number, name, status, region, reason } = req.body
+    const {
+      number,
+      name,
+      status,
+      region,
+      reason,
+      quick_inspection_interval_days,
+      planned_inspection_interval_days,
+    } = req.body
     const companyId = req.user.company_id || 'default'
     if (!VEHICLE_STATUSES.has(String(status))) {
       return sendError(res, 400, 'Неизвестный статус техники')
@@ -496,6 +610,19 @@ export default function registerVehicleRoutes({
     if (duplicateError) {
       return sendError(res, 400, duplicateError)
     }
+    const quickInterval = normalizeOptionalInterval(
+      quick_inspection_interval_days === undefined
+        ? oldVehicle.quick_inspection_interval_days
+        : quick_inspection_interval_days,
+    )
+    const plannedInterval = normalizeOptionalInterval(
+      planned_inspection_interval_days === undefined
+        ? oldVehicle.planned_inspection_interval_days
+        : planned_inspection_interval_days,
+    )
+    if (quickInterval.error || plannedInterval.error) {
+      return sendError(res, 400, quickInterval.error || plannedInterval.error)
+    }
 
     updateVehicleRecord(db, req.params.id, {
       number: validated.number,
@@ -503,6 +630,8 @@ export default function registerVehicleRoutes({
       status,
       region: validated.region,
       companyId,
+      quickInspectionIntervalDays: quickInterval.value,
+      plannedInspectionIntervalDays: plannedInterval.value,
     })
 
     if (oldVehicle.status !== status) {

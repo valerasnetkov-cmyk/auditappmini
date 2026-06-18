@@ -3,6 +3,100 @@
 ## Unreleased
 
 ### Changed
+- **RC readiness freeze**: функциональные изменения зафиксированы на уровне
+  pilot-ready RC; дальнейшая работа до pilot/staging ограничена release gates,
+  точечными исправлениями failures и документированием рисков. Крупная
+  декомпозиция resource-admin поставлена на паузу после выделения
+  `resourceAdminStats`, чтобы не расширять blast radius перед пилотом.
+- **Dependency audit hardening для RC**: web и mobile lockfiles закрепляют
+  безопасные транзитивные версии `@babel/core`, `js-yaml`, `tmp` и `ws` через
+  `overrides`, не поднимая React Native/Expo major перед RC. `npm run
+  verify:launch` теперь проходит dependency audits для backend/web/mobile без
+  уязвимостей.
+- **Public demo smoke stability**: ожидание старта сервера в `smoke:public-demo`
+  увеличено до 60 секунд, чтобы полный launch gate не падал флейком на
+  медленном Windows/CI старте после безопасной обработки corrupt SVG.
+- **Release evidence snapshot**: локальные RC-gates пройдены на 2026-06-18:
+  `npm run verify:launch`, `npm run backup:local`, `npm run backup:verify`,
+  `npm run release:readiness`, `npm run release:evidence` и
+  `npm run mobile:eas:readiness`. `doctor:production` остаётся внешним
+  pilot/staging blocker до настройки реального `backend/.env.production` и
+  persistent paths.
+- **Декомпозиция subscription alerts**: расчёт статусов подписок, дедупликация сервисных уведомлений, выбор tenant-получателей и агрегат уведомлений вынесены из крупного `adminSaas.js` в `backend/src/services/subscriptionAlerts.js`. CLI `subscriptions:check` теперь использует сервис напрямую, а HTTP-контракт resource-admin сохранён.
+- **Проверка правил подписки**: добавлены unit-тесты переходов `active`, `expiring`, `grace`, `expired` и `suspended`; backend unit suite содержит 57 тестов.
+- **Декомпозиция resource billing**: payment mapping, списки и сводка платежей, нормализация payload, MRR и перерасчёт подписки вынесены в `backend/src/services/resourceBilling.js`. `adminSaas.js` уменьшен с 2027 до 1799 строк без изменения resource-admin API.
+- **Проверка resource billing**: добавлены unit-тесты нормализации платежа и расчёта MRR; backend unit suite содержит 60 тестов.
+- **Декомпозиция тарифов и лимитов**: mapping, выборка тарифов, нормализация create/update payload и upsert лимитов компаний вынесены в `backend/src/services/resourcePlans.js`. RBAC, аудит и HTTP CRUD остались в resource-admin routes; `adminSaas.js` уменьшен с 1799 до 1646 строк.
+- **Проверка тарифов**: добавлены unit-тесты нормализации тарифов, частичного обновления и default plan; backend unit suite содержит 63 теста.
+- **Декомпозиция владельцев компаний**: owner mapping, setup-status, выборки и мутации владельцев вынесены в `backend/src/services/resourceOwners.js`. HTTP-валидация, выдача setup-link и audit log сохранены в resource-admin routes; `adminSaas.js` уменьшен с 1646 до 1550 строк.
+- **Проверка owner setup**: добавлены unit-тесты состояний setup-link и legacy mapping; backend unit suite содержит 66 тестов.
+- **Декомпозиция компаний resource-admin**: реестр компаний, usage/risk/health mapping, subscription summary и проверки наличия tenant-данных вынесены в `backend/src/services/resourceCompanies.js`. Dashboard и CRUD продолжают использовать прежние контракты; `adminSaas.js` уменьшен с 1550 до 1346 строк.
+- **Проверка company metrics**: добавлены unit-тесты процентов лимитов, risk thresholds, падения активности и deterministic stale-date; backend unit suite содержит 69 тестов.
+- **Декомпозиция уведомлений и аудита**: resource/company выборки уведомлений, mapping audit log, безопасный JSON parsing и отметка уведомления прочитанным вынесены в `backend/src/services/resourceActivity.js`. `adminSaas.js` уменьшен с 1346 до 1258 строк.
+- **Проверка resource activity**: добавлены unit-тесты notification defaults и audit payload parsing; backend unit suite содержит 72 теста.
+- **Декомпозиция resource insights**: расчёт limit usage, disabled modules, churn/upsell risk center и billing summary вынесен в `backend/src/services/resourceInsights.js`. `adminSaas.js` уменьшен с 1258 до 1152 строк.
+- **Проверка коммерческих метрик**: добавлены unit-тесты limit/risk thresholds, deterministic churn, recommended plan, potential MRR и trial conversion; backend unit suite содержит 75 тестов.
+- **Декомпозиция resource dashboard**: totals, plan breakdown, activity trend, product activity, storage, OCR stats, service health, health center и activation funnel вынесены из `adminSaas.js` в `backend/src/services/resourceDashboard.js`. `adminSaas.js` уменьшен с 1152 до 712 строк без изменения `/api/admin/saas/stats`.
+- **Проверка dashboard-агрегатов**: добавлены unit-тесты mapper-ов totals, product activity, storage stats, health items и activation funnel; backend unit suite содержит 80 тестов.
+- **Декомпозиция resource-admin stats composition**: сборка общего `/stats` response и карточки компании вынесены в `backend/src/services/resourceAdminStats.js`. `adminSaas.js` уменьшен с 712 до 642 строк; старые named exports сохранены через re-export.
+- **Проверка company details composition**: добавлен unit-тест `buildResourceCompanyDetails`; backend unit suite содержит 81 тест.
+
+### Verified
+- `npm --prefix backend run test:unit`
+- `npm --prefix backend run smoke`
+- `npm --prefix backend run smoke:saas-admin`
+- `npm --prefix backend run lint`
+- `npm run verify:launch`
+- `npm run backup:local`
+- `npm run backup:verify`
+- `npm run release:readiness`
+- `npm run release:evidence`
+- `npm run release:first-start`
+- `npm run mobile:eas:readiness`
+- `git diff --check`
+
+- **P0: надёжный доказательный осмотр**: добавлены повторно безопасные
+  additive-миграции, идемпотентные client ID осмотров и фотографий, единый
+  readiness-контракт и запрет изменений после технического завершения.
+  Mobile сохраняет durable draft и локальные фото в Expo document storage,
+  показывает статусы синхронизации и загружает до двух фото параллельно с
+  восстановлением очереди. Backend сохраняет оригиналы, формирует отдельные
+  watermark WebP и авторизованные PDF-отчёты с кириллицей, QR и SHA-256.
+  Web использует тот же readiness-контракт, показывает причины блокировки и
+  позволяет сформировать и скачать отчёт. Полный `npm run verify:launch`
+  пройден: 46 backend unit-тестов, весь smoke-набор, web build, mobile verify,
+  10 Chromium E2E, launch doctors и dependency audits без уязвимостей.
+- **Проверка целостности PDF**: отчёты формируются через уникальный временный
+  файл и публикуются после вычисления SHA-256; параллельные генерации одного
+  отчёта сериализуются. Metadata и скачивание повторно проверяют hash и размер
+  файла, фиксируют `valid`, `missing` или `mismatch` и блокируют повреждённый
+  PDF кодом `REPORT_INTEGRITY_FAILED`. Web показывает время проверки и не
+  предлагает скачать файл до подтверждения целостности.
+- **P1: согласование осмотра**: технический `completed` дополнен отдельным
+  `approval_status` и транзакционной историей переходов. Инспектор отправляет
+  собственный завершённый акт, manager/owner принимает, отклоняет или требует
+  новую фиксацию; отказ и возврат требуют причину. Завершённый акт остаётся
+  неизменяемым, tenant-переходы защищены RBAC, адресные события попадают в
+  существующие in-app уведомления, а web показывает статус, комментарий и
+  историю решений. PDF включает текущее согласование.
+- **P1: план-график осмотров**: компания задаёт интервалы быстрых и плановых
+  проверок, техника может переопределить каждый интервал. Backend рассчитывает
+  `inspection_actual`, `inspection_due_soon`, `inspection_overdue` и
+  `never_inspected` только по завершённым осмотрам, возвращает единый
+  `inspection_schedule` и фильтрует список по риску. Web показывает график в
+  списке и карточке техники, позволяет редактировать интервалы, а dashboard
+  использует тот же расчёт для напоминаний. Полный `npm run verify:launch`
+  пройден: 49 backend unit-тестов, весь smoke-набор, web/mobile проверки,
+  11 Chromium E2E, launch doctors и audits без уязвимостей.
+- **P1: жизненный цикл дефекта**: добавлены критичность
+  `low|medium|high|critical`, управленческие статусы
+  `open|in_progress|resolved|reopened|closed` и tenant-история переходов.
+  Доказательные поля завершённого осмотра остаются неизменными, а manager и
+  owner меняют lifecycle через отдельный endpoint с обязательным комментарием.
+  Critical-дефект уведомляет owner/manager. Web получил форму ручного дефекта,
+  управление статусом, историю и фильтры журнала. Полный
+  `npm run verify:launch` пройден: 52 backend unit-теста, весь smoke-набор,
+  web/mobile проверки, 11 Chromium E2E и audits без уязвимостей.
 - **Заявки на пилот**: пилотные CTA лендинга переведены с `mailto` на
   адаптивную форму с согласием, honeypot, UTM/source и отдельным IP rate
   limit. В SaaS-панель добавлена очередь `/saas-admin/pilot-requests` со

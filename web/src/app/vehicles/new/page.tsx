@@ -17,6 +17,8 @@ type VehicleFormState = {
   name: string
   status: VehicleStatus
   region: string
+  quickInspectionIntervalDays: string
+  plannedInspectionIntervalDays: string
 }
 
 const initialForm: VehicleFormState = {
@@ -24,6 +26,8 @@ const initialForm: VehicleFormState = {
   name: '',
   status: 'active',
   region: '',
+  quickInspectionIntervalDays: '',
+  plannedInspectionIntervalDays: '',
 }
 
 function getVehicleStatusLabel(status: VehicleStatus) {
@@ -86,6 +90,12 @@ export default function NewVehiclePage() {
         name: formData.name.trim(),
         status: formData.status,
         region: formData.region || undefined,
+        quick_inspection_interval_days: formData.quickInspectionIntervalDays
+          ? Number(formData.quickInspectionIntervalDays)
+          : null,
+        planned_inspection_interval_days: formData.plannedInspectionIntervalDays
+          ? Number(formData.plannedInspectionIntervalDays)
+          : null,
       })
 
       if (result.error) {
@@ -209,6 +219,45 @@ export default function NewVehiclePage() {
                     Регионы редактируются администратором в настройках, здесь доступен только выбор из списка.
                   </span>
                 </label>
+              </div>
+
+              <div>
+                <h2 className="mb-3 font-semibold text-foreground">Индивидуальный график</h2>
+                <div className="grid gap-5 md:grid-cols-2">
+                  <label className="block">
+                    <span className="label">Быстрый осмотр, дней</span>
+                    <input
+                      type="number"
+                      min="1"
+                      max="3650"
+                      value={formData.quickInspectionIntervalDays}
+                      onChange={(event) => setFormData({
+                        ...formData,
+                        quickInspectionIntervalDays: event.target.value,
+                      })}
+                      className="input"
+                      placeholder="По настройке компании"
+                    />
+                  </label>
+                  <label className="block">
+                    <span className="label">Плановый осмотр, дней</span>
+                    <input
+                      type="number"
+                      min="1"
+                      max="3650"
+                      value={formData.plannedInspectionIntervalDays}
+                      onChange={(event) => setFormData({
+                        ...formData,
+                        plannedInspectionIntervalDays: event.target.value,
+                      })}
+                      className="input"
+                      placeholder="По настройке компании"
+                    />
+                  </label>
+                </div>
+                <p className="mt-2 text-xs text-foreground-muted">
+                  Пустые поля наследуют интервалы компании.
+                </p>
               </div>
 
               <div className="flex flex-wrap gap-3 pt-2">

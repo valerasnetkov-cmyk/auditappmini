@@ -3,6 +3,8 @@ export type UserRole = 'inspector' | 'manager' | 'owner' | 'admin'
 export type InspectionType = 'quick' | 'scheduled' | 'accident'
 
 export type InspectionStatus = 'open' | 'closed'
+export type PhotoUploadStatus = 'local_pending' | 'uploading' | 'uploaded' | 'failed'
+export type DraftSyncStatus = 'draft_local' | 'sync_pending' | 'syncing' | 'synced' | 'sync_failed'
 
 export type VehicleStatus = 'active' | 'repair'
 
@@ -87,6 +89,12 @@ export type PhotoRecord = {
   photo_type?: string | null
   is_required?: number | boolean
   geo?: string | null
+  client_photo_id?: string | null
+  upload_status?: string | null
+  captured_at?: string | null
+  captured_lat?: number | null
+  captured_lng?: number | null
+  watermark_url?: string | null
 }
 
 export type UploadPhotoResponse = PhotoRecord
@@ -102,6 +110,8 @@ export type Inspection = {
   completed: boolean
   odometer_value?: number
   odometer_unit?: string
+  odometer_confirmed_at?: string
+  odometer_unavailable_reason?: string
   accident_occurred_at?: string
   accident_location?: string
   checklist_items: ChecklistItem[]
@@ -125,9 +135,12 @@ export type CreateInspectionPayload = {
   type: InspectionType
   odometer_value?: number
   odometer_unit?: string
+  odometer_unavailable_reason?: string
   checklist: ChecklistItem[]
   accident_occurred_at?: string
   accident_location?: string
+  client_inspection_id?: string
+  sync_source?: 'mobile' | 'web'
 }
 
 export type CreateDefectPayload = {
@@ -143,9 +156,25 @@ export type AuthResponse = {
 
 export type ApiError = {
   error: string
+  message?: string
+  missing?: InspectionReadinessMissingItem[]
 }
 
 export type ApiResponse<T> = T | ApiError
+
+export type InspectionReadinessMissingItem = {
+  code: string
+  field: string
+  label: string
+}
+
+export type InspectionReadiness = {
+  inspectionId: string
+  inspectionType: InspectionType
+  completed: boolean
+  ready: boolean
+  missing: InspectionReadinessMissingItem[]
+}
 
 export const QUICK_CHECKLIST = [
   'Внешний вид',

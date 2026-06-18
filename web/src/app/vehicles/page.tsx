@@ -36,8 +36,14 @@ export default function VehiclesPage() {
   const { usage: companyUsage, loading: companyUsageLoading } = useCompanyUsage()
   const list = useVehiclesList()
   const {
-    state: { vehicles, regions, loading, searchQuery, statusFilter, error, sortConfig, visibleVehicles, hasMoreVehicles, totalCount },
-    actions: { setError, setSearchQuery, setStatusFilter, setRegionFilter, handleSort, loadMore, reload },
+    state: {
+      vehicles, regions, loading, searchQuery, statusFilter, inspectionStatusFilter,
+      error, sortConfig, visibleVehicles, hasMoreVehicles, totalCount,
+    },
+    actions: {
+      setError, setSearchQuery, setStatusFilter, setRegionFilter,
+      setInspectionStatusFilter, handleSort, loadMore, reload,
+    },
   } = list
 
   const createRestriction = getCompanyOperationRestriction(companyUsage, 'create')
@@ -113,6 +119,12 @@ export default function VehiclesPage() {
         number: normalizeVehicleNumber(formData.number),
         name: formData.name.trim(),
         region: formData.region || undefined,
+        quick_inspection_interval_days: formData.quickInspectionIntervalDays
+          ? Number(formData.quickInspectionIntervalDays)
+          : null,
+        planned_inspection_interval_days: formData.plannedInspectionIntervalDays
+          ? Number(formData.plannedInspectionIntervalDays)
+          : null,
       })
 
       if (result.error) {
@@ -137,6 +149,8 @@ export default function VehiclesPage() {
       name: vehicle.name,
       status: vehicle.status,
       region: vehicle.region || '',
+      quickInspectionIntervalDays: vehicle.quick_inspection_interval_days?.toString() || '',
+      plannedInspectionIntervalDays: vehicle.planned_inspection_interval_days?.toString() || '',
     })
     setFormError(writeRestrictionMessage)
   }
@@ -162,6 +176,12 @@ export default function VehiclesPage() {
         number: normalizeVehicleNumber(formData.number),
         name: formData.name.trim(),
         region: formData.region || undefined,
+        quick_inspection_interval_days: formData.quickInspectionIntervalDays
+          ? Number(formData.quickInspectionIntervalDays)
+          : null,
+        planned_inspection_interval_days: formData.plannedInspectionIntervalDays
+          ? Number(formData.plannedInspectionIntervalDays)
+          : null,
       })
 
       if (result.error) {
@@ -275,12 +295,14 @@ export default function VehiclesPage() {
           searchQuery={searchQuery}
           statusFilter={statusFilter}
           regionFilter={list.state.regionFilter}
+          inspectionStatusFilter={inspectionStatusFilter}
           regions={regions}
           hiddenColumns={hiddenColumns}
           showColumnMenu={showColumnMenu}
           onSearchChange={setSearchQuery}
           onStatusChange={setStatusFilter}
           onRegionChange={setRegionFilter}
+          onInspectionStatusChange={setInspectionStatusFilter}
           onToggleColumnMenu={() => setShowColumnMenu((value) => !value)}
           onToggleColumn={toggleColumn}
         />

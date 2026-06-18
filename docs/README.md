@@ -24,8 +24,12 @@
   ручные оплаты и billing statuses.
 - [`architecture.md`](./architecture.md) — общая архитектура backend/web/mobile.
 - [`inspection-types.md`](./inspection-types.md) — типы осмотров (быстрый / плановый / ДТП).
+- [`inspection-approval.md`](./inspection-approval.md) — P1 согласование завершённых осмотров и история решений.
+- [`inspection-schedule.md`](./inspection-schedule.md) — P1 план-график быстрых и плановых осмотров.
+- [`defect-lifecycle.md`](./defect-lifecycle.md) — P1 статусы, критичность и история обработки дефектов.
 - [`inspection-photo-requirements.md`](./inspection-photo-requirements.md) — обязательные фото по типам осмотра.
 - [`inspection-photo-pipeline.md`](./inspection-photo-pipeline.md) — WebP-конвейер загрузки и хранения фото.
+- [`reliable-evidence-inspection.md`](./reliable-evidence-inspection.md) — P0 readiness, offline draft, watermark и PDF-отчёт.
 - [`accident-inspection.md`](./accident-inspection.md) — осмотр ДТП: обязательные место и время.
 - [`planned-inspection-systems.md`](./planned-inspection-systems.md) — технические блоки планового осмотра.
 - [`odometer-recognition.md`](./odometer-recognition.md) — фото одометра и фиксация километража.

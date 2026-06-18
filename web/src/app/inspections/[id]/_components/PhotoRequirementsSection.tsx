@@ -25,6 +25,9 @@ export default function PhotoRequirementsSection({
 }) {
   const required = requirements.requirements.required
   const completedCount = required.filter((photoType) => (inspectionPhotos[photoType] || []).length > 0).length
+  const displayed = requirements.type === 'accident' && requirements.requirements.optional.includes('odometer')
+    ? [...required, 'odometer']
+    : required
 
   return (
     <div className="mb-6 rounded-xl border border-slate-200 bg-slate-50 p-4">
@@ -41,7 +44,7 @@ export default function PhotoRequirementsSection({
         </div>
       </div>
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-        {required.map((photoType) => {
+        {displayed.map((photoType) => {
           const photos = inspectionPhotos[photoType] || []
           const label = requirements.labels[photoType] || photoType
 
@@ -50,7 +53,7 @@ export default function PhotoRequirementsSection({
               <div className="mb-2 flex items-center justify-between gap-2">
                 <span className="text-sm font-medium text-slate-800">{label}</span>
                 <Badge tone={photos.length ? 'success' : 'warning'}>
-                  {photos.length ? 'Добавлено' : 'Требуется'}
+                  {photos.length ? 'Добавлено' : required.includes(photoType) ? 'Требуется' : 'Необязательно'}
                 </Badge>
               </div>
 

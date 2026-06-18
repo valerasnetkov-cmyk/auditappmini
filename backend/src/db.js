@@ -503,6 +503,8 @@ function seedDefaultPlans() {
 
 function applySchemaMigrations() {
   ensureColumn('companies', 'access_mode', "TEXT NOT NULL DEFAULT 'standard'")
+  ensureColumn('companies', 'default_quick_inspection_interval_days', 'INTEGER NOT NULL DEFAULT 7')
+  ensureColumn('companies', 'default_planned_inspection_interval_days', 'INTEGER NOT NULL DEFAULT 30')
   ensureColumn('users', 'company_id', "TEXT DEFAULT 'default'")
   ensureColumn('users', 'status', "TEXT NOT NULL DEFAULT 'active'")
   ensureColumn('users', 'mfa_enabled', 'INTEGER NOT NULL DEFAULT 0')
@@ -520,6 +522,8 @@ function applySchemaMigrations() {
   ensureColumn('vehicles', 'company_id', "TEXT DEFAULT 'default'")
   ensureColumn('vehicles', 'region', 'TEXT')
   ensureColumn('vehicles', 'last_scheduled_inspection', 'TEXT')
+  ensureColumn('vehicles', 'quick_inspection_interval_days', 'INTEGER')
+  ensureColumn('vehicles', 'planned_inspection_interval_days', 'INTEGER')
   ensureColumn('vehicles', 'created_at', 'TEXT')
   dropVehicleQrCodeColumn()
   ensureVehicleStatusSupportsArchived()
@@ -531,14 +535,56 @@ function applySchemaMigrations() {
   ensureColumn('inspections', 'odometer_value', 'INTEGER')
   ensureColumn('inspections', 'odometer_unit', "TEXT DEFAULT 'km'")
   ensureColumn('inspections', 'odometer_recognized_at', 'TEXT')
+  ensureColumn('inspections', 'client_inspection_id', 'TEXT')
+  ensureColumn('inspections', 'sync_source', "TEXT NOT NULL DEFAULT 'web'")
+  ensureColumn('inspections', 'completed_at', 'TEXT')
+  ensureColumn('inspections', 'odometer_confirmed_at', 'TEXT')
+  ensureColumn('inspections', 'odometer_unavailable_reason', 'TEXT')
+  ensureColumn('inspections', 'approval_status', "TEXT NOT NULL DEFAULT 'draft'")
+  ensureColumn('inspections', 'submitted_at', 'TEXT')
+  ensureColumn('inspections', 'submitted_by', 'TEXT')
+  ensureColumn('inspections', 'reviewed_at', 'TEXT')
+  ensureColumn('inspections', 'reviewed_by', 'TEXT')
+  ensureColumn('inspections', 'approval_comment', 'TEXT')
   ensureColumn('inspections', 'created_at', 'TEXT')
+
+  db.run(`
+    CREATE TABLE IF NOT EXISTS inspection_approval_history (
+      id TEXT PRIMARY KEY,
+      company_id TEXT NOT NULL,
+      inspection_id TEXT NOT NULL,
+      from_status TEXT,
+      to_status TEXT NOT NULL,
+      comment TEXT,
+      created_by TEXT NOT NULL,
+      created_at TEXT DEFAULT (datetime('now'))
+    )
+  `)
+  db.run('CREATE INDEX IF NOT EXISTS idx_inspection_approval_history_inspection ON inspection_approval_history(company_id, inspection_id, created_at)')
 
   ensureColumn('defects', 'company_id', "TEXT DEFAULT 'default'")
   ensureColumn('defects', 'checklist_item_id', 'TEXT')
   ensureColumn('defects', 'comment', 'TEXT')
   ensureColumn('defects', 'status', "TEXT NOT NULL DEFAULT 'open'")
+  ensureColumn('defects', 'severity', "TEXT NOT NULL DEFAULT 'medium'")
+  ensureColumn('defects', 'resolved_at', 'TEXT')
   ensureColumn('defects', 'created_at', 'TEXT')
   ensureColumn('defects', 'closed_at', 'TEXT')
+  ensureColumn('defects', 'closed_by', 'TEXT')
+  ensureColumn('defects', 'manager_comment', 'TEXT')
+  db.run(`
+    CREATE TABLE IF NOT EXISTS defect_status_history (
+      id TEXT PRIMARY KEY,
+      company_id TEXT NOT NULL,
+      defect_id TEXT NOT NULL,
+      from_status TEXT,
+      to_status TEXT NOT NULL,
+      comment TEXT,
+      created_by TEXT NOT NULL,
+      created_at TEXT DEFAULT (datetime('now'))
+    )
+  `)
+  db.run('CREATE INDEX IF NOT EXISTS idx_defect_status_history_defect ON defect_status_history(company_id, defect_id, created_at)')
 
   ensureColumn('photos', 'defect_id', 'TEXT')
   ensureColumn('photos', 'company_id', "TEXT DEFAULT 'default'")
@@ -556,7 +602,43 @@ function applySchemaMigrations() {
   ensureColumn('photos', 'size_webp', 'INTEGER')
   ensureColumn('photos', 'size_thumb', 'INTEGER')
   ensureColumn('photos', 'hash', 'TEXT')
+  ensureColumn('photos', 'client_photo_id', 'TEXT')
+  ensureColumn('photos', 'upload_status', "TEXT NOT NULL DEFAULT 'uploaded'")
+  ensureColumn('photos', 'captured_at', 'TEXT')
+  ensureColumn('photos', 'captured_lat', 'REAL')
+  ensureColumn('photos', 'captured_lng', 'REAL')
+  ensureColumn('photos', 'watermark_url', 'TEXT')
+  ensureColumn('photos', 'watermark_generated_at', 'TEXT')
   ensureColumn('photos', 'created_at', 'TEXT')
+
+  db.run(`
+    CREATE TABLE IF NOT EXISTS inspection_reports (
+      id TEXT PRIMARY KEY,
+      company_id TEXT NOT NULL,
+      inspection_id TEXT NOT NULL,
+      pdf_url TEXT,
+      sha256 TEXT,
+      file_size INTEGER,
+      status TEXT NOT NULL DEFAULT 'pending',
+      integrity_status TEXT NOT NULL DEFAULT 'unverified',
+      verified_at TEXT,
+      generated_at TEXT,
+      created_at TEXT DEFAULT (datetime('now')),
+      updated_at TEXT DEFAULT (datetime('now')),
+      UNIQUE (company_id, inspection_id)
+    )
+  `)
+  ensureColumn('inspection_reports', 'company_id', 'TEXT')
+  ensureColumn('inspection_reports', 'inspection_id', 'TEXT')
+  ensureColumn('inspection_reports', 'pdf_url', 'TEXT')
+  ensureColumn('inspection_reports', 'sha256', 'TEXT')
+  ensureColumn('inspection_reports', 'file_size', 'INTEGER')
+  ensureColumn('inspection_reports', 'status', "TEXT NOT NULL DEFAULT 'pending'")
+  ensureColumn('inspection_reports', 'integrity_status', "TEXT NOT NULL DEFAULT 'unverified'")
+  ensureColumn('inspection_reports', 'verified_at', 'TEXT')
+  ensureColumn('inspection_reports', 'generated_at', 'TEXT')
+  ensureColumn('inspection_reports', 'created_at', 'TEXT')
+  ensureColumn('inspection_reports', 'updated_at', 'TEXT')
 
   db.run(`
     CREATE TABLE IF NOT EXISTS company_limits (
@@ -937,10 +1019,28 @@ function applySchemaMigrations() {
   db.run('UPDATE photos SET original_url = url WHERE original_url IS NULL AND url IS NOT NULL')
   db.run('UPDATE photos SET webp_url = url WHERE webp_url IS NULL AND url IS NOT NULL')
   db.run('UPDATE photos SET thumb_url = url WHERE thumb_url IS NULL AND url IS NOT NULL')
+  db.run("UPDATE photos SET upload_status = 'uploaded' WHERE upload_status IS NULL OR upload_status = ''")
+  db.run('UPDATE photos SET captured_at = created_at WHERE captured_at IS NULL')
+  db.run(`
+    UPDATE inspections
+    SET odometer_confirmed_at = COALESCE(odometer_recognized_at, created_at)
+    WHERE odometer_value IS NOT NULL AND odometer_confirmed_at IS NULL
+  `)
   db.run('CREATE INDEX IF NOT EXISTS idx_vehicles_company_status_created ON vehicles(company_id, status, created_at DESC)')
   db.run('CREATE INDEX IF NOT EXISTS idx_vehicles_company_number ON vehicles(company_id, number)')
   db.run('CREATE INDEX IF NOT EXISTS idx_inspections_company_vehicle_created ON inspections(company_id, vehicle_id, created_at DESC, id DESC)')
   db.run('CREATE INDEX IF NOT EXISTS idx_defects_inspection ON defects(inspection_id)')
+  db.run(`
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_inspections_company_client_id
+    ON inspections(company_id, client_inspection_id)
+    WHERE client_inspection_id IS NOT NULL
+  `)
+  db.run(`
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_photos_company_inspection_client_id
+    ON photos(company_id, inspection_id, client_photo_id)
+    WHERE client_photo_id IS NOT NULL
+  `)
+  db.run('CREATE INDEX IF NOT EXISTS idx_reports_company_inspection ON inspection_reports(company_id, inspection_id)')
   seedDefaultPlans()
 }
 
@@ -1021,6 +1121,8 @@ export async function initDatabase() {
   ensureColumn('companies', 'billing_contact_name', 'TEXT')
   ensureColumn('companies', 'billing_contact_phone', 'TEXT')
   ensureColumn('companies', 'accounting_comment', 'TEXT')
+  ensureColumn('companies', 'default_quick_inspection_interval_days', 'INTEGER NOT NULL DEFAULT 7')
+  ensureColumn('companies', 'default_planned_inspection_interval_days', 'INTEGER NOT NULL DEFAULT 30')
 
   db.run(`
     CREATE TABLE IF NOT EXISTS company_limits (
@@ -1061,6 +1163,8 @@ export async function initDatabase() {
       company_id TEXT DEFAULT 'default',
       region TEXT,
       last_scheduled_inspection TEXT,
+      quick_inspection_interval_days INTEGER,
+      planned_inspection_interval_days INTEGER,
       created_at TEXT DEFAULT (datetime('now'))
     )
   `)
@@ -1106,13 +1210,21 @@ export async function initDatabase() {
       title TEXT NOT NULL,
       comment TEXT,
       status TEXT NOT NULL DEFAULT 'open',
+      severity TEXT NOT NULL DEFAULT 'medium',
+      resolved_at TEXT,
       created_at TEXT DEFAULT (datetime('now')),
-      closed_at TEXT
+      closed_at TEXT,
+      closed_by TEXT,
+      manager_comment TEXT
     )
   `)
   // Migrate if needed: ensure columns exist in existing DB
   try { db.run(`ALTER TABLE defects ADD COLUMN status TEXT NOT NULL DEFAULT 'open'`) } catch {}
   try { db.run(`ALTER TABLE defects ADD COLUMN closed_at TEXT`) } catch {}
+  try { db.run(`ALTER TABLE defects ADD COLUMN severity TEXT NOT NULL DEFAULT 'medium'`) } catch {}
+  try { db.run(`ALTER TABLE defects ADD COLUMN resolved_at TEXT`) } catch {}
+  try { db.run(`ALTER TABLE defects ADD COLUMN closed_by TEXT`) } catch {}
+  try { db.run(`ALTER TABLE defects ADD COLUMN manager_comment TEXT`) } catch {}
   // defect_history table for status changes
   try {
     db.run(`CREATE TABLE IF NOT EXISTS defect_history (
@@ -1287,6 +1399,7 @@ export function getDb() {
     exec: (sql) => {
       db.exec(sql)
     },
+    transaction: (fn) => db.raw.transaction(fn),
   }
 }
 

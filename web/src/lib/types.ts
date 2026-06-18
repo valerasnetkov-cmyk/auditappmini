@@ -8,6 +8,8 @@ export type ApiPagination = {
 export type ApiResponse<T> = {
   data?: T
   error?: string
+  code?: string
+  missing?: InspectionReadinessMissingItem[]
   pagination?: ApiPagination
 }
 
@@ -256,6 +258,25 @@ export type MFAVerifyResponse = {
 }
 
 export type VehicleStatus = 'active' | 'repair' | 'archived' | string
+export type InspectionScheduleStatus =
+  | 'inspection_actual'
+  | 'inspection_due_soon'
+  | 'inspection_overdue'
+  | 'never_inspected'
+
+export type InspectionScheduleItem = {
+  status: InspectionScheduleStatus
+  interval_days: number
+  last_inspection_at?: string | null
+  next_due?: string | null
+  days_until?: number | null
+}
+
+export type VehicleInspectionSchedule = {
+  status: InspectionScheduleStatus
+  quick: InspectionScheduleItem
+  planned: InspectionScheduleItem
+}
 
 export type VehicleListItem = {
   id: string
@@ -267,6 +288,9 @@ export type VehicleListItem = {
 
 export type VehicleRecord = VehicleListItem & {
   created_at?: string
+  quick_inspection_interval_days?: number | null
+  planned_inspection_interval_days?: number | null
+  inspection_schedule?: VehicleInspectionSchedule
   defectsCount?: number
   lastInspection?: {
     id: string
@@ -276,6 +300,9 @@ export type VehicleRecord = VehicleListItem & {
 
 export type VehicleDetail = VehicleListItem & {
   last_scheduled_inspection?: string | null
+  quick_inspection_interval_days?: number | null
+  planned_inspection_interval_days?: number | null
+  inspection_schedule?: VehicleInspectionSchedule
 }
 
 export type VehicleHistoryEntry = {
@@ -293,6 +320,8 @@ export type CreateVehiclePayload = {
   name: string
   status?: VehicleStatus
   region?: string
+  quick_inspection_interval_days?: number | null
+  planned_inspection_interval_days?: number | null
 }
 
 export type UpdateVehiclePayload = {
@@ -301,9 +330,18 @@ export type UpdateVehiclePayload = {
   status: VehicleStatus
   region?: string
   reason?: string
+  quick_inspection_interval_days?: number | null
+  planned_inspection_interval_days?: number | null
 }
 
 export type InspectionType = 'quick' | 'scheduled' | 'accident' | string
+export type InspectionApprovalStatus =
+  | 'draft'
+  | 'submitted'
+  | 'approved'
+  | 'rejected'
+  | 'revision_required'
+  | string
 
 export type ChecklistItemInput = {
   id?: string
@@ -342,6 +380,13 @@ export type PhotoRecord = {
   photo_type?: string | null
   is_required?: number | boolean
   geo?: string | null
+  client_photo_id?: string | null
+  upload_status?: string | null
+  captured_at?: string | null
+  captured_lat?: number | null
+  captured_lng?: number | null
+  watermark_url?: string | null
+  watermark_generated_at?: string | null
 }
 
 export type PhotoRequirementsResponse = {
@@ -370,7 +415,11 @@ export type DefectRecord = {
   comment?: string | null
   created_at: string
   status?: string
+  severity?: 'low' | 'medium' | 'high' | 'critical' | string
+  resolved_at?: string | null
   closed_at?: string
+  closed_by?: string | null
+  manager_comment?: string | null
   photos: PhotoRecord[]
 }
 
@@ -378,8 +427,12 @@ export type DefectHistoryEntry = {
   id: string
   defect_id: string
   status: string
+  from_status?: string | null
+  to_status?: string
+  comment?: string | null
   changed_at: string
   changed_by?: string | null
+  changed_by_name?: string | null
 }
 
 export type VehicleDefectHistoryItem = DefectRecord & {
@@ -437,6 +490,10 @@ export type InspectionDetail = {
   accident_location?: string | null
   odometer_value?: number | null
   odometer_unit?: string | null
+  odometer_confirmed_at?: string | null
+  odometer_unavailable_reason?: string | null
+  completed_at?: string | null
+  approval_status?: InspectionApprovalStatus
   checklist_items: ChecklistItemResponse[]
   defects: DefectRecord[]
   photos?: PhotoRecord[]
@@ -456,6 +513,61 @@ export type UpdateInspectionPayload = {
   accident_location?: string
   odometer_value?: number
   odometer_unit?: string
+  odometer_unavailable_reason?: string
+}
+
+export type InspectionApprovalHistoryEntry = {
+  id: string
+  company_id: string
+  inspection_id: string
+  from_status?: InspectionApprovalStatus | null
+  to_status: InspectionApprovalStatus
+  comment?: string | null
+  created_by: string
+  created_by_name?: string | null
+  created_by_role?: string | null
+  created_at: string
+}
+
+export type InspectionApproval = {
+  status: InspectionApprovalStatus
+  submitted_at?: string | null
+  submitted_by?: string | null
+  reviewed_at?: string | null
+  reviewed_by?: string | null
+  comment?: string | null
+  history: InspectionApprovalHistoryEntry[]
+}
+
+export type InspectionReadinessMissingItem = {
+  code: string
+  field: string
+  label: string
+}
+
+export type InspectionReadiness = {
+  inspectionId: string
+  inspectionType: InspectionType
+  completed: boolean
+  ready: boolean
+  missing: InspectionReadinessMissingItem[]
+}
+
+export type InspectionReport = {
+  id: string
+  company_id: string
+  inspection_id: string
+  pdf_url?: string | null
+  sha256?: string | null
+  file_size?: number | null
+  status: 'pending' | 'generating' | 'ready' | 'failed' | 'corrupted' | string
+  integrity_status?: 'unverified' | 'valid' | 'missing' | 'mismatch' | string
+  verified_at?: string | null
+  actual_sha256?: string | null
+  actual_file_size?: number | null
+  generated_at?: string | null
+  created_at?: string | null
+  updated_at?: string | null
 }
 
 export type InspectionCreateResponse = {
@@ -479,7 +591,9 @@ export type NotificationItem = {
   vehicle_number: string
   vehicle_name: string
   is_overdue: boolean
-  days_until: number
+  days_until: number | null
+  inspection_type?: 'quick' | 'planned'
+  schedule_status?: InspectionScheduleStatus
   next_due?: string | null
   last_inspection?: string | null
 }
@@ -488,6 +602,8 @@ export type SettingsResponse = {
   scheduled_inspection_days?: number
   notification_days_before?: number
   timezone_offset?: number
+  default_quick_inspection_interval_days?: number
+  default_planned_inspection_interval_days?: number
 }
 
 export type CompanyResourceUsage = {

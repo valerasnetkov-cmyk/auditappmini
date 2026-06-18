@@ -1,9 +1,25 @@
 import { v4 as uuidv4 } from 'uuid'
+import { sendInspectionCompletedError } from '../services/inspectionReadiness.js'
 
 function getAllowedPhotoTypes(photoRequirements, inspectionType) {
   const requirements = photoRequirements[inspectionType]
   if (!requirements) return new Set()
   return new Set([...(requirements.required || []), ...(requirements.optional || [])])
+}
+
+function nullableCoordinate(value) {
+  if (value === undefined || value === null || value === '') return null
+  const number = Number(value)
+  return Number.isFinite(number) ? number : null
+}
+
+function getExistingClientPhoto(db, companyId, inspectionId, clientPhotoId) {
+  if (!clientPhotoId) return null
+  return db.prepare(`
+    SELECT *
+    FROM photos
+    WHERE company_id = ? AND inspection_id = ? AND client_photo_id = ?
+  `).get(companyId, inspectionId, clientPhotoId)
 }
 
 export default function registerPhotoRoutes({
@@ -26,14 +42,25 @@ export default function registerPhotoRoutes({
   }, uploadPhoto, async (req, res) => {
     const inspectionId = req.params.id
     const companyId = req.user.company_id || 'default'
-    const inspection = db.prepare('SELECT id, type FROM inspections WHERE id = ? AND company_id = ?').get(inspectionId, companyId)
+    const inspection = db.prepare('SELECT id, type, completed FROM inspections WHERE id = ? AND company_id = ?').get(inspectionId, companyId)
     if (!inspection) {
       await removeFileIfExists(req.file?.path)
       return sendError(res, 404, API_MESSAGES.inspectionNotFound)
     }
+    if (inspection.completed) {
+      await removeFileIfExists(req.file?.path)
+      return sendInspectionCompletedError(res)
+    }
 
     if (!req.file) {
       return sendError(res, 400, 'Photo is required')
+    }
+
+    const clientPhotoId = String(req.body.client_photo_id || req.body.clientPhotoId || '').trim() || null
+    const existingPhoto = getExistingClientPhoto(db, companyId, inspectionId, clientPhotoId)
+    if (existingPhoto) {
+      await removeFileIfExists(req.file.path)
+      return res.json(existingPhoto)
     }
 
     const photoType = String(req.body.photo_type || req.body.photoType || '').trim()
@@ -44,6 +71,9 @@ export default function registerPhotoRoutes({
 
     const id = uuidv4()
     const geo = req.body.geo || null
+    const capturedAt = String(req.body.captured_at || req.body.capturedAt || '').trim() || new Date().toISOString()
+    const capturedLat = nullableCoordinate(req.body.captured_lat ?? req.body.capturedLat)
+    const capturedLng = nullableCoordinate(req.body.captured_lng ?? req.body.capturedLng)
     const isRequired = (photoRequirements[inspection.type]?.required || []).includes(photoType) ? 1 : 0
 
     try {
@@ -60,9 +90,10 @@ export default function registerPhotoRoutes({
           id, inspection_id, defect_id, company_id, photo_type, url,
           original_url, webp_url, thumb_url, original_mime, original_name,
           width, height, size_original, size_webp, size_thumb, hash,
-          geo, is_required
+          geo, is_required, client_photo_id, upload_status, captured_at,
+          captured_lat, captured_lng
         )
-        VALUES (?, ?, NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        VALUES (?, ?, NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'uploaded', ?, ?, ?)
       `).run(
         id,
         inspectionId,
@@ -82,6 +113,10 @@ export default function registerPhotoRoutes({
         processed.hash,
         geo,
         isRequired,
+        clientPhotoId,
+        capturedAt,
+        capturedLat,
+        capturedLng,
       )
     } catch (err) {
       await removeFileIfExists(req.file?.path)
@@ -104,14 +139,32 @@ export default function registerPhotoRoutes({
   }, uploadPhoto, async (req, res) => {
     const { geo } = req.body
     const companyId = req.user.company_id || 'default'
-    const defect = db.prepare('SELECT id, inspection_id FROM defects WHERE id = ? AND company_id = ?').get(req.params.id, companyId)
+    const defect = db.prepare(`
+      SELECT d.id, d.inspection_id, i.completed
+      FROM defects d
+      JOIN inspections i ON i.id = d.inspection_id
+      WHERE d.id = ? AND d.company_id = ?
+    `).get(req.params.id, companyId)
     if (!defect) {
       await removeFileIfExists(req.file?.path)
       return sendError(res, 404, API_MESSAGES.defectNotFound)
     }
+    if (defect.completed) {
+      await removeFileIfExists(req.file?.path)
+      return sendInspectionCompletedError(res)
+    }
     if (!req.file) return sendError(res, 400, 'Photo is required')
 
+    const clientPhotoId = String(req.body.client_photo_id || req.body.clientPhotoId || '').trim() || null
+    const existingPhoto = getExistingClientPhoto(db, companyId, defect.inspection_id, clientPhotoId)
+    if (existingPhoto) {
+      await removeFileIfExists(req.file.path)
+      return res.json(existingPhoto)
+    }
     const id = uuidv4()
+    const capturedAt = String(req.body.captured_at || req.body.capturedAt || '').trim() || new Date().toISOString()
+    const capturedLat = nullableCoordinate(req.body.captured_lat ?? req.body.capturedLat)
+    const capturedLng = nullableCoordinate(req.body.captured_lng ?? req.body.capturedLng)
 
     try {
       const processed = await processUploadedPhoto({
@@ -127,9 +180,10 @@ export default function registerPhotoRoutes({
           id, inspection_id, defect_id, company_id, photo_type, url,
           original_url, webp_url, thumb_url, original_mime, original_name,
           width, height, size_original, size_webp, size_thumb, hash,
-          geo, is_required
+          geo, is_required, client_photo_id, upload_status, captured_at,
+          captured_lat, captured_lng
         )
-        VALUES (?, ?, ?, ?, NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)
+        VALUES (?, ?, ?, ?, NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, 'uploaded', ?, ?, ?)
       `).run(
         id,
         defect.inspection_id,
@@ -148,6 +202,10 @@ export default function registerPhotoRoutes({
         processed.size_thumb,
         processed.hash,
         geo || null,
+        clientPhotoId,
+        capturedAt,
+        capturedLat,
+        capturedLng,
       )
     } catch (err) {
       await removeFileIfExists(req.file?.path)
@@ -173,6 +231,12 @@ export default function registerPhotoRoutes({
     if (!photo) {
       return sendError(res, 404, 'Photo not found')
     }
+    const inspection = db.prepare(`
+      SELECT completed
+      FROM inspections
+      WHERE id = ? AND company_id = ?
+    `).get(photo.inspection_id, companyId)
+    if (inspection?.completed) return sendInspectionCompletedError(res)
 
     db.prepare('DELETE FROM photos WHERE id = ?').run(id)
     await removePhotoFiles(photo)

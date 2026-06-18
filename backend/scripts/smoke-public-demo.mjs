@@ -15,7 +15,7 @@ function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms))
 }
 
-async function waitForServer(timeoutMs = 30000) {
+async function waitForServer(timeoutMs = 60000) {
   const startedAt = Date.now()
   while (Date.now() - startedAt < timeoutMs) {
     try {

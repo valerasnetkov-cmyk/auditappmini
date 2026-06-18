@@ -30,6 +30,7 @@ export function InspectionFlowScreen({ company }: { company: Company }) {
       photoRequirements,
       inspectionPhotos,
       odometer,
+      odometerUnavailableReason,
       checklist,
       completedInspection,
       loading,
@@ -64,11 +65,7 @@ export function InspectionFlowScreen({ company }: { company: Company }) {
     if (target.kind === 'inspection') {
       if (!inspectionId) return
       try {
-        const uploaded = await api.uploadPhoto(inspectionId, target.photoType, photo.uri)
-        actions.setInspectionPhoto(target.photoType, {
-          localUri: photo.uri,
-          serverUrl: uploaded.thumb_url || uploaded.webp_url || uploaded.url,
-        })
+        await actions.enqueueInspectionPhoto(target.photoType, photo.uri, accident.currentLocation)
       } catch (error: unknown) {
         const err = error as { message?: string }
         Alert.alert('Ошибка', err.message || 'Не удалось загрузить фото осмотра')
@@ -77,7 +74,7 @@ export function InspectionFlowScreen({ company }: { company: Company }) {
     }
 
     if (target.kind === 'defect') {
-      actions.setDefectPhoto(target.title, photo.uri)
+      await actions.setDefectPhoto(target.title, photo.uri)
     }
   }
 
@@ -147,7 +144,9 @@ export function InspectionFlowScreen({ company }: { company: Company }) {
           inspectionPhotos={inspectionPhotos}
           loading={loading}
           onOpenCamera={(photoType) => camera.openCamera({ kind: 'inspection', photoType })}
-          onContinue={() => actions.setStep(inspectionType === 'accident' ? 'checklist' : 'odometer')}
+          onRetry={actions.retryInspectionPhoto}
+          onRetryAll={actions.retryFailedUploads}
+          onContinue={() => actions.setStep('odometer')}
         />
       )}
 
@@ -155,7 +154,10 @@ export function InspectionFlowScreen({ company }: { company: Company }) {
         <OdometerStep
           odometer={odometer}
           distanceUnit={company.distance_unit || 'км'}
+          unavailableReason={odometerUnavailableReason}
+          allowUnavailable={inspectionType === 'accident'}
           onChange={actions.setOdometer}
+          onChangeUnavailableReason={actions.setOdometerUnavailableReason}
           onContinue={() => actions.setStep('checklist')}
         />
       )}
@@ -168,6 +170,7 @@ export function InspectionFlowScreen({ company }: { company: Company }) {
           onSetResult={actions.setChecklistResult}
           onSetComment={actions.setChecklistComment}
           onOpenDefectCamera={(title) => camera.openCamera({ kind: 'defect', title })}
+          onRetryDefectPhoto={actions.retryDefectPhoto}
           onFinish={() => actions.finishInspection(company.distance_unit)}
         />
       )}

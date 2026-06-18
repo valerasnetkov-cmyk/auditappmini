@@ -84,6 +84,36 @@ export function VehicleForm({
             {mode === 'edit' ? <option value="archived">Архив</option> : null}
           </select>
         </div>
+
+        <div className="grid gap-4 md:grid-cols-2">
+          <div>
+            <label className="label">Быстрый осмотр, дней</label>
+            <input
+              type="number"
+              min="1"
+              max="3650"
+              placeholder="По настройке компании"
+              value={formData.quickInspectionIntervalDays}
+              onChange={(event) => onChange({ ...formData, quickInspectionIntervalDays: event.target.value })}
+              className="input"
+            />
+          </div>
+          <div>
+            <label className="label">Плановый осмотр, дней</label>
+            <input
+              type="number"
+              min="1"
+              max="3650"
+              placeholder="По настройке компании"
+              value={formData.plannedInspectionIntervalDays}
+              onChange={(event) => onChange({ ...formData, plannedInspectionIntervalDays: event.target.value })}
+              className="input"
+            />
+          </div>
+        </div>
+        <p className="text-xs text-foreground-muted">
+          Оставьте поля пустыми, чтобы использовать интервалы компании.
+        </p>
       </div>
 
       <div className="mt-6 flex justify-end gap-3">

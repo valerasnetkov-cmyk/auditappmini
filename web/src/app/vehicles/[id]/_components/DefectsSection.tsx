@@ -64,6 +64,13 @@ function DefectCard({
   onCloseDefect, onReopenDefect, onToggleHistory,
 }: DefectCardProps) {
   const isClosed = defect.status === 'closed'
+  const statusLabel = {
+    open: 'Открыт',
+    in_progress: 'В работе',
+    resolved: 'Устранён',
+    reopened: 'Открыт повторно',
+    closed: 'Закрыт',
+  }[defect.status || 'open'] || defect.status
 
   return (
     <div
@@ -80,9 +87,12 @@ function DefectCard({
           </div>
           <span
             data-testid={`defect-status-${defect.id}`}
-            className={isClosed ? 'badge badge-success' : 'badge badge-warning'}
+            className={isClosed ? 'badge badge-success' : defect.status === 'reopened' ? 'badge badge-danger' : 'badge badge-warning'}
           >
-            {isClosed ? 'Закрыт' : 'Открыт'}
+            {statusLabel}
+          </span>
+          <span className={defect.severity === 'critical' ? 'badge badge-danger' : defect.severity === 'high' ? 'badge badge-warning' : 'badge badge-info'}>
+            {defect.severity === 'critical' ? 'Критический' : defect.severity === 'high' ? 'Высокий' : defect.severity === 'low' ? 'Низкий' : 'Средний'}
           </span>
         </div>
         <span
@@ -152,7 +162,8 @@ function DefectCard({
           >
             {history.length === 0 ? 'История пустая' : history.map((item) => (
               <div key={item.id}>
-                {item.changed_at} - {item.status}{' '}
+                {item.changed_at} - {item.status}
+                {item.comment ? `: ${item.comment}` : ''}{' '}
                 {item.changed_by_name ? `(${item.changed_by_name})` : item.changed_by ? `(${item.changed_by})` : ''}
               </div>
             ))}

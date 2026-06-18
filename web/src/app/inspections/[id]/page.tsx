@@ -1,13 +1,15 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { useParams } from 'next/navigation'
 import Layout from '@/components/Layout'
 import api from '@/lib/api/client'
 import { getCompanyOperationRestriction } from '@/lib/companyAccess'
 import { useCompanyUsage } from '@/lib/useCompanyUsage'
-import type { InspectionType } from '@/lib/types'
+import type { InspectionReport, InspectionType } from '@/lib/types'
+import type { AuthUser, InspectionApproval } from '@/lib/types'
+import { isManagerRole } from '@/lib/auth'
 
 import { useStatus } from './_hooks/useStatus'
 import { useInspection } from './_hooks/useInspection'
@@ -15,7 +17,6 @@ import { useChecklist } from './_hooks/useChecklist'
 import { useAccidentFields } from './_hooks/useAccidentFields'
 import { useOdometer } from './_hooks/useOdometer'
 import { usePhotoUpload } from './_hooks/usePhotoUpload'
-import { printIncidentCard } from './_lib/printIncidentCard'
 
 import NewInspectionForm from './_components/NewInspectionForm'
 import InspectionDetailBody from './_components/InspectionDetailBody'
@@ -33,12 +34,19 @@ export default function InspectionDetailPage() {
       : ''
 
   const { statusMessage, statusTone, show: showStatus, clear: clearStatus } = useStatus()
-  const { inspection, loading, error, isNewInspection, photoRequirements, reload } =
+  const { inspection, loading, error, isNewInspection, photoRequirements, readiness, reload } =
     useInspection(inspectionId)
   const { checklist, setResult, setComment } = useChecklist(inspection)
   const { accidentOccurredAt, setAccidentOccurredAt, accidentLocation, setAccidentLocation } =
     useAccidentFields(inspection)
-  const { odometerValue, setOdometerValue, odometerUnit, setOdometerUnit } = useOdometer(inspection)
+  const {
+    odometerValue,
+    setOdometerValue,
+    odometerUnit,
+    setOdometerUnit,
+    odometerUnavailableReason,
+    setOdometerUnavailableReason,
+  } = useOdometer(inspection)
   const {
     defectPhotos,
     inspectionPhotos,
@@ -51,6 +59,28 @@ export default function InspectionDetailPage() {
   } = usePhotoUpload(inspection)
 
   const [saving, setSaving] = useState(false)
+  const [report, setReport] = useState<InspectionReport | null>(null)
+  const [reportLoading, setReportLoading] = useState(false)
+  const [approval, setApproval] = useState<InspectionApproval | null>(null)
+  const [approvalLoading, setApprovalLoading] = useState(false)
+  const [currentUser, setCurrentUser] = useState<AuthUser | null>(null)
+
+  useEffect(() => {
+    void api.getMe().then((result) => {
+      if (result.data) setCurrentUser(result.data)
+    })
+  }, [])
+
+  useEffect(() => {
+    if (!inspection?.completed) return
+    void Promise.all([
+      api.getInspectionReport(inspection.id),
+      api.getInspectionApproval(inspection.id),
+    ]).then(([reportResult, approvalResult]) => {
+      if (reportResult.data) setReport(reportResult.data)
+      if (approvalResult.data) setApproval(approvalResult.data)
+    })
+  }, [inspection?.completed, inspection?.id])
 
   const guardWrite = (): boolean => {
     if (companyUsageLoading) {
@@ -131,8 +161,12 @@ export default function InspectionDetailPage() {
             ? parseInt(odometerValue, 10)
             : undefined,
         odometer_unit:
-          (inspection.type === 'quick' || inspection.type === 'scheduled') && odometerUnit
+          odometerValue && odometerUnit
             ? odometerUnit
+            : undefined,
+        odometer_unavailable_reason:
+          inspection.type === 'accident' && !odometerValue
+            ? odometerUnavailableReason.trim()
             : undefined,
       })
       if (result.error) {
@@ -156,7 +190,10 @@ export default function InspectionDetailPage() {
     try {
       const result = await api.completeInspection(inspection.id)
       if (result.error) {
-        showStatus('error', result.error)
+        const details = result.missing?.length
+          ? `: ${result.missing.map((item) => item.label).join(', ')}`
+          : ''
+        showStatus('error', `${result.error}${details}`)
         return
       }
       await reload()
@@ -165,6 +202,102 @@ export default function InspectionDetailPage() {
       showStatus('error', 'Ошибка завершения осмотра')
     } finally {
       setSaving(false)
+    }
+  }
+
+  const handleCreateDefect = async (data: {
+    title: string
+    comment: string
+    severity: string
+  }) => {
+    if (!inspection || !guardWrite()) return
+    setSaving(true)
+    clearStatus()
+    try {
+      const result = await api.createDefect(inspection.id, data)
+      if (result.error) {
+        showStatus('error', result.error)
+        return
+      }
+      await reload()
+      showStatus('success', 'Дефект добавлен')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const handleGenerateReport = async () => {
+    if (!inspection) return
+    setReportLoading(true)
+    clearStatus()
+    try {
+      const result = await api.createInspectionReport(inspection.id)
+      if (result.error || !result.data) {
+        showStatus('error', result.error || 'Не удалось сформировать отчёт')
+        return
+      }
+      setReport(result.data)
+      showStatus('success', 'PDF-отчёт сформирован')
+    } finally {
+      setReportLoading(false)
+    }
+  }
+
+  const handleDownloadReport = async () => {
+    if (!inspection) return
+    setReportLoading(true)
+    clearStatus()
+    try {
+      const result = await api.downloadInspectionReport(inspection.id)
+      if (result.error || !result.data) {
+        showStatus('error', result.error || 'Не удалось скачать отчёт')
+        return
+      }
+      const url = URL.createObjectURL(result.data)
+      const link = document.createElement('a')
+      link.href = url
+      link.download = `inspection-${inspection.id}.pdf`
+      link.click()
+      URL.revokeObjectURL(url)
+    } finally {
+      setReportLoading(false)
+    }
+  }
+
+  const handleSubmitApproval = async (comment: string) => {
+    if (!inspection || !guardWrite()) return
+    setApprovalLoading(true)
+    clearStatus()
+    try {
+      const result = await api.submitInspection(inspection.id, comment)
+      if (result.error || !result.data) {
+        showStatus('error', result.error || 'Не удалось отправить осмотр')
+        return
+      }
+      setApproval(result.data)
+      showStatus('success', 'Осмотр отправлен на согласование')
+    } finally {
+      setApprovalLoading(false)
+    }
+  }
+
+  const handleReviewApproval = async (
+    status: 'approved' | 'rejected' | 'revision_required',
+    comment: string,
+  ) => {
+    if (!inspection || !guardWrite()) return
+    setApprovalLoading(true)
+    clearStatus()
+    try {
+      const result = await api.reviewInspection(inspection.id, status, comment)
+      if (result.error || !result.data) {
+        showStatus('error', result.error || 'Не удалось сохранить решение')
+        return
+      }
+      setApproval(result.data)
+      showStatus('success', status === 'approved' ? 'Осмотр согласован' : 'Решение сохранено')
+    } finally {
+      setApprovalLoading(false)
     }
   }
 
@@ -220,6 +353,12 @@ export default function InspectionDetailPage() {
       defectPhotos={defectPhotos}
       inspectionPhotos={inspectionPhotos}
       photoRequirements={photoRequirements}
+      readiness={readiness}
+      report={report}
+      reportLoading={reportLoading}
+      approval={approval}
+      approvalLoading={approvalLoading}
+      canReviewApproval={isManagerRole(currentUser?.role)}
       accidentOccurredAt={accidentOccurredAt}
       setAccidentOccurredAt={setAccidentOccurredAt}
       accidentLocation={accidentLocation}
@@ -228,6 +367,8 @@ export default function InspectionDetailPage() {
       setOdometerValue={setOdometerValue}
       odometerUnit={odometerUnit}
       setOdometerUnit={setOdometerUnit}
+      odometerUnavailableReason={odometerUnavailableReason}
+      setOdometerUnavailableReason={setOdometerUnavailableReason}
       uploadingPhoto={uploadingPhoto}
       deletingPhoto={deletingPhoto}
       saving={saving}
@@ -243,7 +384,11 @@ export default function InspectionDetailPage() {
       onInspectionPhotoDelete={deleteInspectionPhoto}
       onSave={handleSave}
       onComplete={handleComplete}
-      onPrint={() => printIncidentCard(inspection)}
+      onCreateDefect={handleCreateDefect}
+      onGenerateReport={() => void handleGenerateReport()}
+      onDownloadReport={() => void handleDownloadReport()}
+      onSubmitApproval={handleSubmitApproval}
+      onReviewApproval={handleReviewApproval}
       onError={showStatus}
     />
   )

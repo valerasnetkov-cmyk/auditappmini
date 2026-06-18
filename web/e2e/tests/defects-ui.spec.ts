@@ -24,13 +24,15 @@ test('Defects UI: create vehicle, add defect, display, close and reopen (UI path
     await expect(defectCard).toBeVisible()
     await expect(defectCard.getByText('UI defect item')).toBeVisible()
 
+    page.once('dialog', (dialog) => dialog.accept('Закрыто в defects UI E2E'))
     await defectCard.getByRole('button', { name: 'Закрыть дефект' }).click()
     await expect(page.getByText('Дефект закрыт')).toBeVisible({ timeout: 6000 })
     await expect(statusBadge).toHaveText('Закрыт')
 
+    page.once('dialog', (dialog) => dialog.accept('Повторно открыто в defects UI E2E'))
     await defectCard.getByRole('button', { name: 'Вернуть в работу' }).click()
     await expect(page.getByText('Дефект повторно открыт')).toBeVisible({ timeout: 6000 })
-    await expect(statusBadge).toHaveText('Открыт')
+    await expect(statusBadge).toHaveText('Открыт повторно')
   } finally {
     await archiveVehicle(request, adminToken, vehicle.id)
   }

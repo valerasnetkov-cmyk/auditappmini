@@ -13,6 +13,8 @@ import type {
   VehicleNumberRecognitionResponse,
   OdometerRecognitionResponse,
   UploadPhotoResponse,
+  InspectionReadiness,
+  InspectionReadinessMissingItem,
 } from './types'
 
 const DEFAULT_API_URL = Platform.select({
@@ -135,10 +137,27 @@ async function request<T>(endpoint: string, options: RequestInit = {}): Promise<
     if (sessionError) {
       throw sessionError
     }
-    throw new Error(backendError || 'Request failed')
+    throw new ApiRequestError(
+      error?.message || backendError || 'Request failed',
+      response.status,
+      backendError,
+      Array.isArray(error?.missing) ? error.missing : [],
+    )
   }
 
   return response.json()
+}
+
+export class ApiRequestError extends Error {
+  constructor(
+    message: string,
+    public status: number,
+    public code?: string,
+    public missing: InspectionReadinessMissingItem[] = [],
+  ) {
+    super(message)
+    this.name = 'ApiRequestError'
+  }
 }
 
 function getPhotoUploadMetadata(imageUri: string, basename: string): { type: string; name: string } {
@@ -231,6 +250,10 @@ export const api = {
     })
   },
 
+  async getInspectionReadiness(id: string): Promise<InspectionReadiness> {
+    return request<InspectionReadiness>(`/inspections/${id}/readiness`)
+  },
+
   async getInspection(id: string): Promise<Inspection> {
     return request<Inspection>(`/inspections/${id}`)
   },
@@ -239,10 +262,28 @@ export const api = {
     return request<PhotoRequirementsResponse>(`/photo-requirements/${type}`)
   },
 
-  async uploadPhoto(inspectionId: string, photoType: string, imageUri: string): Promise<UploadPhotoResponse> {
+  async uploadPhoto(
+    inspectionId: string,
+    photoType: string,
+    imageUri: string,
+    metadata?: {
+      clientPhotoId?: string
+      capturedAt?: string
+      capturedLat?: number | null
+      capturedLng?: number | null
+    },
+  ): Promise<UploadPhotoResponse> {
     const formData = new FormData()
     appendPhoto(formData, 'photo', imageUri, 'photo')
     formData.append('photo_type', photoType)
+    if (metadata?.clientPhotoId) formData.append('client_photo_id', metadata.clientPhotoId)
+    if (metadata?.capturedAt) formData.append('captured_at', metadata.capturedAt)
+    if (metadata?.capturedLat !== null && metadata?.capturedLat !== undefined) {
+      formData.append('captured_lat', String(metadata.capturedLat))
+    }
+    if (metadata?.capturedLng !== null && metadata?.capturedLng !== undefined) {
+      formData.append('captured_lng', String(metadata.capturedLng))
+    }
 
     return request<UploadPhotoResponse>(`/inspections/${inspectionId}/photos`, {
       method: 'POST',
@@ -272,9 +313,26 @@ export const api = {
     })
   },
 
-  async uploadDefectPhoto(defectId: string, imageUri: string): Promise<UploadPhotoResponse> {
+  async uploadDefectPhoto(
+    defectId: string,
+    imageUri: string,
+    metadata?: {
+      clientPhotoId?: string
+      capturedAt?: string
+      capturedLat?: number | null
+      capturedLng?: number | null
+    },
+  ): Promise<UploadPhotoResponse> {
     const formData = new FormData()
     appendPhoto(formData, 'photo', imageUri, 'defect')
+    if (metadata?.clientPhotoId) formData.append('client_photo_id', metadata.clientPhotoId)
+    if (metadata?.capturedAt) formData.append('captured_at', metadata.capturedAt)
+    if (metadata?.capturedLat !== null && metadata?.capturedLat !== undefined) {
+      formData.append('captured_lat', String(metadata.capturedLat))
+    }
+    if (metadata?.capturedLng !== null && metadata?.capturedLng !== undefined) {
+      formData.append('captured_lng', String(metadata.capturedLng))
+    }
 
     return request<UploadPhotoResponse>(`/defects/${defectId}/photos`, {
       method: 'POST',

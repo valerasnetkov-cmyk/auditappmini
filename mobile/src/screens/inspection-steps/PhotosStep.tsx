@@ -18,18 +18,26 @@ export function PhotosStep({
   loading,
   onOpenCamera,
   onContinue,
+  onRetry,
+  onRetryAll,
 }: {
   photoRequirements: PhotoRequirementsResponse
   inspectionPhotos: Record<string, InspectionPhotoPreview>
   loading: boolean
   onOpenCamera: (photoType: string) => void
   onContinue: () => void
+  onRetry: (photoType: string) => void
+  onRetryAll: () => void
 }) {
   const { colors } = useTheme()
   const required = photoRequirements.requirements.required
   const completed = required.filter((type) => inspectionPhotos[type]).length
   const canProceed = required.length > 0 && completed === required.length
   const isAccident = photoRequirements.type === 'accident'
+  const displayed = isAccident && photoRequirements.requirements.optional.includes('odometer')
+    ? [...required, 'odometer']
+    : required
+  const hasFailures = Object.values(inspectionPhotos).some((photo) => photo.status === 'failed')
 
   return (
     <View style={styles.fullScreen}>
@@ -46,16 +54,30 @@ export function PhotosStep({
           </View>
         ) : null}
         <View style={componentStyles.photoGrid}>
-          {required.map((photoType) => {
+          {displayed.map((photoType) => {
             const preview = inspectionPhotos[photoType]
             if (preview) {
               return (
-                <PhotoThumb
-                  key={photoType}
-                  uri={preview.localUri}
-                  label={photoRequirements.labels[photoType]}
-                  onPress={() => onOpenCamera(photoType)}
-                />
+                <View key={photoType}>
+                  <PhotoThumb
+                    uri={preview.localUri}
+                    label={photoRequirements.labels[photoType]}
+                    status={preview.status}
+                    onPress={() => onOpenCamera(photoType)}
+                  />
+                  <Text style={[styles.uploadStatus, { color: preview.status === 'failed' ? colors.danger : colors.mutedText }]}>
+                    {preview.status === 'uploaded'
+                      ? 'Загружено'
+                      : preview.status === 'uploading'
+                        ? 'Загружается…'
+                        : preview.status === 'failed'
+                          ? preview.error || 'Ошибка загрузки'
+                          : 'Ожидает загрузки'}
+                  </Text>
+                  {preview.status === 'failed' ? (
+                    <Button title="Повторить" variant="secondary" onPress={() => onRetry(photoType)} />
+                  ) : null}
+                </View>
               )
             }
             return (
@@ -79,6 +101,9 @@ export function PhotosStep({
           })}
         </View>
       </ScrollView>
+      {hasFailures ? (
+        <Button title="Повторить неотправленные" variant="secondary" onPress={onRetryAll} />
+      ) : null}
       <Button
         title="Продолжить"
         variant="primary"
@@ -117,5 +142,11 @@ const styles = StyleSheet.create({
     fontSize: 13,
     lineHeight: 18,
     marginBottom: 6,
+  },
+  uploadStatus: {
+    maxWidth: 150,
+    marginTop: 4,
+    marginBottom: 8,
+    fontSize: 12,
   },
 })

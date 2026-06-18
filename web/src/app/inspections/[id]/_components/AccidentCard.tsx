@@ -9,6 +9,8 @@ export default function AccidentCard({
   setAccidentOccurredAt,
   accidentLocation,
   setAccidentLocation,
+  odometerUnavailableReason,
+  setOdometerUnavailableReason,
   disabled,
 }: {
   inspection: InspectionDetail
@@ -16,6 +18,8 @@ export default function AccidentCard({
   setAccidentOccurredAt: (value: string) => void
   accidentLocation: string
   setAccidentLocation: (value: string) => void
+  odometerUnavailableReason: string
+  setOdometerUnavailableReason: (value: string) => void
   disabled: boolean
 }) {
   return (
@@ -43,6 +47,19 @@ export default function AccidentCard({
             className="w-full rounded-lg border px-3 py-2 text-sm"
           />
         </div>
+      </div>
+      <div className="mt-4">
+        <label className="mb-1 block text-sm font-medium text-slate-700">
+          Причина недоступности одометра
+        </label>
+        <input
+          type="text"
+          value={odometerUnavailableReason}
+          onChange={(event) => setOdometerUnavailableReason(event.target.value)}
+          disabled={disabled}
+          placeholder="Заполните, если пробег и фото одометра недоступны"
+          className="w-full rounded-lg border px-3 py-2 text-sm"
+        />
       </div>
       <p className="mt-3 text-xs text-slate-500">Время осмотра: {formatDateTime(inspection.created_at)}</p>
     </div>

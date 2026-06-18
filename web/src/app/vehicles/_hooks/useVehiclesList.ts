@@ -9,6 +9,7 @@ import { ITEMS_PER_BATCH, type SortConfig, type SortableVehicleKey } from '../_l
 type LoadArgs = {
   searchQuery: string
   statusFilter: string
+  inspectionStatusFilter: string
 }
 
 type Setters = {
@@ -30,6 +31,7 @@ async function loadData(args: LoadArgs, setters: Setters) {
         limit: 100,
         search: args.searchQuery,
         status: args.statusFilter || undefined,
+        inspectionStatus: args.inspectionStatusFilter || undefined,
       }),
       api.getRegions(),
     ])
@@ -62,8 +64,12 @@ function sortVehicles(
   const filtered = regionFilter ? vehicles.filter((vehicle) => vehicle.region === regionFilter) : vehicles
 
   return [...filtered].sort((left, right) => {
-    let leftValue: string | number = left[sortConfig.key] ?? ''
-    let rightValue: string | number = right[sortConfig.key] ?? ''
+    let leftValue: string | number = sortConfig.key === 'inspectionSchedule'
+      ? left.inspection_schedule?.status || ''
+      : left[sortConfig.key] ?? ''
+    let rightValue: string | number = sortConfig.key === 'inspectionSchedule'
+      ? right.inspection_schedule?.status || ''
+      : right[sortConfig.key] ?? ''
 
     if (typeof leftValue === 'string') leftValue = leftValue.toLowerCase()
     if (typeof rightValue === 'string') rightValue = rightValue.toLowerCase()
@@ -81,22 +87,23 @@ export function useVehiclesList() {
   const [searchQuery, setSearchQuery] = useState('')
   const [statusFilter, setStatusFilter] = useState('')
   const [regionFilter, setRegionFilter] = useState('')
+  const [inspectionStatusFilter, setInspectionStatusFilter] = useState('')
   const [visibleCount, setVisibleCount] = useState(ITEMS_PER_BATCH)
   const [totalCount, setTotalCount] = useState(0)
   const [error, setError] = useState('')
   const [sortConfig, setSortConfig] = useState<SortConfig>({ key: 'number', direction: 'asc' })
 
   const reload = () =>
-    loadData({ searchQuery, statusFilter }, {
+    loadData({ searchQuery, statusFilter, inspectionStatusFilter }, {
       setVehicles, setRegions, setLoading, setError, setTotalCount,
     })
 
   useEffect(() => {
     if (!requireAuthToken()) return
-    void loadData({ searchQuery, statusFilter }, {
+    void loadData({ searchQuery, statusFilter, inspectionStatusFilter }, {
       setVehicles, setRegions, setLoading, setError, setTotalCount,
     })
-  }, [searchQuery, statusFilter])
+  }, [searchQuery, statusFilter, inspectionStatusFilter])
 
   const handleSearchChange = (value: string) => {
     setSearchQuery(value)
@@ -110,6 +117,11 @@ export function useVehiclesList() {
 
   const handleRegionChange = (value: string) => {
     setRegionFilter(value)
+    setVisibleCount(ITEMS_PER_BATCH)
+  }
+
+  const handleInspectionStatusChange = (value: string) => {
+    setInspectionStatusFilter(value)
     setVisibleCount(ITEMS_PER_BATCH)
   }
 
@@ -140,6 +152,7 @@ export function useVehiclesList() {
       searchQuery,
       statusFilter,
       regionFilter,
+      inspectionStatusFilter,
       totalCount,
       error,
       sortConfig,
@@ -151,6 +164,7 @@ export function useVehiclesList() {
       setSearchQuery: handleSearchChange,
       setStatusFilter: handleStatusChange,
       setRegionFilter: handleRegionChange,
+      setInspectionStatusFilter: handleInspectionStatusChange,
       handleSort,
       loadMore,
       reload,

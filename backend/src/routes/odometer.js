@@ -1,4 +1,5 @@
 import { normalizeVehicleNumberToCyrillic } from '../utils/transliteration.js'
+import { sendInspectionCompletedError } from '../services/inspectionReadiness.js'
 
 function ocrGate(ensureOcrAvailable) {
   return (req, res, next) => {
@@ -78,10 +79,15 @@ export function registerOdometerRoutes({
     if (!inspection) {
       return res.status(404).json({ error: API_MESSAGES?.inspectionNotFound || 'Осмотр не найден' })
     }
+    if (inspection.completed) return sendInspectionCompletedError(res)
 
     db.prepare(`
       UPDATE inspections
-      SET odometer_value = ?, odometer_unit = ?, odometer_recognized_at = datetime('now')
+      SET odometer_value = ?,
+          odometer_unit = ?,
+          odometer_recognized_at = datetime('now'),
+          odometer_confirmed_at = datetime('now'),
+          odometer_unavailable_reason = NULL
       WHERE id = ? AND company_id = ?
     `).run(odometer_value, odometer_unit, inspectionId, companyId)
 

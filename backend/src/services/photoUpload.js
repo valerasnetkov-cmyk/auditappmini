@@ -127,12 +127,66 @@ export async function removeFileIfExists(filePath) {
 }
 
 export async function removePhotoFiles(photo) {
-  const urls = new Set([photo?.url, photo?.original_url, photo?.webp_url, photo?.thumb_url].filter(Boolean))
+  const urls = new Set([
+    photo?.url,
+    photo?.original_url,
+    photo?.webp_url,
+    photo?.thumb_url,
+    photo?.watermark_url,
+  ].filter(Boolean))
   await Promise.all(Array.from(urls).map(async (url) => {
     if (!url.startsWith('/uploads/')) return
     const resolved = resolveUploadPath(url.slice('/uploads/'.length))
     if (resolved) await removeFileIfExists(resolved.filePath)
   }))
+}
+
+function escapeSvgText(value) {
+  return String(value || '')
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;')
+    .replaceAll("'", '&apos;')
+}
+
+export async function generateWatermarkedPhoto({ photo, lines }) {
+  const sourceUrl = photo.webp_url || photo.url
+  if (!sourceUrl?.startsWith('/uploads/')) {
+    throw new Error('Watermark source is unavailable')
+  }
+
+  const source = resolveUploadPath(sourceUrl.slice('/uploads/'.length))
+  if (!source || !fs.existsSync(source.filePath)) {
+    throw new Error('Watermark source file is missing')
+  }
+
+  const targetDir = path.dirname(source.filePath)
+  const targetPath = path.join(targetDir, 'watermark.webp')
+  const metadata = await createSharpImage(await fs.promises.readFile(source.filePath)).metadata()
+  const width = Math.max(1, metadata.width || 1200)
+  const height = Math.max(1, metadata.height || 800)
+  const fontSize = Math.max(18, Math.round(width * 0.018))
+  const lineHeight = Math.round(fontSize * 1.35)
+  const padding = Math.max(18, Math.round(width * 0.018))
+  const boxHeight = padding * 2 + lineHeight * lines.length
+  const text = lines.map((line, index) => (
+    `<text x="${padding}" y="${padding + fontSize + index * lineHeight}" fill="white" font-size="${fontSize}" font-family="DejaVu Sans, Arial, sans-serif">${escapeSvgText(line)}</text>`
+  )).join('')
+  const overlay = Buffer.from(`
+    <svg width="${width}" height="${height}" xmlns="http://www.w3.org/2000/svg">
+      <rect x="0" y="${height - boxHeight}" width="${width}" height="${boxHeight}" fill="rgba(0,0,0,0.68)" />
+      <g transform="translate(0 ${height - boxHeight})">${text}</g>
+    </svg>
+  `)
+
+  await createSharpImage(await fs.promises.readFile(source.filePath))
+    .composite([{ input: overlay, gravity: 'south' }])
+    .webp({ quality: 84 })
+    .toFile(targetPath)
+
+  const relativePath = path.relative(uploadsDir, targetPath).replace(/\\/g, '/')
+  return buildUploadUrl(relativePath)
 }
 
 export async function removePhotoFilesForRows(photos) {

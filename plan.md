@@ -92,7 +92,35 @@
 - Выполнено: `/saas-admin` показывает "Администрирование ресурса" и работает с сервисными сущностями без техники, осмотров, дефектов и фото компаний.
 - Выполнено: роль `admin` отделена от tenant endpoints, а resource-admin API закрыт для `owner`, `manager` и `inspector`.
 - Выполнено: MFA login challenge, backend/web/mobile audit gates, smoke-проверки и полный локальный `npm run verify:launch` проходят.
-- Осталось перед пилотом: запустить `npm run doctor:production` на реальном pilot/staging окружении, создать и проверить backup, приложить release evidence и собрать mobile EAS artifact.
+- Выполнено P0: durable mobile draft, неблокирующая очередь фото, единый
+  readiness, неизменяемость завершённого акта, watermark и авторизованный PDF
+  с проверкой SHA-256/размера.
+- Выполнено P1 согласование: отдельный `approval_status`, tenant/RBAC
+  переходы, история решений, адресные in-app уведомления, web-карточка и
+  отображение решения в PDF. `completed` остаётся технической полнотой.
+- Выполнено P1 план-график: tenant-интервалы quick/planned, переопределения
+  техники, единый расчёт сроков и рисков, backend-фильтрация, dashboard
+  напоминания и web UI списка/карточки/настроек.
+- Выполнено P1 lifecycle дефекта: критичность, управленческие статусы,
+  обязательный комментарий, tenant-история, RBAC, critical-уведомления,
+  ручное создание и web-фильтры. Доказательная часть завершённого акта
+  остаётся неизменной.
+- Выполнено RC-gates 2026-06-18: `npm run verify:launch`,
+  `npm run backup:local`, `npm run backup:verify`,
+  `npm run release:readiness`, `npm run release:evidence` и
+  `npm run mobile:eas:readiness` проходят локально. Release readiness
+  возвращает `pilot-ready-after-release-actions`.
+- Выполнено RC dependency hardening: web/mobile audits закрыты через
+  транзитивные `overrides` для `@babel/core`, `js-yaml`, `tmp` и `ws` без
+  React Native/Expo major upgrade перед пилотом.
+- Freeze перед RC: не расширять SaaS/P1-функции и не продолжать крупную
+  декомпозицию до внешнего pilot/staging `doctor:production`, кроме точечных
+  исправлений найденных release gate failures.
+- Осталось перед пилотом: запустить `npm run doctor:production` на реальном
+  pilot/staging окружении с production secrets и persistent paths,
+  создать/проверить backup уже на pilot/staging данных, приложить release
+  evidence JSON к release notes и собрать mobile EAS artifact отдельным
+  решением.
 - В работе после отказа от Directus: resource-admin контур разделяется на операционные страницы; добавлен MVP оффлайн-платежей и подписок (`company_payments`, `company_subscriptions`, `/api/admin/resource/payments`, `/saas-admin/payments`) как основа для ручного продления тарифов, MRR и будущих уведомлений.
 - Выполнено в рамках разделения resource-admin: `/saas-admin` стал обзором ресурса, `/saas-admin/companies` отвечает за реестр компаний/владельцев/лимиты, `/saas-admin/plans` — за тарифы, `/saas-admin/payments` — за оффлайн-платежи и подписки.
 - Выполнено в рамках offline billing: добавлен сканер сроков подписок, API `/api/admin/resource/alerts`, команда `npm --prefix backend run subscriptions:check` и страница `/saas-admin/alerts` для уведомлений о 14/7/3/1 днях до окончания, grace period, просрочке и приостановке.
@@ -113,7 +141,31 @@
 - Выполнено: `PUBLIC_REGISTRATION_ENABLED` больше не зависит от `NODE_ENV` по умолчанию; публичная регистрация отключена и включается только явным opt-in.
 - Выполнено: `smoke:production-guard` расширен реальным коротким стартом backend в `NODE_ENV=production` с валидным env.
 - Выполнено: `.gitignore` очищен от дублей и явно исключает runtime SQLite, uploads/backups/logs, `.tmp-*`, `.tmp-runtime`, `.tmp-e2e` и release artifacts.
-- Осталось: миграция с `sql.js`, распределенный rate limit, укрупненный рефакторинг backend/web/mobile монолитов.
+- Миграция с `sql.js` на `better-sqlite3` и распределённый Redis rate limit
+  уже выполнены и покрыты unit/smoke-проверками.
+- В работе: укрупнённый рефакторинг backend/web/mobile модулей. Из
+  `adminSaas.js` выделен самостоятельный `subscriptionAlerts` service с
+  unit-тестами и сохранением resource-admin API.
+- Продолжение backend-декомпозиции: payment queries, billing summary, MRR и
+  перерасчёт подписки выделены в `resourceBilling` service; `adminSaas.js`
+  уменьшен до 1799 строк.
+- Тарифы и лимиты выделены в `resourcePlans` service; resource-admin RBAC и
+  аудит сохранены в route-слое, `adminSaas.js` уменьшен до 1646 строк.
+- Владельцы компаний и состояния setup-link выделены в `resourceOwners`
+  service; `adminSaas.js` уменьшен до 1550 строк.
+- Реестр компаний и resource-admin health/risk mapping выделены в
+  `resourceCompanies` service; `adminSaas.js` уменьшен до 1346 строк.
+- Уведомления resource/company scope и чтение audit log выделены в
+  `resourceActivity` service; `adminSaas.js` уменьшен до 1258 строк.
+- Limit usage, billing summary и churn/upsell расчёты выделены в
+  `resourceInsights` service; `adminSaas.js` уменьшен до 1152 строк.
+- Dashboard totals, plan breakdown, activity trend, product activity, storage,
+  OCR stats, service health, health center и activation funnel выделены в
+  `resourceDashboard` service; `adminSaas.js` уменьшен до 712 строк, backend
+  unit suite содержит 80 тестов.
+- Сборка resource-admin `/stats` response и карточки компании выделена в
+  `resourceAdminStats` service; `adminSaas.js` уменьшен до 642 строк, backend
+  unit suite содержит 81 тест.
 
 ## Допущения
 - Выполнено в рамках tenant UX: журналы и карточки осмотров/техники/дефектов, импорт, справочники и сервисные настройки показывают баннер тарифа и блокируют создание, удаление, закрытие/переоткрытие дефектов, сохранение/завершение осмотра, загрузку и удаление фото при `suspended`, отключенной компании или `expired` там, где создается новая операционная запись.
