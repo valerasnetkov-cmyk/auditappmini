@@ -4,6 +4,7 @@ import { FormEvent, useEffect, useState } from 'react'
 import api from '@/lib/api/client'
 import { hasAuthSession } from '@/lib/auth'
 import type { AuthUser } from '@/lib/types'
+import { PilotRequestButton } from '../_components/PilotRequestModal'
 
 type LoginFormVariant = 'landing' | 'standalone'
 
@@ -211,12 +212,12 @@ export default function LoginForm({
               или
               <span className="h-px flex-1 bg-slate-200" />
             </div>
-            <a
-              href={`mailto:${ACCESS_EMAIL}?subject=Получить доступ к AuditAvto`}
+            <PilotRequestButton
+              source="landing-login-access"
               className="flex h-14 w-full items-center justify-center rounded-2xl border border-line bg-white px-5 text-base font-semibold text-primary hover:border-primary/40 hover:bg-primary/5"
             >
               Получить доступ
-            </a>
+            </PilotRequestButton>
           </div>
         ) : (
           <p className="text-center text-sm text-gray-600">
