@@ -9,6 +9,7 @@
     "doctor:launch": "node scripts/launch-doctor.mjs",
     "doctor:production": "node scripts/launch-doctor.mjs --production --doctor-env-file .env.production",
     "lint": "eslint",
+    "smoke:static-chunks": "node scripts/smoke-static-chunks.mjs",
     "prepare:e2e": "npx playwright install",
     "prepare:e2e:chromium": "npx playwright install chromium",
     "test:e2e": "npx playwright test",
