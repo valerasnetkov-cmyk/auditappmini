@@ -1,4 +1,5 @@
 import type { Metadata } from 'next'
+import Image from 'next/image'
 import Link from 'next/link'
 import {
   CameraIcon,
@@ -40,7 +41,9 @@ export default function DemoPage() {
     <main className="min-h-screen bg-[var(--color-bg-app)] px-5 py-8 text-foreground sm:px-8 lg:py-14">
       <div className="mx-auto max-w-6xl">
         <header className="flex items-center justify-between gap-4">
-          <Link href="/" className="text-xl font-semibold text-foreground">AuditAvto</Link>
+          <Link href="/" className="inline-flex items-center" aria-label="AuditAvto">
+            <Image src="/brand/auditavto-logo-horizontal.svg" alt="AuditAvto" width={244} height={48} priority className="h-auto w-40" />
+          </Link>
           <Link href="/" className="text-sm font-semibold text-foreground-secondary hover:text-primary">На главную</Link>
         </header>
 

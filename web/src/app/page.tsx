@@ -517,7 +517,9 @@ export default function LandingPage() {
       </section>
 
       <footer className={styles.footer}>
-        <Link href="/" className={styles.footerBrand}>AuditAvto</Link>
+        <Link href="/" className={styles.footerBrand} aria-label="AuditAvto">
+          <Image src="/brand/auditavto-logo-horizontal.svg" alt="AuditAvto" width={244} height={48} />
+        </Link>
         <nav aria-label="Правовая информация">
           <Link href="/privacy">Политика ПДн</Link>
           <Link href="/personal-data-consent">Согласие ПДн</Link>

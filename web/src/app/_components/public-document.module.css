@@ -18,9 +18,14 @@
 }
 
 .brand {
+  display: inline-flex;
+  align-items: center;
   color: var(--color-text-primary);
-  font-size: 19px;
-  font-weight: 760;
+}
+
+.brand img {
+  width: 168px;
+  height: auto;
 }
 
 .document {

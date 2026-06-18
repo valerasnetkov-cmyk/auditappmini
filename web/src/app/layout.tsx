@@ -42,7 +42,7 @@ export const metadata: Metadata = {
   icons: {
     icon: "/brand/favicon.svg",
     shortcut: "/brand/favicon.svg",
-    apple: "/auditavto/icon.png",
+    apple: "/brand/favicon.svg",
   },
   openGraph: {
     type: "website",

@@ -1,4 +1,5 @@
 import Link from 'next/link'
+import Image from 'next/image'
 import type { ReactNode } from 'react'
 import styles from './public-document.module.css'
 
@@ -13,7 +14,9 @@ export function PublicDocument({ title, description, updated, children }: Public
   return (
     <main className={styles.page}>
       <header className={styles.header}>
-        <Link href="/" className={styles.brand}>AuditAvto</Link>
+        <Link href="/" className={styles.brand} aria-label="AuditAvto">
+          <Image src="/brand/auditavto-logo-horizontal.svg" alt="AuditAvto" width={244} height={48} priority />
+        </Link>
         <Link href="/">На главную</Link>
       </header>
 
