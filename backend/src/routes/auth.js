@@ -282,7 +282,7 @@ export default function registerAuthRoutes({
 
   app.post('/api/auth/demo', ...publicAuthRateLimit, (req, res) => {
     if (!PUBLIC_DEMO_ENABLED) {
-      return res.status(404).json({
+      return res.status(503).json({
         error: 'demo_unavailable',
         message: 'Публичное демо сейчас недоступно.',
       })

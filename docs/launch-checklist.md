@@ -16,6 +16,7 @@ Legacy mobile-app removal record: `docs/mobile-app-retirement.md`.
 - Copy `backend/.env.production.example`, `web/.env.production.example` and `mobile/.env.production.example` to private env files or secret manager values and follow `docs/production-env.md`.
 - Use a strong `JWT_SECRET`; never use the development fallback.
 - Keep `PUBLIC_REGISTRATION_ENABLED=false` in production; company users must be created by the company owner.
+- For the public `/demo` page, set `PUBLIC_DEMO_ENABLED=true` and a strong `PUBLIC_DEMO_PASSWORD`; otherwise `/api/auth/demo` returns `demo_unavailable`.
 - Set `TRUST_PROXY` explicitly and keep sensitive endpoint rate limits enabled.
 - Keep `GRACEFUL_SHUTDOWN_TIMEOUT_MS` configured so PM2/redeploy stops do not abort active requests immediately.
 - Keep `REQUEST_ID_HEADER=x-request-id`, `ACCESS_LOG_FORMAT=json` and `ACCESS_LOG_SKIP_PATHS=/health,/api/health` for production diagnostics without noisy health-check logs.

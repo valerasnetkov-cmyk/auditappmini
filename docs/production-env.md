@@ -75,6 +75,7 @@ EXPO_PUBLIC_API_URL=https://api.<project-domain>/api
 | `PILOT_REQUEST_RATE_LIMIT_WINDOW_MS` / `PILOT_REQUEST_RATE_LIMIT_MAX` | Отдельный IP-лимит публичной формы заявки на пилот; по умолчанию 5 отправок за 30 минут. |
 | `REDIS_URL` | **Рекомендуется для production** (Epic 3.2). Формат `redis://[:password@]host:port[/db]`. Без `REDIS_URL` rate-limit работает только в in-memory режиме (per-replica, обходится при multi-replica). С заданным `REDIS_URL` rate-limit становится распределённым (atomic INCR+EXPIRE в Lua-скрипте). В production при заданном `REDIS_URL` endpoint `/api/health/ready` возвращает `503`, если Redis недоступен. |
 | `ADMIN_EMAIL` / `ADMIN_PASSWORD` | Первичный админ SaaS, если нужен автосид при первом старте. `ADMIN_PASSWORD=admin123` допустим только локально; production doctor блокирует demo/placeholder значения. |
+| `PUBLIC_DEMO_ENABLED` / `PUBLIC_DEMO_PASSWORD` | Публичный read-only demo contour для `/demo`. Для `auditavto.ru` должен быть включён: `PUBLIC_DEMO_ENABLED=true`, пароль не короче 12 символов. Backend при старте provision-ит тестовую компанию `demo`. |
 | `WEB_APP_URL` | Публичный URL web-приложения для owner setup ссылок. |
 
 Сгенерировать `JWT_SECRET` можно так:

@@ -3,6 +3,10 @@
 ## Unreleased
 
 ### Changed
+- **Production demo availability**: production env template now enables the
+  public read-only demo contour explicitly and documents required
+  `PUBLIC_DEMO_PASSWORD`; disabled demo auth now returns `503 demo_unavailable`
+  instead of a misleading `404`.
 - **Graphify integration**: added project-scoped Graphify Codex skill/hooks,
   root npm helper scripts for graph extraction/query/update/call-flow export,
   and ignored generated `graphify-out/` artifacts.
