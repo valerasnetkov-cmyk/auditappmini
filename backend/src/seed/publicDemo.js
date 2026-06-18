@@ -42,6 +42,16 @@ const RECENT_INSPECTION_DAY_OFFSETS = [
   0,
 ]
 
+function resolveDemoUserId(db) {
+  const byEmail = db.prepare('SELECT id FROM users WHERE lower(email) = lower(?)').get(PUBLIC_DEMO_EMAIL)
+  if (byEmail?.id) return byEmail.id
+
+  const byId = db.prepare('SELECT id FROM users WHERE id = ?').get(PUBLIC_DEMO_USER_ID)
+  if (byId?.id) return byId.id
+
+  return PUBLIC_DEMO_USER_ID
+}
+
 function dateDaysAgo(days, hour = 9) {
   const value = new Date()
   value.setUTCHours(hour, 0, 0, 0)
@@ -97,6 +107,7 @@ export async function provisionPublicDemo({ db, password }) {
   if (demoPassword.length < 12) {
     throw new Error('PUBLIC_DEMO_PASSWORD must contain at least 12 characters')
   }
+  const demoUserId = resolveDemoUserId(db)
 
   const photos = await Promise.all([
     ensureDemoImage({
@@ -131,9 +142,18 @@ export async function provisionPublicDemo({ db, password }) {
         status = 'active'
     `).run(PUBLIC_DEMO_COMPANY_ID, 'demo', 'Демо-парк', 'RU-SAK', 'Russia')
 
+    const passwordHash = bcrypt.hashSync(demoPassword, 10)
     db.prepare(`
-      INSERT INTO users (id, email, password, name, role, status, company_id, mfa_enabled)
-      VALUES (?, ?, ?, ?, 'manager', 'active', ?, 0)
+      INSERT INTO users (id, email, password, name, role, status, company_id, mfa_enabled, mfa_secret)
+      VALUES (?, ?, ?, ?, 'manager', 'active', ?, 0, NULL)
+      ON CONFLICT(email) DO UPDATE SET
+        password = excluded.password,
+        name = excluded.name,
+        role = 'manager',
+        status = 'active',
+        company_id = excluded.company_id,
+        mfa_enabled = 0,
+        mfa_secret = NULL
       ON CONFLICT(id) DO UPDATE SET
         email = excluded.email,
         password = excluded.password,
@@ -144,9 +164,9 @@ export async function provisionPublicDemo({ db, password }) {
         mfa_enabled = 0,
         mfa_secret = NULL
     `).run(
-      PUBLIC_DEMO_USER_ID,
+      demoUserId,
       PUBLIC_DEMO_EMAIL,
-      bcrypt.hashSync(demoPassword, 10),
+      passwordHash,
       'Демо-менеджер',
       PUBLIC_DEMO_COMPANY_ID,
     )
@@ -222,7 +242,7 @@ export async function provisionPublicDemo({ db, password }) {
       `).run(
         id,
         vehicle[0],
-        PUBLIC_DEMO_USER_ID,
+        demoUserId,
         PUBLIC_DEMO_COMPANY_ID,
         type,
         type === 'accident' ? createdAt : null,

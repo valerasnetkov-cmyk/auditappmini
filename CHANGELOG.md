@@ -3,6 +3,9 @@
 ## Unreleased
 
 ### Changed
+- **Public demo seed idempotency**: `provisionPublicDemo` теперь повторно
+  безопасен при перезапусках production backend и переиспользует существующего
+  demo-пользователя по email/id без `UNIQUE constraint failed: users.email`.
 - **Production demo availability**: production env template now enables the
   public read-only demo contour explicitly and documents required
   `PUBLIC_DEMO_PASSWORD`; disabled demo auth now returns `503 demo_unavailable`

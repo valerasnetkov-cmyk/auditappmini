@@ -10,7 +10,7 @@ import {
   PUBLIC_REGISTRATION_ENABLED,
 } from '../config.js'
 import { setAuthCookie, clearAuthCookie } from '../middleware/auth.js'
-import { PUBLIC_DEMO_COMPANY_ID, PUBLIC_DEMO_USER_ID } from '../seed/publicDemo.js'
+import { PUBLIC_DEMO_COMPANY_ID, PUBLIC_DEMO_EMAIL } from '../seed/publicDemo.js'
 
 function getWebAppUrl() {
   return (process.env.WEB_APP_URL || process.env.FRONTEND_URL || 'http://localhost:3002').replace(/\/+$/, '')
@@ -293,8 +293,8 @@ export default function registerAuthRoutes({
              COALESCE(c.access_mode, 'standard') AS access_mode
       FROM users u
       JOIN companies c ON c.id = u.company_id
-      WHERE u.id = ? AND u.company_id = ? AND c.access_mode = 'demo_readonly'
-    `).get(PUBLIC_DEMO_USER_ID, PUBLIC_DEMO_COMPANY_ID)
+      WHERE lower(u.email) = lower(?) AND u.company_id = ? AND c.access_mode = 'demo_readonly'
+    `).get(PUBLIC_DEMO_EMAIL, PUBLIC_DEMO_COMPANY_ID)
 
     if (!user || user.status === 'inactive') {
       return res.status(503).json({

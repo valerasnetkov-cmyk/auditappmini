@@ -56,9 +56,7 @@ async function seedPrivateTenant() {
   }
 }
 
-async function run() {
-  await seedPrivateTenant()
-
+function startServer() {
   const server = spawn(process.execPath, ['src/server.js'], {
     cwd: process.cwd(),
     env: {
@@ -77,6 +75,29 @@ async function run() {
   server.stderr.on('data', (chunk) => {
     stderr += chunk.toString()
   })
+
+  return { server, getStderr: () => stderr }
+}
+
+async function stopServer(server) {
+  server.kill()
+  await sleep(300)
+}
+
+async function run() {
+  await seedPrivateTenant()
+
+  const firstStart = startServer()
+  try {
+    await waitForServer()
+  } finally {
+    await stopServer(firstStart.server)
+  }
+  if (firstStart.getStderr().trim()) {
+    throw new Error(firstStart.getStderr().trim())
+  }
+
+  const { server, getStderr } = startServer()
 
   try {
     await waitForServer()
@@ -121,7 +142,7 @@ async function run() {
       body: JSON.stringify({ vehicles: 1, inspections: 1 }),
     }, 403)
 
-    await request('/api/users/demo-manager/mfa/setup', {
+    await request(`/api/users/${login.user.id}/mfa/setup`, {
       method: 'POST',
       headers,
       body: JSON.stringify({}),
@@ -164,14 +185,13 @@ async function run() {
       photoProtected: true,
     }, null, 2))
   } finally {
-    server.kill()
-    await sleep(300)
+    await stopServer(server)
     await fs.rm(DATABASE_PATH, { force: true })
     await fs.rm(UPLOAD_DIR, { recursive: true, force: true })
   }
 
-  if (stderr.trim()) {
-    console.error(stderr.trim())
+  if (getStderr().trim()) {
+    console.error(getStderr().trim())
   }
 }
 
