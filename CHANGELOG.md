@@ -3,6 +3,9 @@
 ## Unreleased
 
 ### Changed
+- **Graphify integration**: added project-scoped Graphify Codex skill/hooks,
+  root npm helper scripts for graph extraction/query/update/call-flow export,
+  and ignored generated `graphify-out/` artifacts.
 - **Pilot RC closure**: release readiness повторно проверен перед пилотом:
   `verify:launch`, `mobile:eas:readiness`, OCR smoke и local backup/verify
   проходят; `doctor:production`, Tesseract CLI smoke и EAS preview build

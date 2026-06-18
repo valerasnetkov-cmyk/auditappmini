@@ -33,6 +33,7 @@ backend/backups/
 backend/data/
 backend/logs/
 release-evidence/
+graphify-out/
 
 # Logs and temporary artifacts
 *.log

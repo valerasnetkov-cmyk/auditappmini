@@ -34,6 +34,11 @@
     "mobile:eas:readiness": "npm --prefix mobile run eas:readiness",
     "mobile:eas:configure": "npm --prefix mobile run eas:configure",
     "mobile:eas:preview:android": "npm --prefix mobile run eas:preview:android",
-    "mobile:eas:production": "npm --prefix mobile run eas:production"
+    "mobile:eas:production": "npm --prefix mobile run eas:production",
+    "graphify:install": "graphify install --project --platform codex",
+    "graphify:extract": "graphify extract .",
+    "graphify:update": "graphify update .",
+    "graphify:query": "graphify query",
+    "graphify:callflow": "graphify export callflow-html"
   }
 }
