@@ -29,7 +29,10 @@ export function PublicDocument({ title, description, updated, children }: Public
 
       <footer className={styles.footer}>
         <Link href="/privacy">Конфиденциальность</Link>
-        <Link href="/terms">Условия</Link>
+        <Link href="/terms">Пользовательское соглашение</Link>
+        <Link href="/offer">Оферта</Link>
+        <Link href="/personal-data-consent">Согласие на ПДн</Link>
+        <Link href="/marketing-consent">Согласие на рассылку</Link>
         <Link href="/security">Безопасность</Link>
         <Link href="/cookie-policy">Cookies</Link>
         <a href="mailto:info@auditavto.ru">info@auditavto.ru</a>

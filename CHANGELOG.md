@@ -3,6 +3,27 @@
 ## Unreleased
 
 ### Changed
+- **Pilot RC closure**: release readiness повторно проверен перед пилотом:
+  `verify:launch`, `mobile:eas:readiness`, OCR smoke и local backup/verify
+  проходят; `doctor:production`, Tesseract CLI smoke и EAS preview build
+  остаются внешними gates для pilot/staging окружения с реальными секретами и
+  server/runtime доступами.
+- **Odometer OCR provider**: добавлен backend provider layer для OCR одометра:
+  dev/test `mock` сохраняет ручное подтверждение, а `tesseract-cli` запускает
+  системный Tesseract через backend после `sharp`-предобработки изображения.
+  `/api/odometer/recognize` остаётся assistive-only и не записывает финальный
+  пробег без подтверждения инспектором; production doctor проверяет Tesseract
+  только при включённом `OCR_ODOMETER_PROVIDER=tesseract-cli`. Добавлен manual
+  staging smoke `npm --prefix backend run smoke:ocr:tesseract`, а парсер OCR
+  не превращает отрицательные шумы вроде `-123` в валидный пробег.
+- **Public legal documents**: добавлены полная политика обработки персональных
+  данных, согласие на обработку ПДн, публичная оферта, пользовательское
+  соглашение и согласие на рекламно-информационные сообщения из переданных
+  регламентных файлов. Футер лендинга, форма заявки, sitemap и robots теперь
+  ссылаются на актуальный legal-контур. Исправлен маппинг документов
+  `/terms` и `/personal-data-consent`, из публичных текстов удалены служебные
+  шаблонные фразы, а оферта уточнена по платёжным каналам, ЭДО и
+  форс-мажору без формулировки "военные действия".
 - **Landing login checkbox**: чекбокс "Запомнить меня" в лендинговой форме
   входа теперь явно включён по умолчанию и больше не отображается как
   неактивный после гидрации.
@@ -52,6 +73,8 @@
 ### Verified
 - `npm --prefix backend run test:unit`
 - `npm --prefix backend run smoke`
+- `npm --prefix backend run smoke:ocr`
+- `npm --prefix backend run smoke:ocr:tesseract`
 - `npm --prefix backend run smoke:saas-admin`
 - `npm --prefix backend run lint`
 - `npm run verify:launch`

@@ -117,13 +117,17 @@ DELETE /api/vehicles/:id
 
 ```json
 {
-  "rawText": "128450",
-  "recognizedValue": 128450,
+  "raw_value": "128450",
+  "normalized_value": 128450,
   "unit": "km",
   "confidence": 0.86,
   "candidates": [
-    { "value": 128450, "confidence": 0.86 }
-  ]
+    128450
+  ],
+  "provider": "tesseract-cli",
+  "requires_manual_confirmation": true,
+  "photo_url": "/uploads/odometer.png",
+  "recognized_at": "2026-06-18T00:00:00.000Z"
 }
 ```
 

@@ -63,6 +63,8 @@ EXPO_PUBLIC_API_URL=https://api.<project-domain>/api
 | `UPLOAD_DIR` | Постоянный каталог фото, не внутри временной release-папки. |
 | `MAX_IMAGE_PIXELS` | Максимальное число пикселей в исходном фото; защищает обработку изображений от слишком больших файлов. |
 | `BACKUP_DIR` | Постоянный каталог локальных backup-снимков. |
+| `OCR_ODOMETER_PROVIDER` | Провайдер OCR одометра: `mock` сохраняет manual-confirmation placeholder, `tesseract-cli` включает локальный Tesseract CLI. |
+| `TESSERACT_CMD` / `TESSERACT_TIMEOUT_MS` | Команда Tesseract и timeout распознавания. Проверяются production doctor только при `OCR_ODOMETER_PROVIDER=tesseract-cli`. |
 | `SECURITY_CSP` | CSP для API-ответов; по умолчанию запрещает загрузку ресурсов, формы и встраивание во фрейм. |
 | `SECURITY_CROSS_ORIGIN_OPENER_POLICY` | COOP-заголовок, по умолчанию `same-origin`. |
 | `SECURITY_CROSS_ORIGIN_RESOURCE_POLICY` | CORP-заголовок, по умолчанию `same-site`. |
@@ -96,6 +98,25 @@ DATABASE_PATH=C:\Auditmini\data\database.sqlite
 UPLOAD_DIR=C:\Auditmini\uploads
 BACKUP_DIR=C:\Auditmini\backups
 ```
+
+Если включаете OCR одометра через Tesseract, установите Tesseract 5.x и
+traineddata на backend host и проверьте бинарь до старта:
+
+```powershell
+tesseract --version
+npm --prefix backend run smoke:ocr:tesseract
+```
+
+Production env:
+
+```dotenv
+OCR_ODOMETER_PROVIDER=tesseract-cli
+TESSERACT_CMD=tesseract
+TESSERACT_TIMEOUT_MS=10000
+```
+
+Если Tesseract не готов на pilot/staging, оставьте `OCR_ODOMETER_PROVIDER=mock`:
+endpoint продолжит требовать ручное подтверждение без автоматического значения.
 
 ## 6. Проверьте production env до старта
 

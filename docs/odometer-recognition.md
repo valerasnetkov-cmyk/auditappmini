@@ -139,17 +139,31 @@ odometer_recognitions
 
 Назначение: принять фото одометра и вернуть распознанный километраж.
 
+Текущая реализация использует заменяемый backend provider:
+
+```txt
+OCR_ODOMETER_PROVIDER=mock           -> ручное подтверждение без авто-значения
+OCR_ODOMETER_PROVIDER=tesseract-cli  -> локальный Tesseract CLI на backend host
+```
+
+`tesseract-cli` не является источником истины: результат всегда остаётся
+подсказкой для инспектора и требует ручного подтверждения.
+
 Ответ:
 
 ```json
 {
-  "rawText": "128450",
-  "recognizedValue": 128450,
+  "raw_value": "128450",
+  "normalized_value": 128450,
   "unit": "km",
   "confidence": 0.86,
   "candidates": [
-    { "value": 128450, "confidence": 0.86 }
-  ]
+    128450
+  ],
+  "provider": "tesseract-cli",
+  "requires_manual_confirmation": true,
+  "photo_url": "/uploads/photo.png",
+  "recognized_at": "2026-06-18T00:00:00.000Z"
 }
 ```
 

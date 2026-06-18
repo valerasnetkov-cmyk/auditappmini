@@ -253,7 +253,11 @@ export function PilotRequestProvider({ children }: { children: ReactNode }) {
                     <span>
                       Я согласен на обработку контактных данных для ответа на заявку в соответствии с{' '}
                       <Link href="/privacy" className="font-medium text-primary hover:text-primary-hover" target="_blank">
-                        политикой конфиденциальности
+                        политикой обработки персональных данных
+                      </Link>{' '}
+                      и{' '}
+                      <Link href="/personal-data-consent" className="font-medium text-primary hover:text-primary-hover" target="_blank">
+                        согласием на обработку персональных данных
                       </Link>.
                     </span>
                   </label>

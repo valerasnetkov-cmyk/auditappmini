@@ -519,8 +519,11 @@ export default function LandingPage() {
       <footer className={styles.footer}>
         <Link href="/" className={styles.footerBrand}>AuditAvto</Link>
         <nav aria-label="Правовая информация">
-          <Link href="/privacy">Конфиденциальность</Link>
-          <Link href="/terms">Условия использования</Link>
+          <Link href="/privacy">Политика ПДн</Link>
+          <Link href="/personal-data-consent">Согласие ПДн</Link>
+          <Link href="/terms">Пользовательское соглашение</Link>
+          <Link href="/offer">Оферта</Link>
+          <Link href="/marketing-consent">Согласие на рассылку</Link>
           <Link href="/security">Безопасность</Link>
           <Link href="/cookie-policy">Cookies</Link>
         </nav>

@@ -29,10 +29,28 @@ export default function sitemap(): MetadataRoute.Sitemap {
       priority: 0.3,
     },
     {
+      url: 'https://auditavto.ru/personal-data-consent',
+      lastModified,
+      changeFrequency: 'yearly',
+      priority: 0.3,
+    },
+    {
       url: 'https://auditavto.ru/terms',
       lastModified,
       changeFrequency: 'yearly',
       priority: 0.3,
+    },
+    {
+      url: 'https://auditavto.ru/offer',
+      lastModified,
+      changeFrequency: 'yearly',
+      priority: 0.3,
+    },
+    {
+      url: 'https://auditavto.ru/marketing-consent',
+      lastModified,
+      changeFrequency: 'yearly',
+      priority: 0.2,
     },
     {
       url: 'https://auditavto.ru/cookie-policy',

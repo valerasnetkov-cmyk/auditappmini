@@ -1,5 +1,11 @@
+import fs from 'node:fs/promises'
 import { normalizeVehicleNumberToCyrillic } from '../utils/transliteration.js'
 import { sendInspectionCompletedError } from '../services/inspectionReadiness.js'
+import {
+  OcrFailedError,
+  OcrProviderUnavailableError,
+  recognizeOdometerPhoto,
+} from '../services/odometerOcr.js'
 
 function ocrGate(ensureOcrAvailable) {
   return (req, res, next) => {
@@ -27,8 +33,26 @@ function subscriptionGate(ensureOperationalWriteAllowed, mode = 'create') {
   }
 }
 
+function sendOcrError(res, err) {
+  if (err instanceof OcrProviderUnavailableError) {
+    return res.status(503).json({ error: err.code, message: err.message })
+  }
+
+  if (err instanceof OcrFailedError) {
+    return res.status(422).json({ error: err.code, message: err.message })
+  }
+
+  console.error('[odometer-ocr] Unexpected OCR error:', err)
+  return res.status(500).json({ error: 'ocr_failed', message: 'OCR failed' })
+}
+
+async function removeUploadedRecognitionFile(file) {
+  if (!file?.path) return
+  await fs.rm(file.path, { force: true }).catch(() => {})
+}
+
 // Odometer recognition routes.
-// MVP returns manual-confirmation placeholders until a real OCR provider is wired.
+// OCR suggestions are assistive only; inspector confirmation remains required.
 export function registerOdometerRoutes({
   app,
   db,
@@ -45,22 +69,34 @@ export function registerOdometerRoutes({
     subscriptionGate(ensureOperationalWriteAllowed, 'create'),
     ocrGate(ensureOcrAvailable),
     upload.single('photo'),
-    (req, res) => {
+    async (req, res) => {
       if (!req.file) {
-        return res.status(400).json({ error: API_MESSAGES?.odometerPhotoRequired || 'Фото одометра обязательно' })
+        return res.status(400).json({
+          error: 'odometer_photo_required',
+          message: API_MESSAGES?.odometerPhotoRequired || 'Фото одометра обязательно',
+        })
       }
-      recordOcrUsage?.(req.user.company_id || 'default', 'odometer')
 
-      res.json({
-        raw_value: null,
-        normalized_value: null,
-        unit: 'km',
-        confidence: 0,
-        requires_manual_confirmation: true,
-        message: API_MESSAGES?.odometerRequiresManualConfirmation || 'Требуется ручное подтверждение показаний',
-        photo_url: `/uploads/${req.file.filename}`,
-        recognized_at: new Date().toISOString(),
-      })
+      try {
+        const recognition = await recognizeOdometerPhoto({ filePath: req.file.path })
+        recordOcrUsage?.(req.user.company_id || 'default', 'odometer')
+
+        return res.json({
+          raw_value: recognition.rawText || null,
+          normalized_value: recognition.normalizedValue,
+          unit: 'km',
+          confidence: recognition.confidence,
+          candidates: recognition.candidates,
+          provider: recognition.provider,
+          requires_manual_confirmation: true,
+          message: API_MESSAGES?.odometerRequiresManualConfirmation || 'Требуется ручное подтверждение показаний',
+          photo_url: `/uploads/${req.file.filename}`,
+          recognized_at: new Date().toISOString(),
+        })
+      } catch (err) {
+        await removeUploadedRecognitionFile(req.file)
+        return sendOcrError(res, err)
+      }
     },
   )
 

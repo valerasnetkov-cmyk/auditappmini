@@ -1,4 +1,5 @@
 import dotenv from 'dotenv'
+import { spawnSync } from 'node:child_process'
 import fs from 'node:fs'
 import path from 'node:path'
 import process from 'node:process'
@@ -218,6 +219,9 @@ const requestIdHeader = (process.env.REQUEST_ID_HEADER || 'x-request-id').trim()
 const accessLogFormat = process.env.ACCESS_LOG_FORMAT || (isProduction ? 'json' : 'text')
 const accessLogSlowMs = readPositiveIntegerEnv('ACCESS_LOG_SLOW_MS', 1000)
 const accessLogSkipPaths = readCsvEnv('ACCESS_LOG_SKIP_PATHS')
+const ocrOdometerProvider = process.env.OCR_ODOMETER_PROVIDER || 'mock'
+const tesseractCmd = process.env.TESSERACT_CMD || 'tesseract'
+const tesseractTimeoutMs = readPositiveIntegerEnv('TESSERACT_TIMEOUT_MS', 10000)
 
 requireProduction(Number.isInteger(securityHstsMaxAge), 'SECURITY_HSTS_MAX_AGE must be a positive integer')
 requireProduction(Boolean(securityCsp.trim()), 'SECURITY_CSP must not be empty')
@@ -240,6 +244,22 @@ requireProduction(authAccountRateLimitMax <= 100, 'AUTH_ACCOUNT_RATE_LIMIT_MAX s
 requireProduction(['json', 'text', 'off'].includes(accessLogFormat), 'ACCESS_LOG_FORMAT must be one of: json, text, off')
 requireProduction(/^[a-z0-9!#$%&'*+.^_`|~-]+$/.test(requestIdHeader), 'REQUEST_ID_HEADER must be a valid HTTP header name')
 requireProduction(accessLogSkipPaths.every(isValidAccessLogSkipPath), 'ACCESS_LOG_SKIP_PATHS must contain comma-separated absolute URL paths')
+requireProduction(['mock', 'tesseract-cli'].includes(ocrOdometerProvider), 'OCR_ODOMETER_PROVIDER must be mock or tesseract-cli')
+requireProduction(Number.isInteger(tesseractTimeoutMs), 'TESSERACT_TIMEOUT_MS must be a positive integer')
+
+if (ocrOdometerProvider === 'tesseract-cli') {
+  requireProduction(Boolean(tesseractCmd.trim()), 'TESSERACT_CMD must not be empty when OCR_ODOMETER_PROVIDER=tesseract-cli')
+  const versionCheck = spawnSync(tesseractCmd, ['--version'], {
+    encoding: 'utf8',
+    timeout: 5000,
+    windowsHide: true,
+  })
+
+  requireProduction(versionCheck.status === 0, `Tesseract command must be available: ${tesseractCmd}`)
+  if (versionCheck.status !== 0 && !isProduction) {
+    warnings.push(`[production] Tesseract command is not available: ${tesseractCmd}`)
+  }
+}
 
 const databasePath = process.env.DATABASE_PATH ? path.resolve(backendRoot, process.env.DATABASE_PATH) : null
 const uploadsDir = process.env.UPLOAD_DIR ? path.resolve(backendRoot, process.env.UPLOAD_DIR) : null
@@ -292,6 +312,9 @@ const result = {
     accessLogFormat,
     accessLogSlowMs,
     accessLogSkipPaths,
+    ocrOdometerProvider,
+    tesseractCmd: ocrOdometerProvider === 'tesseract-cli' ? tesseractCmd : null,
+    tesseractTimeoutMs,
     resourceAdminConfigured: true,
   },
   warnings,

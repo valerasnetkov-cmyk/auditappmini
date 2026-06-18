@@ -102,6 +102,14 @@
   text-underline-offset: 3px;
 }
 
+.legalText h2 {
+  padding-top: 18px;
+}
+
+.legalText p {
+  margin-top: 12px;
+}
+
 .footer {
   flex-wrap: wrap;
   justify-content: center;

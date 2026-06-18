@@ -72,6 +72,12 @@ export const MAX_IMAGE_PIXELS = parsePositiveIntegerEnv('MAX_IMAGE_PIXELS', 40_0
 
 export const JSON_BODY_LIMIT = process.env.JSON_BODY_LIMIT || '2mb'
 
+export const OCR_ODOMETER_PROVIDER = process.env.OCR_ODOMETER_PROVIDER || 'mock'
+
+export const TESSERACT_CMD = process.env.TESSERACT_CMD || 'tesseract'
+
+export const TESSERACT_TIMEOUT_MS = parsePositiveIntegerEnv('TESSERACT_TIMEOUT_MS', 10000)
+
 export const GRACEFUL_SHUTDOWN_TIMEOUT_MS = parsePositiveIntegerEnv('GRACEFUL_SHUTDOWN_TIMEOUT_MS', 10000)
 
 export const REQUEST_ID_HEADER = normalizeHeaderName(process.env.REQUEST_ID_HEADER || 'x-request-id')
@@ -95,6 +101,7 @@ const ALLOWED_ACCESS_LOG_FORMATS = ['json', 'text', 'off']
 const ALLOWED_COOP_VALUES = ['same-origin', 'same-origin-allow-popups', 'unsafe-none']
 const ALLOWED_CORP_VALUES = ['same-origin', 'same-site', 'cross-origin']
 const ALLOWED_COOKIE_SAME_SITE = ['Strict', 'Lax', 'None']
+const ALLOWED_ODOMETER_OCR_PROVIDERS = ['mock', 'tesseract-cli']
 const SAFE_OWNER_DEFAULT_PASSWORD = 'admin123'
 
 function isPathInside(parentPath, targetPath) {
@@ -180,6 +187,7 @@ export function assertProductionConfig() {
   assertPositiveInteger(PILOT_REQUEST_RATE_LIMIT_MAX, 'PILOT_REQUEST_RATE_LIMIT_MAX')
   assertPositiveInteger(AUTH_COOKIE_MAX_AGE_SECONDS, 'AUTH_COOKIE_MAX_AGE_SECONDS')
   assertPositiveInteger(MAX_IMAGE_PIXELS, 'MAX_IMAGE_PIXELS')
+  assertPositiveInteger(TESSERACT_TIMEOUT_MS, 'TESSERACT_TIMEOUT_MS')
   assertPositiveInteger(GRACEFUL_SHUTDOWN_TIMEOUT_MS, 'GRACEFUL_SHUTDOWN_TIMEOUT_MS')
   assertPositiveInteger(ACCESS_LOG_SLOW_MS, 'ACCESS_LOG_SLOW_MS')
 
@@ -194,6 +202,11 @@ export function assertProductionConfig() {
   assertOneOf(SECURITY_CROSS_ORIGIN_OPENER_POLICY, ALLOWED_COOP_VALUES, 'SECURITY_CROSS_ORIGIN_OPENER_POLICY')
   assertOneOf(SECURITY_CROSS_ORIGIN_RESOURCE_POLICY, ALLOWED_CORP_VALUES, 'SECURITY_CROSS_ORIGIN_RESOURCE_POLICY')
   assertOneOf(AUTH_COOKIE_SAME_SITE, ALLOWED_COOKIE_SAME_SITE, 'AUTH_COOKIE_SAME_SITE')
+  assertOneOf(OCR_ODOMETER_PROVIDER, ALLOWED_ODOMETER_OCR_PROVIDERS, 'OCR_ODOMETER_PROVIDER')
+
+  if (OCR_ODOMETER_PROVIDER === 'tesseract-cli' && !TESSERACT_CMD.trim()) {
+    throw new Error('TESSERACT_CMD must not be empty when OCR_ODOMETER_PROVIDER=tesseract-cli')
+  }
 
   if (AUTH_COOKIE_SAME_SITE === 'None' && !AUTH_COOKIE_SECURE) {
     throw new Error('AUTH_COOKIE_SECURE must be true when AUTH_COOKIE_SAME_SITE=None')

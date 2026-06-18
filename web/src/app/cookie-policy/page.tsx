@@ -3,7 +3,7 @@ import { PublicDocument } from '../_components/PublicDocument'
 
 export const metadata: Metadata = {
   title: 'Cookies — AuditAvto',
-  description: 'Информация о cookies и локальном хранении настроек AuditAvto.',
+  description: 'Информация о cookies, аналитике и локальном хранении настроек AuditAvto.',
   alternates: { canonical: '/cookie-policy' },
 }
 
@@ -11,8 +11,8 @@ export default function CookiePolicyPage() {
   return (
     <PublicDocument
       title="Cookies и локальное хранение"
-      description="Сервис использует технические механизмы, необходимые для входа и сохранения пользовательских настроек. Рекламные cookies на публичной странице не заявлены."
-      updated="11 июня 2026 года"
+      description="Сервис использует технические механизмы для входа, сохранения настроек и получения статистики работы публичного сайта."
+      updated="18 июня 2026 года"
     >
       <section>
         <h2>Авторизационная cookie</h2>
@@ -28,6 +28,16 @@ export default function CookiePolicyPage() {
         <p>
           Текущая production-конфигурация предусматривает срок сессии до семи дней. Выход из аккаунта
           удаляет авторизационную cookie. Администратор также может прекратить или отозвать доступ.
+        </p>
+      </section>
+
+      <section>
+        <h2>Аналитика</h2>
+        <p>
+          На публичном сайте могут использоваться cookies и аналогичные технологии аналитики,
+          включая Яндекс Метрику и, при последующем подключении, Google Analytics. Они помогают
+          оценивать посещаемость, улучшать интерфейс и качество сервиса. Подробнее цели и состав
+          обработки описаны в <a href="/privacy">политике обработки персональных данных</a>.
         </p>
       </section>
 

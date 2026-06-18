@@ -125,6 +125,18 @@ cd backend
 node -r dotenv/config src/server.js dotenv_config_path=.env.production
 ```
 
+Если включён OCR одометра через Tesseract CLI, перед стартом backend на
+pilot/staging host проверьте системную зависимость:
+
+```powershell
+tesseract --version
+npm --prefix backend run doctor:production
+npm --prefix backend run smoke:ocr:tesseract
+```
+
+Без установленного Tesseract оставьте `OCR_ODOMETER_PROVIDER=mock`, чтобы
+распознавание работало как manual-confirmation placeholder.
+
 ### Web
 
 Перед build production env должен быть уже задан:
