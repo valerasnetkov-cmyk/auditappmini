@@ -3,6 +3,9 @@
 ## Unreleased
 
 ### Changed
+- **Landing login checkbox**: чекбокс "Запомнить меня" в лендинговой форме
+  входа теперь явно включён по умолчанию и больше не отображается как
+  неактивный после гидрации.
 - **Vehicle number edit hotfix**: web API client now disables fetch caching for
   authenticated JSON requests, so vehicle detail/list data is refetched after
   `PUT /vehicles/:id`. `smoke:vehicles` covers the production regression
