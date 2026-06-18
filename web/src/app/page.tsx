@@ -250,7 +250,7 @@ export default function LandingPage() {
               <LoginForm defaultNextPath="/dashboard" showAccessAction variant="landing" />
               <div className={styles.loginNote}>
                 <UserGroupIcon aria-hidden="true" />
-                Для владельцев, менеджеров и инспекторов
+                Для владельцев и менеджеров
               </div>
             </aside>
 

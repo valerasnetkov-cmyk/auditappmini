@@ -192,7 +192,7 @@ export default function LoginForm({
       {isLanding && !mfaToken ? (
         <div className="flex items-center justify-between gap-4 text-sm">
           <label className="flex items-center gap-3 text-slate-600">
-            <input type="checkbox" checked readOnly className="h-5 w-5 rounded border-slate-300 text-primary" />
+            <input type="checkbox" className="h-5 w-5 rounded border-slate-300 text-primary" />
             Запомнить меня
           </label>
         </div>
