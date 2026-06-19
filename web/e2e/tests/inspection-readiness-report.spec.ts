@@ -38,8 +38,9 @@ test('Inspection readiness blocks incomplete completion and exposes generated PD
 
     await loginAsCompanyOwner(page)
     await page.goto(`${WEB_BASE}/inspections/${inspectionId}`)
+    await expect(page.getByText('Осмотр проводится только с мобильного устройства')).toBeVisible()
     await expect(page.getByText('Не хватает данных для завершения')).toBeVisible()
-    await expect(page.getByRole('button', { name: 'Завершить осмотр' })).toBeDisabled()
+    await expect(page.getByRole('button', { name: 'Завершить осмотр' })).toHaveCount(0)
 
     const updateResponse = await request.put(`${API_BASE}/api/inspections/${inspectionId}`, {
       headers: apiHeaders(token),

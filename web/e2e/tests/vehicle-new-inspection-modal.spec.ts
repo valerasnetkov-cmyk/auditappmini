@@ -1,7 +1,7 @@
 import { expect, test } from '@playwright/test'
 import { archiveVehicle, createVehicle, getAdminToken, loginAsAdmin, WEB_BASE } from './helpers'
 
-test('Vehicles: New Inspection modal preselects current vehicle', async ({ page, request }) => {
+test('Vehicles: web list does not expose inspection start action', async ({ page, request }) => {
   await loginAsAdmin(page)
 
   const adminToken = await getAdminToken(request)
@@ -12,12 +12,9 @@ test('Vehicles: New Inspection modal preselects current vehicle', async ({ page,
 
     const row = page.locator('tr', { hasText: vehicle.number }).first()
     await expect(row).toBeVisible({ timeout: 10000 })
-    await row.getByRole('button', { name: 'Осмотр' }).click()
-
-    await expect(page.getByText('Новый осмотр')).toBeVisible({ timeout: 5000 })
-    await expect(page.getByText(`Автомобиль: ${vehicle.number} · ${vehicle.name}`)).toBeVisible()
-
-    await page.getByRole('button', { name: 'Отмена' }).click()
+    await expect(row.getByText('Осмотр: mobile')).toBeVisible()
+    await expect(row.getByRole('button', { name: 'Осмотр' })).toHaveCount(0)
+    await expect(row.getByRole('link', { name: 'Осмотр' })).toHaveCount(0)
   } finally {
     await archiveVehicle(request, adminToken, vehicle.id)
   }

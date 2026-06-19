@@ -3,6 +3,10 @@
 ## Unreleased
 
 ### Changed
+- **Mobile-only inspection web contract**: web E2E and docs now explicitly
+  enforce that starting, conducting, editing checklist/photo/odometer data and
+  completing inspections happens only in the mobile app. The local launch gate
+  was re-run successfully after updating the web inspection tests.
 - **Public demo seed idempotency**: `provisionPublicDemo` теперь повторно
   безопасен при перезапусках production backend и переиспользует существующего
   demo-пользователя по email/id без `UNIQUE constraint failed: users.email`.
