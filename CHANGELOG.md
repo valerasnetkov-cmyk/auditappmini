@@ -7,6 +7,11 @@
   enforce that starting, conducting, editing checklist/photo/odometer data and
   completing inspections happens only in the mobile app. The local launch gate
   was re-run successfully after updating the web inspection tests.
+- **Local production gate rehearsal**: private ignored production env files can
+  now pass `doctor:production` locally; backend PM2 and web `next start` were
+  started and verified against health/readiness/login endpoints. EAS preview
+  Android build remains an operator/cloud gate after a local non-interactive
+  attempt timed out without build output.
 - **Public demo seed idempotency**: `provisionPublicDemo` теперь повторно
   безопасен при перезапусках production backend и переиспользует существующего
   demo-пользователя по email/id без `UNIQUE constraint failed: users.email`.
