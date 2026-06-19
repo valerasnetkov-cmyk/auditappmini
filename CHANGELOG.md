@@ -13,8 +13,9 @@
   Android build remains an operator/cloud gate after a local non-interactive
   attempt timed out without build output.
 - **EAS preview Android gate**: preview Android cloud build was submitted from
-  the release commit and is queued in EAS; the run exposed that preview EAS
-  environment variables still need to be configured in the EAS cloud.
+  the release commit, the missing preview EAS `EXPO_PUBLIC_API_URL` variable
+  was configured in the EAS cloud, and a replacement preview build was queued
+  with that environment loaded.
 - **Public demo seed idempotency**: `provisionPublicDemo` теперь повторно
   безопасен при перезапусках production backend и переиспользует существующего
   demo-пользователя по email/id без `UNIQUE constraint failed: users.email`.
