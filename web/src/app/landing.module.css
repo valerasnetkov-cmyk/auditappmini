@@ -500,12 +500,23 @@
 }
 
 .cardGrid,
-.fourGrid {
+.fourGrid,
+.audienceGrid {
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
 .fourGrid {
   margin-top: 30px;
+}
+
+.audienceGrid {
+  display: grid;
+  gap: 14px;
+  margin-top: 30px;
+}
+
+.audienceGrid .smallCard:first-child {
+  grid-column: span 2;
 }
 
 .threeGrid {
@@ -550,6 +561,142 @@
   color: var(--color-text-secondary);
   font-size: 14px;
   line-height: 1.5;
+}
+
+.lossPanel {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(320px, 0.78fr);
+  gap: 24px;
+  align-items: stretch;
+  border: 1px solid var(--color-border-default);
+  border-radius: 24px;
+  background: #fff;
+  padding: clamp(22px, 4vw, 34px);
+  box-shadow: 0 18px 42px rgba(15, 23, 42, 0.065);
+}
+
+.eyebrow {
+  display: inline-flex;
+  width: fit-content;
+  border-radius: 999px;
+  background: var(--color-brand-primary-soft);
+  padding: 7px 11px;
+  color: var(--color-brand-primary-active);
+  font-size: 12px;
+  font-weight: 760;
+}
+
+.lossScenario h2 {
+  max-width: 720px;
+  margin: 16px 0 0;
+  color: var(--color-text-primary);
+  font-size: clamp(27px, 2.7vw, 38px);
+  font-weight: 720;
+  line-height: 1.16;
+}
+
+.lossAmount {
+  display: grid;
+  gap: 7px;
+  width: fit-content;
+  margin-top: 24px;
+  border: 1px solid #fecaca;
+  border-radius: 18px;
+  background: #fff7ed;
+  padding: 18px 22px;
+}
+
+.lossAmount span {
+  color: var(--color-text-secondary);
+  font-size: 14px;
+  font-weight: 650;
+}
+
+.lossAmount strong {
+  color: #dc2626;
+  font-size: clamp(34px, 4vw, 52px);
+  font-weight: 760;
+  line-height: 1;
+}
+
+.lossScenario p,
+.lossResult p,
+.effectGrid p {
+  margin: 16px 0 0;
+  color: var(--color-text-secondary);
+  font-size: 15px;
+  line-height: 1.58;
+}
+
+.lossResult {
+  border: 1px solid var(--color-border-muted);
+  border-radius: 18px;
+  background: var(--color-bg-muted);
+  padding: 22px;
+}
+
+.lossResult h3,
+.effectGrid h3 {
+  margin: 0;
+  color: var(--color-text-primary);
+  font-size: 18px;
+  font-weight: 760;
+  line-height: 1.25;
+}
+
+.lossResult h3 + p {
+  margin-top: 8px;
+}
+
+.lossResult h3:not(:first-child) {
+  margin-top: 22px;
+}
+
+.lossResult ul {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  margin: 14px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.lossResult li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--color-text-secondary);
+  font-size: 14px;
+  font-weight: 650;
+}
+
+.lossResult li svg {
+  width: 18px;
+  height: 18px;
+  flex: 0 0 auto;
+  color: var(--color-brand-primary);
+}
+
+.effectGrid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
+  margin-top: 30px;
+}
+
+.effectGrid article {
+  border: 1px solid var(--color-border-default);
+  border-radius: 18px;
+  background: #fff;
+  padding: 18px;
+  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.04);
+}
+
+.effectGrid svg {
+  width: 30px;
+  height: 30px;
+  margin-bottom: 14px;
+  color: var(--color-brand-primary);
 }
 
 .productSections {
@@ -1025,7 +1172,8 @@
   .productSection,
   .benefitPanel,
   .offer,
-  .demoSection {
+  .demoSection,
+  .lossPanel {
     grid-template-columns: 1fr;
   }
 
@@ -1039,7 +1187,8 @@
 
   .threeGrid,
   .securityStrip,
-  .tariffGrid {
+  .tariffGrid,
+  .effectGrid {
     grid-template-columns: 1fr;
   }
 
@@ -1099,7 +1248,16 @@
   .heroFeatureGrid,
   .cardGrid,
   .fourGrid,
+  .audienceGrid,
   .steps {
+    grid-template-columns: 1fr;
+  }
+
+  .audienceGrid .smallCard:first-child {
+    grid-column: auto;
+  }
+
+  .lossResult ul {
     grid-template-columns: 1fr;
   }
 

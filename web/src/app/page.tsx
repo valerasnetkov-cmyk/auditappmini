@@ -3,6 +3,8 @@ import Image from 'next/image'
 import Link from 'next/link'
 import {
   ArrowRightIcon,
+  BanknotesIcon,
+  BuildingOffice2Icon,
   CameraIcon,
   ChartBarIcon,
   ChatBubbleLeftRightIcon,
@@ -14,7 +16,9 @@ import {
   KeyIcon,
   LockClosedIcon,
   ShieldCheckIcon,
+  TruckIcon,
   UserGroupIcon,
+  WrenchScrewdriverIcon,
 } from '@heroicons/react/24/outline'
 import LoginForm from './login/LoginForm'
 import { Accordion } from '@/components/ui'
@@ -100,6 +104,14 @@ const solutionCards = [
   ['Данные у руководителя', 'Владелец и менеджер видят состояние техники без сбора отчётов вручную.', UserGroupIcon],
 ]
 
+const audienceCards = [
+  ['Автопарки', 'Легковой и грузовой парк с регулярными осмотрами до и после смены.', TruckIcon],
+  ['Строительная техника', 'Экскаваторы, самосвалы и техника на объектах с высокой ценой простоя.', WrenchScrewdriverIcon],
+  ['Коммунальная техника', 'Контроль состояния машин, маршрутов, дефектов и пробега по сменам.', BuildingOffice2Icon],
+  ['Логистические компании', 'Единый стандарт фотофиксации для водителей, менеджеров и филиалов.', ChartBarIcon],
+  ['Аренда спецтехники', 'Доказательная база при передаче, возврате и спорных повреждениях.', KeyIcon],
+]
+
 const inspectionSteps = [
   ['1', 'Выбор техники', 'Инспектор выбирает автомобиль или прицеп из списка.'],
   ['2', 'Фото по зонам', 'Обязательные снимки помогают сохранить единый стандарт.'],
@@ -136,6 +148,15 @@ const benefits = [
   'Доказательная база по повреждениям',
   'Меньше зависимости от человеческого фактора',
   'Прозрачность по технике и сотрудникам',
+]
+
+const economicEffects = [
+  ['Снижение спорных случаев', 'История осмотров помогает быстрее понять, когда и где появилось повреждение.'],
+  ['Сокращение времени проверки', 'Руководитель открывает готовую карточку вместо сбора фото из переписок.'],
+  ['Единый стандарт осмотров', 'Обязательные фото и чек-листы снижают риск формальной проверки.'],
+  ['Контроль пробега', 'Пробег хранится в истории техники и сопоставляется между осмотрами.'],
+  ['История ДТП', 'События, место, фото и комментарии остаются в единой базе.'],
+  ['Контроль дефектов', 'Открытые и повторные дефекты видны без ручной сверки таблиц.'],
 ]
 
 const tariffs = [
@@ -351,10 +372,48 @@ export default function LandingPage() {
         </div>
       </section>
 
+      <section className={styles.section}>
+        <div className={styles.lossPanel}>
+          <div className={styles.lossScenario}>
+            <span className={styles.eyebrow}>Стоимость одной спорной ситуации</span>
+            <h2>Одно повреждение может стоить дороже месяца цифрового контроля</h2>
+            <div className={styles.lossAmount}>
+              <span>Повреждение автомобиля</span>
+              <strong>120 000 ₽</strong>
+            </div>
+            <p>
+              Если фотографий нет, невозможно быстро определить виновного, момент появления дефекта и состояние техники до передачи.
+            </p>
+          </div>
+          <div className={styles.lossResult}>
+            <h3>Без AuditAvto</h3>
+            <p>Затраты компании, конфликт между сотрудниками и разбор по памяти вместо фактов.</p>
+            <h3>AuditAvto хранит</h3>
+            <ul>
+              {['историю осмотров', 'фотофиксацию', 'пробег', 'дефекты', 'отчёты'].map((item) => (
+                <li key={item}><CheckCircleIcon aria-hidden="true" />{item}</li>
+              ))}
+            </ul>
+          </div>
+        </div>
+      </section>
+
+      <section className={styles.section}>
+        <SectionTitle
+          title="Для кого"
+          text="AuditAvto полезен там, где техника передаётся между людьми, работает в сменах и любая спорная ситуация превращается в прямые расходы."
+        />
+        <div className={styles.audienceGrid}>
+          {audienceCards.map(([title, text, Icon]) => (
+            <SmallCard key={title as string} title={title as string} text={text as string} icon={Icon as IconType} />
+          ))}
+        </div>
+      </section>
+
       <section id="how" className={styles.section}>
         <SectionTitle
           title="Как работает осмотр"
-          text="Пять шагов вместо разрозненных сообщений, таблиц и ручных отчётов."
+          text="Инспектор проводит осмотр, загружает фотографии, система фиксирует данные, формирует отчёт, а руководитель получает результат."
         />
         <div className={styles.steps}>
           {inspectionSteps.map(([number, title, text]) => (
@@ -414,6 +473,22 @@ export default function LandingPage() {
           <ul>
             {benefits.map((benefit) => <li key={benefit}><CheckCircleIcon aria-hidden="true" />{benefit}</li>)}
           </ul>
+        </div>
+      </section>
+
+      <section className={styles.section}>
+        <SectionTitle
+          title="Экономический эффект"
+          text="Система не просто хранит фото: она снижает стоимость хаоса вокруг осмотров, дефектов, пробега и ДТП."
+        />
+        <div className={styles.effectGrid}>
+          {economicEffects.map(([title, text]) => (
+            <article key={title}>
+              <BanknotesIcon aria-hidden="true" />
+              <h3>{title}</h3>
+              <p>{text}</p>
+            </article>
+          ))}
         </div>
       </section>
 
@@ -496,7 +571,7 @@ export default function LandingPage() {
         </div>
         <div className={styles.offerActions}>
           <PilotRequestButton source="pilot-offer" className={styles.primaryButton}>Запросить пилот <ArrowRightIcon aria-hidden="true" /></PilotRequestButton>
-          <a href="mailto:info@auditavto.ru?subject=Получить консультацию AuditAvto" className={styles.secondaryButton}>Получить консультацию</a>
+          <a href="mailto:info@auditavto.ru?subject=Получить демонстрацию AuditAvto" className={styles.secondaryButton}>Получить демонстрацию</a>
         </div>
       </section>
 
@@ -514,7 +589,7 @@ export default function LandingPage() {
       <section className={styles.finalCta}>
         <h2>Хватит собирать осмотры из чатов и таблиц</h2>
         <p>Запустите AuditAvto на части автопарка и проверьте, насколько проще становится контроль техники, дефектов, пробега и ДТП.</p>
-        <PilotRequestButton source="final-cta" className={styles.primaryButton}>Запросить пилот <ArrowRightIcon aria-hidden="true" /></PilotRequestButton>
+        <PilotRequestButton source="final-cta" className={styles.primaryButton}>Проверить систему на своём автопарке <ArrowRightIcon aria-hidden="true" /></PilotRequestButton>
       </section>
 
       <footer className={styles.footer}>

@@ -36,6 +36,9 @@
   в настройках техники вынесен в динамический chunk на момент загрузки
   Excel-файла; build wrapper переключает analyzer-сборку Next 16 на
   `--webpack`, чтобы отчёты реально генерировались.
+- **Landing conversion**: лендинг усилен финансовым сценарием “Стоимость одной
+  спорной ситуации”, блоками “Для кого” и “Экономический эффект”, уточнённым
+  описанием сценария осмотра и более сильными CTA для пилота/демонстрации.
 - **Mobile-only inspection web contract**: web E2E and docs now explicitly
   enforce that starting, conducting, editing checklist/photo/odometer data and
   completing inspections happens only in the mobile app. The local launch gate
