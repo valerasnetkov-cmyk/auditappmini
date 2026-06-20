@@ -8,6 +8,10 @@
   историю одометра без откатов, графики ДТП/одометра и сортируемые заголовки
   таблиц. PDF-отчёты дополнены публичной проверкой, QR и footer CTA
   `auditavto.ru`.
+- **Public demo self-repair**: вход в публичное демо теперь проверяет наличие
+  обязательного набора demo-данных, включая `demo-vehicle-01`, и автоматически
+  переподготавливает демо-компанию, чтобы production не отдавал 404 на карточку
+  тестовой техники после частичного или устаревшего seed.
 - **Mobile-only inspection web contract**: web E2E and docs now explicitly
   enforce that starting, conducting, editing checklist/photo/odometer data and
   completing inspections happens only in the mobile app. The local launch gate

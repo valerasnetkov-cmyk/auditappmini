@@ -42,6 +42,41 @@ const RECENT_INSPECTION_DAY_OFFSETS = [
   0,
 ]
 
+export function getPublicDemoReadiness(db) {
+  const company = db.prepare(`
+    SELECT id, access_mode, status
+    FROM companies
+    WHERE id = ?
+  `).get(PUBLIC_DEMO_COMPANY_ID)
+  const user = db.prepare(`
+    SELECT id, status, company_id
+    FROM users
+    WHERE lower(email) = lower(?)
+  `).get(PUBLIC_DEMO_EMAIL)
+  const vehicleCount = db.prepare(`
+    SELECT COUNT(*) AS count
+    FROM vehicles
+    WHERE company_id = ?
+  `).get(PUBLIC_DEMO_COMPANY_ID)?.count || 0
+  const requiredVehicle = db.prepare(`
+    SELECT id
+    FROM vehicles
+    WHERE id = ? AND company_id = ?
+  `).get(VEHICLES[0][0], PUBLIC_DEMO_COMPANY_ID)
+
+  return {
+    ready: Boolean(
+      company?.access_mode === 'demo_readonly'
+        && company.status === 'active'
+        && user?.status === 'active'
+        && user.company_id === PUBLIC_DEMO_COMPANY_ID
+        && vehicleCount >= VEHICLES.length
+        && requiredVehicle,
+    ),
+    vehicleCount,
+  }
+}
+
 function resolveDemoUserId(db) {
   const byEmail = db.prepare('SELECT id FROM users WHERE lower(email) = lower(?)').get(PUBLIC_DEMO_EMAIL)
   if (byEmail?.id) return byEmail.id

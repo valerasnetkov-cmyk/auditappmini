@@ -10,7 +10,12 @@ import {
   PUBLIC_REGISTRATION_ENABLED,
 } from '../config.js'
 import { setAuthCookie, clearAuthCookie } from '../middleware/auth.js'
-import { PUBLIC_DEMO_COMPANY_ID, PUBLIC_DEMO_EMAIL } from '../seed/publicDemo.js'
+import {
+  getPublicDemoReadiness,
+  provisionPublicDemo,
+  PUBLIC_DEMO_COMPANY_ID,
+  PUBLIC_DEMO_EMAIL,
+} from '../seed/publicDemo.js'
 
 function getWebAppUrl() {
   return (process.env.WEB_APP_URL || process.env.FRONTEND_URL || 'http://localhost:3002').replace(/\/+$/, '')
@@ -280,11 +285,28 @@ export default function registerAuthRoutes({
     return sendAuthSession(res, user)
   })
 
-  app.post('/api/auth/demo', ...publicAuthRateLimit, (req, res) => {
+  app.post('/api/auth/demo', ...publicAuthRateLimit, async (req, res) => {
     if (!PUBLIC_DEMO_ENABLED) {
       return res.status(503).json({
         error: 'demo_unavailable',
         message: 'Публичное демо сейчас недоступно.',
+      })
+    }
+
+    try {
+      const readiness = getPublicDemoReadiness(db)
+      if (!readiness.ready) {
+        console.warn(`[public-demo] repairing demo dataset before login; vehicles=${readiness.vehicleCount}`)
+        await provisionPublicDemo({
+          db,
+          password: process.env.PUBLIC_DEMO_PASSWORD,
+        })
+      }
+    } catch (error) {
+      console.error('[public-demo] unable to prepare demo dataset:', error)
+      return res.status(503).json({
+        error: 'demo_unavailable',
+        message: 'Публичное демо ещё не подготовлено.',
       })
     }
 
