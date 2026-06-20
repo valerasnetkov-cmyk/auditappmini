@@ -16,6 +16,9 @@
   заменяется экраном `HTTP 404`, если дополнительный запрос списка фото
   `/vehicles/:id/photo-options` недоступен на production; основная карточка
   продолжает отображаться, а выбор фото остаётся пустым.
+- **Landing cookie consent**: на лендинг добавлен всплывающий cookie-баннер с
+  ссылкой на `/cookie-policy` и сохранением принятого уведомления в
+  `localStorage`, чтобы посетитель не видел баннер повторно после согласия.
 - **Mobile-only inspection web contract**: web E2E and docs now explicitly
   enforce that starting, conducting, editing checklist/photo/odometer data and
   completing inspections happens only in the mobile app. The local launch gate

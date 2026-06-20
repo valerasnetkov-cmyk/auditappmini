@@ -18,6 +18,7 @@ import {
 } from '@heroicons/react/24/outline'
 import LoginForm from './login/LoginForm'
 import { Accordion } from '@/components/ui'
+import { CookieConsentBanner } from './_components/CookieConsentBanner'
 import { PilotRequestButton, PilotRequestProvider } from './_components/PilotRequestModal'
 import styles from './landing.module.css'
 
@@ -531,6 +532,7 @@ export default function LandingPage() {
         </nav>
         <a href="mailto:info@auditavto.ru">info@auditavto.ru</a>
       </footer>
+      <CookieConsentBanner />
     </main>
     </PilotRequestProvider>
   )
