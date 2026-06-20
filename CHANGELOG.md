@@ -19,6 +19,10 @@
 - **Landing cookie consent**: на лендинг добавлен всплывающий cookie-баннер с
   ссылкой на `/cookie-policy` и сохранением принятого уведомления в
   `localStorage`, чтобы посетитель не видел баннер повторно после согласия.
+- **Resource admin cookie diagnostics**: в “Команду сервиса” добавлена
+  безопасная диагностика cookie текущей админ-сессии через
+  `/api/admin/resource/session-cookies`; UI показывает только метаданные,
+  настройки, срок JWT и короткий отпечаток токена без раскрытия cookie/JWT.
 - **Mobile-only inspection web contract**: web E2E and docs now explicitly
   enforce that starting, conducting, editing checklist/photo/odometer data and
   completing inspections happens only in the mobile app. The local launch gate

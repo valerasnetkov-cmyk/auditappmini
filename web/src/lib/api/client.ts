@@ -32,6 +32,7 @@ import type {
   ResourcePaymentPayload,
   ResourcePlanPayload,
   ResourceAccess,
+  ResourceSessionCookies,
   ResourceServiceUser,
   CompanyBillingDetails,
   ServiceProfile,
@@ -854,6 +855,10 @@ class ApiClient {
 
   async getResourceServiceUsers() {
     return this.request<{ users: ResourceServiceUser[]; presets: Record<string, string[]>; permissions: string[] }>('/admin/resource/service-users')
+  }
+
+  async getResourceSessionCookies() {
+    return this.request<ResourceSessionCookies>('/admin/resource/session-cookies')
   }
 
   async createResourceServiceUser(data: { email: string; name: string; password: string; preset: string; permissions?: string[] }) {

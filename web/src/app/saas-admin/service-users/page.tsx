@@ -3,7 +3,7 @@
 import { FormEvent, useEffect, useState } from 'react'
 import Layout from '@/components/Layout'
 import api from '@/lib/api/client'
-import type { ResourceServiceUser } from '@/lib/types'
+import type { ResourceServiceUser, ResourceSessionCookies } from '@/lib/types'
 
 const permissionLabels: Record<string, string> = {
   'dashboard.view': 'Дашборд',
@@ -27,10 +27,31 @@ const permissionLabels: Record<string, string> = {
   'service_profile.manage': 'Профиль сервиса: управление',
 }
 
+function formatDateTime(value: string | null | undefined) {
+  if (!value) return 'нет данных'
+  return new Intl.DateTimeFormat('ru-RU', {
+    dateStyle: 'short',
+    timeStyle: 'medium',
+  }).format(new Date(value))
+}
+
+function formatDuration(seconds: number | null | undefined) {
+  if (typeof seconds !== 'number') return 'нет данных'
+  const days = Math.floor(seconds / 86_400)
+  const hours = Math.floor((seconds % 86_400) / 3_600)
+  const minutes = Math.floor((seconds % 3_600) / 60)
+  if (days > 0) return `${days} д ${hours} ч`
+  if (hours > 0) return `${hours} ч ${minutes} мин`
+  return `${minutes} мин`
+}
+
 export default function ServiceUsersPage() {
   const [users, setUsers] = useState<ResourceServiceUser[]>([])
   const [presets, setPresets] = useState<Record<string, string[]>>({})
   const [permissions, setPermissions] = useState<string[]>([])
+  const [sessionCookies, setSessionCookies] = useState<ResourceSessionCookies | null>(null)
+  const [sessionCookiesLoading, setSessionCookiesLoading] = useState(false)
+  const [sessionCookiesError, setSessionCookiesError] = useState('')
   const [form, setForm] = useState({ name: '', email: '', password: '', preset: 'support', permissions: [] as string[] })
   const [error, setError] = useState('')
   const [message, setMessage] = useState('')
@@ -48,8 +69,23 @@ export default function ServiceUsersPage() {
     } else setError(result.error || 'Не удалось загрузить команду')
   }
 
+  const loadSessionCookies = async () => {
+    setSessionCookiesLoading(true)
+    setSessionCookiesError('')
+    const result = await api.getResourceSessionCookies()
+    if (result.data) {
+      setSessionCookies(result.data)
+    } else {
+      setSessionCookiesError(result.error || 'Не удалось загрузить cookie текущей сессии')
+    }
+    setSessionCookiesLoading(false)
+  }
+
   useEffect(() => {
-    const timer = window.setTimeout(() => { void load() }, 0)
+    const timer = window.setTimeout(() => {
+      void load()
+      void loadSessionCookies()
+    }, 0)
     return () => window.clearTimeout(timer)
   }, [])
 
@@ -121,6 +157,73 @@ export default function ServiceUsersPage() {
         </div>
         {error ? <div className="rounded-lg bg-red-50 p-3 text-sm text-red-700">{error}</div> : null}
         {message ? <div className="rounded-lg bg-emerald-50 p-3 text-sm text-emerald-700">{message}</div> : null}
+
+        <section className="rounded-lg border bg-white p-5">
+          <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-[0.16em] text-blue-700">Session cookies</p>
+              <h2 className="mt-1 font-semibold">Cookie текущей сессии</h2>
+              <p className="mt-1 text-sm text-gray-600">Безопасная диагностика без показа значения cookie или JWT.</p>
+            </div>
+            <button
+              type="button"
+              className="rounded-lg border px-4 py-2 text-sm font-semibold text-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
+              disabled={sessionCookiesLoading}
+              onClick={() => void loadSessionCookies()}
+            >
+              {sessionCookiesLoading ? 'Обновляем...' : 'Обновить'}
+            </button>
+          </div>
+
+          {sessionCookiesError ? (
+            <div className="mt-4 rounded-lg bg-red-50 p-3 text-sm text-red-700">{sessionCookiesError}</div>
+          ) : null}
+
+          {sessionCookies ? (
+            <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+              <div className="rounded-lg border bg-gray-50 p-3">
+                <div className="text-xs text-gray-500">Статус</div>
+                <div className={`mt-1 font-semibold ${sessionCookies.authCookiePresent ? 'text-emerald-700' : 'text-amber-700'}`}>
+                  {sessionCookies.authCookiePresent ? 'Cookie найдена' : 'Cookie не найдена'}
+                </div>
+                <div className="mt-1 text-xs text-gray-500">Источник: {sessionCookies.authSource || 'нет'}</div>
+              </div>
+              <div className="rounded-lg border bg-gray-50 p-3">
+                <div className="text-xs text-gray-500">Auth-cookie</div>
+                <div className="mt-1 font-semibold">{sessionCookies.authCookieName}</div>
+                <div className="mt-1 text-xs text-gray-500">Длина: {sessionCookies.authCookieLength}</div>
+              </div>
+              <div className="rounded-lg border bg-gray-50 p-3">
+                <div className="text-xs text-gray-500">Срок JWT</div>
+                <div className="mt-1 font-semibold">{formatDuration(sessionCookies.jwt?.expiresInSeconds)}</div>
+                <div className="mt-1 text-xs text-gray-500">до {formatDateTime(sessionCookies.jwt?.expiresAt)}</div>
+              </div>
+              <div className="rounded-lg border bg-gray-50 p-3">
+                <div className="text-xs text-gray-500">Отпечаток токена</div>
+                <div className="mt-1 font-mono text-sm font-semibold">{sessionCookies.tokenFingerprint || 'нет'}</div>
+                <div className="mt-1 text-xs text-gray-500">SHA-256, первые 12 символов</div>
+              </div>
+              <div className="rounded-lg border p-3 md:col-span-2">
+                <div className="text-xs text-gray-500">Параметры cookie</div>
+                <div className="mt-2 flex flex-wrap gap-2 text-xs">
+                  <span className="rounded-full bg-blue-50 px-2 py-1 text-blue-700">HttpOnly: {sessionCookies.settings.httpOnly ? 'да' : 'нет'}</span>
+                  <span className="rounded-full bg-blue-50 px-2 py-1 text-blue-700">Secure: {sessionCookies.settings.secure ? 'да' : 'нет'}</span>
+                  <span className="rounded-full bg-blue-50 px-2 py-1 text-blue-700">SameSite: {sessionCookies.settings.sameSite}</span>
+                  <span className="rounded-full bg-blue-50 px-2 py-1 text-blue-700">Max-Age: {sessionCookies.settings.maxAgeSeconds} сек</span>
+                  <span className="rounded-full bg-blue-50 px-2 py-1 text-blue-700">Path: {sessionCookies.settings.path}</span>
+                </div>
+              </div>
+              <div className="rounded-lg border p-3 md:col-span-2">
+                <div className="text-xs text-gray-500">Cookies в запросе</div>
+                <div className="mt-2 flex flex-wrap gap-2 text-xs">
+                  {sessionCookies.cookieNames.length
+                    ? sessionCookies.cookieNames.map((name) => <span key={name} className="rounded-full bg-gray-100 px-2 py-1 text-gray-700">{name}</span>)
+                    : <span className="text-gray-500">нет cookies</span>}
+                </div>
+              </div>
+            </div>
+          ) : null}
+        </section>
 
         <form onSubmit={submit} className="rounded-lg border bg-white p-5">
           <h2 className="font-semibold">Добавить сотрудника</h2>

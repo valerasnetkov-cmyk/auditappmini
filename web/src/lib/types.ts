@@ -41,6 +41,33 @@ export type ResourceServiceUser = {
   createdAt?: string | null
 }
 
+export type ResourceSessionCookies = {
+  authCookieName: string
+  authSource: 'cookie' | 'bearer' | null
+  authCookiePresent: boolean
+  cookieNames: string[]
+  authCookieLength: number
+  jwt: {
+    subject: string | null
+    userId: string | null
+    email: string | null
+    companyId: string | null
+    role: string | null
+    issuedAt: string | null
+    expiresAt: string | null
+    expiresInSeconds: number | null
+    isExpired: boolean | null
+  } | null
+  settings: {
+    httpOnly: boolean
+    secure: boolean
+    sameSite: string
+    maxAgeSeconds: number
+    path: string
+  }
+  tokenFingerprint: string | null
+}
+
 export type CompanyBillingDetails = {
   id?: string
   legal_name?: string | null

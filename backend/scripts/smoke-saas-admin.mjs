@@ -92,6 +92,7 @@ async function run() {
     })
 
     const adminHeaders = { Authorization: `Bearer ${adminLogin.token}` }
+    const adminCookieHeaders = { Cookie: `audit_session=${encodeURIComponent(adminLogin.token)}` }
     const jsonHeaders = { ...adminHeaders, 'Content-Type': 'application/json' }
     const companyId = `resource-admin-${suffix}`
     const emptyCompanyId = `resource-empty-${suffix}`
@@ -99,6 +100,31 @@ async function run() {
     const updatedOwnerEmail = `resource-owner-updated-${suffix}@example.com`
     const paymentDate = addDaysIso(-23)
     const periodEnd = addDaysIso(7)
+
+    const bearerCookieDiagnostics = await request('/api/admin/resource/session-cookies', { headers: adminHeaders })
+    if (
+      bearerCookieDiagnostics.authSource !== 'bearer' ||
+      bearerCookieDiagnostics.authCookiePresent !== false ||
+      bearerCookieDiagnostics.authCookieName !== 'audit_session' ||
+      bearerCookieDiagnostics.authCookieLength !== 0 ||
+      bearerCookieDiagnostics.jwt?.email !== 'admin@example.com' ||
+      !bearerCookieDiagnostics.tokenFingerprint ||
+      JSON.stringify(bearerCookieDiagnostics).includes(adminLogin.token)
+    ) {
+      throw new Error(`Bearer session cookie diagnostics leaked or missed expected data: ${JSON.stringify(bearerCookieDiagnostics)}`)
+    }
+
+    const cookieOnlyDiagnostics = await request('/api/admin/resource/session-cookies', { headers: adminCookieHeaders })
+    if (
+      cookieOnlyDiagnostics.authSource !== 'cookie' ||
+      cookieOnlyDiagnostics.authCookiePresent !== true ||
+      cookieOnlyDiagnostics.authCookieLength !== adminLogin.token.length ||
+      !cookieOnlyDiagnostics.cookieNames.includes('audit_session') ||
+      cookieOnlyDiagnostics.jwt?.email !== 'admin@example.com' ||
+      JSON.stringify(cookieOnlyDiagnostics).includes(adminLogin.token)
+    ) {
+      throw new Error(`Cookie session diagnostics leaked or missed expected data: ${JSON.stringify(cookieOnlyDiagnostics)}`)
+    }
 
     const company = await request('/api/admin/resource/companies', {
       method: 'POST',
@@ -493,6 +519,7 @@ async function run() {
     })
 
     await request('/api/admin/resource/stats', { headers: { Authorization: `Bearer ${managerLogin.token}` } }, 403)
+    await request('/api/admin/resource/session-cookies', { headers: { Authorization: `Bearer ${managerLogin.token}` } }, 403)
     await request('/api/admin/resource/stats', { headers: { Authorization: `Bearer ${inspectorLogin.token}` } }, 403)
 
     await request(`/api/admin/resource/owners/${owner.id}`, {
@@ -532,6 +559,7 @@ async function run() {
       resourceManagerRbacOk: true,
       pdfReportFeaturePreserved: updatedPlan.features?.pdfReportEnabled === true,
       manualMessageRecipients: manualMessage.created,
+      sessionCookiesDiagnosticsOk: cookieOnlyDiagnostics.authCookiePresent === true,
     }, null, 2))
   } finally {
     server.kill()

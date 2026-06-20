@@ -1,5 +1,13 @@
 import bcrypt from 'bcryptjs'
+import crypto from 'node:crypto'
+import jwt from 'jsonwebtoken'
 import { v4 as uuidv4 } from 'uuid'
+import {
+  AUTH_COOKIE_MAX_AGE_SECONDS,
+  AUTH_COOKIE_NAME,
+  AUTH_COOKIE_SAME_SITE,
+  AUTH_COOKIE_SECURE,
+} from '../config.js'
 import {
   RESOURCE_PERMISSIONS,
   RESOURCE_PERMISSION_PRESETS,
@@ -17,6 +25,80 @@ const CYRILLIC_MAP = {
 
 function text(value) {
   return typeof value === 'string' ? value.trim() : ''
+}
+
+function parseCookieNamesAndValues(header) {
+  const cookies = new Map()
+  if (!header) return cookies
+
+  for (const part of String(header).split(';')) {
+    const separatorIndex = part.indexOf('=')
+    if (separatorIndex === -1) continue
+
+    const name = part.slice(0, separatorIndex).trim()
+    const value = part.slice(separatorIndex + 1).trim()
+    if (!name) continue
+
+    try {
+      cookies.set(name, decodeURIComponent(value))
+    } catch {
+      cookies.set(name, value)
+    }
+  }
+
+  return cookies
+}
+
+function getBearerToken(req) {
+  const authHeader = req.headers.authorization
+  if (!authHeader || !authHeader.startsWith('Bearer ')) return null
+  return authHeader.split(' ')[1] || null
+}
+
+function toIsoFromJwtSeconds(value) {
+  return typeof value === 'number' && Number.isFinite(value)
+    ? new Date(value * 1000).toISOString()
+    : null
+}
+
+function mapSessionCookieDiagnostics(req) {
+  const cookies = parseCookieNamesAndValues(req.headers.cookie)
+  const authCookie = cookies.get(AUTH_COOKIE_NAME) || null
+  const bearerToken = getBearerToken(req)
+  const activeToken = req.authSource === 'cookie' ? authCookie : bearerToken || authCookie
+  const decoded = activeToken ? jwt.decode(activeToken) : null
+  const nowSeconds = Math.floor(Date.now() / 1000)
+  const issuedAt = typeof decoded?.iat === 'number' ? decoded.iat : null
+  const expiresAt = typeof decoded?.exp === 'number' ? decoded.exp : null
+
+  return {
+    authCookieName: AUTH_COOKIE_NAME,
+    authSource: req.authSource || null,
+    authCookiePresent: Boolean(authCookie),
+    cookieNames: [...cookies.keys()].sort((a, b) => a.localeCompare(b)),
+    authCookieLength: authCookie ? authCookie.length : 0,
+    jwt: decoded && typeof decoded === 'object' ? {
+      subject: decoded.sub || decoded.id || null,
+      userId: decoded.id || decoded.sub || null,
+      email: decoded.email || null,
+      companyId: decoded.company_id || null,
+      role: decoded.role || null,
+      issuedAt: toIsoFromJwtSeconds(issuedAt),
+      expiresAt: toIsoFromJwtSeconds(expiresAt),
+      expiresInSeconds: expiresAt ? Math.max(0, expiresAt - nowSeconds) : null,
+      isExpired: expiresAt ? expiresAt <= nowSeconds : null,
+    } : null,
+    settings: {
+      httpOnly: true,
+      secure: AUTH_COOKIE_SECURE,
+      sameSite: AUTH_COOKIE_SAME_SITE,
+      maxAgeSeconds: AUTH_COOKIE_MAX_AGE_SECONDS,
+      path: '/',
+    },
+    tokenFingerprint: activeToken
+      ? crypto.createHash('sha256').update(activeToken).digest('hex').slice(0, 12)
+      : null,
+  }
 }
 
 function writeAudit(db, req, action, entityType, entityId, payload = null, companyId = null) {
@@ -189,6 +271,10 @@ export default function registerAdminOperationsRoutes({ app, db, authenticate })
       ORDER BY CASE role WHEN 'admin' THEN 0 ELSE 1 END, name COLLATE NOCASE
     `).all()
     res.json({ users: users.map((user) => mapResourceUser(db, user)), presets: RESOURCE_PERMISSION_PRESETS, permissions: RESOURCE_PERMISSIONS })
+  })
+
+  app.get('/api/admin/resource/session-cookies', authenticate, requirePermission(db, 'service_users.view'), (req, res) => {
+    res.json(mapSessionCookieDiagnostics(req))
   })
 
   app.post('/api/admin/resource/service-users', authenticate, requirePermission(db, 'service_users.manage'), (req, res) => {
