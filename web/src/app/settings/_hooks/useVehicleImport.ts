@@ -3,7 +3,6 @@
 import { useRef, useState } from 'react'
 import type { ChangeEvent } from 'react'
 import api from '@/lib/api/client'
-import { parseVehiclesExcel } from '../_lib/excelParser'
 import type { ImportResult, StatusMessage } from '../_lib/settings'
 
 type SetStatus = (status: StatusMessage | null) => void
@@ -40,6 +39,7 @@ export function useVehicleImport() {
     setImporting(true)
 
     try {
+      const { parseVehiclesExcel } = await import('../_lib/excelParser')
       const vehicles = await parseVehiclesExcel(await file.arrayBuffer())
       if (!vehicles.length) {
         setStatus({

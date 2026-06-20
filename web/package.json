@@ -5,7 +5,7 @@
   "scripts": {
     "dev": "next dev -p 3002",
     "start": "next start -p 3002",
-    "build": "next build",
+    "build": "node scripts/build.mjs",
     "doctor:launch": "node scripts/launch-doctor.mjs",
     "doctor:production": "node scripts/launch-doctor.mjs --production --doctor-env-file .env.production",
     "lint": "eslint",
@@ -29,6 +29,7 @@
     "react-dom": "^18.2.0"
   },
   "devDependencies": {
+    "@next/bundle-analyzer": "^16.2.9",
     "@playwright/test": "^1.40.0",
     "@tailwindcss/postcss": "^4.2.4",
     "@types/node": "^18",

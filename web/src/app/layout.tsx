@@ -87,25 +87,37 @@ export default function RootLayout({
             {children}
           </ToastProvider>
         </ThemeProvider>
-        <Script id="yandex-metrika" strategy="afterInteractive">
+        <Script id="yandex-metrika" strategy="lazyOnload">
           {`
-            (function(m,e,t,r,i,k,a){
-              m[i]=m[i]||function(){(m[i].a=m[i].a||[]).push(arguments)};
-              m[i].l=1*new Date();
-              for (var j=0;j<document.scripts.length;j++){if(document.scripts[j].src===r){return;}}
-              k=e.createElement(t),a=e.getElementsByTagName(t)[0],k.async=1,k.src=r,a.parentNode.insertBefore(k,a)
-            })(window,document,'script','https://mc.yandex.ru/metrika/tag.js?id=109752087','ym');
+            (function(){
+              function loadMetrika(){
+                (function(m,e,t,r,i,k,a){
+                  m[i]=m[i]||function(){(m[i].a=m[i].a||[]).push(arguments)};
+                  m[i].l=1*new Date();
+                  for (var j=0;j<document.scripts.length;j++){if(document.scripts[j].src===r){return;}}
+                  k=e.createElement(t),a=e.getElementsByTagName(t)[0],k.async=1,k.src=r,a.parentNode.insertBefore(k,a)
+                })(window,document,'script','https://mc.yandex.ru/metrika/tag.js?id=109752087','ym');
 
-            ym(109752087,'init',{
-              ssr:true,
-              webvisor:true,
-              clickmap:true,
-              ecommerce:'dataLayer',
-              referrer:document.referrer,
-              url:location.href,
-              accurateTrackBounce:true,
-              trackLinks:true
-            });
+                ym(109752087,'init',{
+                  ssr:true,
+                  webvisor:true,
+                  clickmap:true,
+                  ecommerce:'dataLayer',
+                  referrer:document.referrer,
+                  url:location.href,
+                  accurateTrackBounce:true,
+                  trackLinks:true
+                });
+              }
+
+              setTimeout(function(){
+                if ('requestIdleCallback' in window) {
+                  requestIdleCallback(loadMetrika, { timeout: 3000 });
+                } else {
+                  loadMetrika();
+                }
+              }, 7000);
+            })();
           `}
         </Script>
         <noscript

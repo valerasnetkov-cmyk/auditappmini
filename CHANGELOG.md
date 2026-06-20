@@ -29,6 +29,13 @@
 - **Resource admin tariff prices**: раздел “Тарифы” в админ-панели теперь
   принудительно нормализует базовые цены `pilot` / `standard` / `enterprise`
   до 5 000 / 15 000 / 50 000 ₽ перед отображением в stats/plans API.
+- **Frontend performance P1**: Яндекс Метрика переведена на `lazyOnload` и
+  дополнительно откладывает инициализацию на 7 секунд с последующим idle,
+  подключён
+  `@next/bundle-analyzer` для `ANALYZE=true npm run build`, а импорт `exceljs`
+  в настройках техники вынесен в динамический chunk на момент загрузки
+  Excel-файла; build wrapper переключает analyzer-сборку Next 16 на
+  `--webpack`, чтобы отчёты реально генерировались.
 - **Mobile-only inspection web contract**: web E2E and docs now explicitly
   enforce that starting, conducting, editing checklist/photo/odometer data and
   completing inspections happens only in the mobile app. The local launch gate
