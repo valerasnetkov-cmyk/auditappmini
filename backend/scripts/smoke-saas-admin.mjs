@@ -362,6 +362,13 @@ async function run() {
     const stats = await request('/api/admin/resource/stats', { headers: adminHeaders })
     const legacyAlias = await request('/api/admin/saas/stats', { headers: adminHeaders })
     const companyDetails = await request(`/api/admin/resource/companies/${company.id}`, { headers: adminHeaders })
+    const expectedPlanPrices = { pilot: 5000, standard: 15000, enterprise: 50000 }
+    for (const [code, price] of Object.entries(expectedPlanPrices)) {
+      const listedPlan = stats.plans?.find((item) => item.code === code)
+      if (!listedPlan || listedPlan.monthlyPriceRub !== price) {
+        throw new Error(`Resource admin plan price mismatch for ${code}: ${JSON.stringify(listedPlan)}`)
+      }
+    }
 
     if (
       companyDetails.company?.id !== company.id ||
@@ -560,6 +567,7 @@ async function run() {
       pdfReportFeaturePreserved: updatedPlan.features?.pdfReportEnabled === true,
       manualMessageRecipients: manualMessage.created,
       sessionCookiesDiagnosticsOk: cookieOnlyDiagnostics.authCookiePresent === true,
+      planPricesOk: true,
     }, null, 2))
   } finally {
     server.kill()

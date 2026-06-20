@@ -27,6 +27,25 @@ function databaseBoolean(value) {
   return value === null ? null : (value ? 1 : 0)
 }
 
+const CORE_PLAN_PRICES_RUB = {
+  pilot: 5000,
+  standard: 15000,
+  enterprise: 50000,
+}
+
+export function ensureCorePlanPrices(db) {
+  const update = db.prepare(`
+    UPDATE plans
+    SET monthly_price_rub = ?, updated_at = datetime('now')
+    WHERE code = ? AND COALESCE(monthly_price_rub, 0) != ?
+  `)
+  if (typeof update.run !== 'function') return
+
+  for (const [code, price] of Object.entries(CORE_PLAN_PRICES_RUB)) {
+    update.run(price, code, price)
+  }
+}
+
 export function mapLimit(row) {
   if (!row) return null
   return {
@@ -67,6 +86,7 @@ export function mapPlan(row) {
 }
 
 export function getPlans(db) {
+  ensureCorePlanPrices(db)
   return db.prepare(`
     SELECT code, name, max_vehicles, max_users, max_storage_mb, monthly_price_rub, ocr_enabled,
       accident_module_enabled, analytics_enabled, pdf_report_enabled, api_access_enabled, status, created_at, updated_at
@@ -76,6 +96,7 @@ export function getPlans(db) {
 }
 
 export function getPlan(db, code) {
+  ensureCorePlanPrices(db)
   return db.prepare(`
     SELECT code, name, max_vehicles, max_users, max_storage_mb, monthly_price_rub,
       ocr_enabled, accident_module_enabled, analytics_enabled, pdf_report_enabled, api_access_enabled,

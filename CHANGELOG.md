@@ -26,6 +26,9 @@
 - **Landing FAQ wording**: вопрос FAQ про преимущество над обычными фото теперь
   использует нейтральную формулировку “мессенджеры” без упоминания конкретных
   сервисов.
+- **Resource admin tariff prices**: раздел “Тарифы” в админ-панели теперь
+  принудительно нормализует базовые цены `pilot` / `standard` / `enterprise`
+  до 5 000 / 15 000 / 50 000 ₽ перед отображением в stats/plans API.
 - **Mobile-only inspection web contract**: web E2E and docs now explicitly
   enforce that starting, conducting, editing checklist/photo/odometer data and
   completing inspections happens only in the mobile app. The local launch gate
