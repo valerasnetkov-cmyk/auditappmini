@@ -23,6 +23,9 @@
   безопасная диагностика cookie текущей админ-сессии через
   `/api/admin/resource/session-cookies`; UI показывает только метаданные,
   настройки, срок JWT и короткий отпечаток токена без раскрытия cookie/JWT.
+- **Landing FAQ wording**: вопрос FAQ про преимущество над обычными фото теперь
+  использует нейтральную формулировку “мессенджеры” без упоминания конкретных
+  сервисов.
 - **Mobile-only inspection web contract**: web E2E and docs now explicitly
   enforce that starting, conducting, editing checklist/photo/odometer data and
   completing inspections happens only in the mobile app. The local launch gate
