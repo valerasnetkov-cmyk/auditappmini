@@ -37,6 +37,7 @@ export function mapLimit(row) {
     ocrEnabled: nullableBoolean(row.ocr_enabled),
     accidentModuleEnabled: nullableBoolean(row.accident_module_enabled),
     analyticsEnabled: nullableBoolean(row.analytics_enabled),
+    pdfReportEnabled: nullableBoolean(row.pdf_report_enabled),
     apiAccessEnabled: nullableBoolean(row.api_access_enabled),
     updatedAt: row.updated_at || null,
   }
@@ -57,6 +58,7 @@ export function mapPlan(row) {
       ocrEnabled: nullableBoolean(row.ocr_enabled),
       accidentModuleEnabled: nullableBoolean(row.accident_module_enabled),
       analyticsEnabled: nullableBoolean(row.analytics_enabled),
+      pdfReportEnabled: nullableBoolean(row.pdf_report_enabled),
       apiAccessEnabled: nullableBoolean(row.api_access_enabled),
     },
     createdAt: row.created_at || null,
@@ -67,7 +69,7 @@ export function mapPlan(row) {
 export function getPlans(db) {
   return db.prepare(`
     SELECT code, name, max_vehicles, max_users, max_storage_mb, monthly_price_rub, ocr_enabled,
-      accident_module_enabled, analytics_enabled, api_access_enabled, status, created_at, updated_at
+      accident_module_enabled, analytics_enabled, pdf_report_enabled, api_access_enabled, status, created_at, updated_at
     FROM plans
     ORDER BY name COLLATE NOCASE ASC
   `).all().map(mapPlan)
@@ -76,7 +78,7 @@ export function getPlans(db) {
 export function getPlan(db, code) {
   return db.prepare(`
     SELECT code, name, max_vehicles, max_users, max_storage_mb, monthly_price_rub,
-      ocr_enabled, accident_module_enabled, analytics_enabled, api_access_enabled,
+      ocr_enabled, accident_module_enabled, analytics_enabled, pdf_report_enabled, api_access_enabled,
       status, created_at, updated_at
     FROM plans
     WHERE code = ?
@@ -92,6 +94,7 @@ export function buildLimitPayload(body = {}) {
     ocrEnabled: nullableBoolean(body.ocrEnabled ?? body.ocr_enabled),
     accidentModuleEnabled: nullableBoolean(body.accidentModuleEnabled ?? body.accident_module_enabled),
     analyticsEnabled: nullableBoolean(body.analyticsEnabled ?? body.analytics_enabled),
+    pdfReportEnabled: nullableBoolean(body.pdfReportEnabled ?? body.pdf_report_enabled),
     apiAccessEnabled: nullableBoolean(body.apiAccessEnabled ?? body.api_access_enabled),
   }
 }
@@ -107,6 +110,7 @@ export function buildPlanPayload(body = {}) {
     ocrEnabled: nullableBoolean(body.ocrEnabled ?? body.ocr_enabled),
     accidentModuleEnabled: nullableBoolean(body.accidentModuleEnabled ?? body.accident_module_enabled),
     analyticsEnabled: nullableBoolean(body.analyticsEnabled ?? body.analytics_enabled),
+    pdfReportEnabled: nullableBoolean(body.pdfReportEnabled ?? body.pdf_report_enabled),
     apiAccessEnabled: nullableBoolean(body.apiAccessEnabled ?? body.api_access_enabled),
     monthlyPriceRub: nullableNumber(body.monthlyPriceRub ?? body.monthly_price_rub),
   }
@@ -135,6 +139,7 @@ export function buildPlanUpdatePayload(existing, body = {}) {
       nullableBoolean,
     ),
     analyticsEnabled: value('analyticsEnabled', 'analytics_enabled', existing.analytics_enabled, nullableBoolean),
+    pdfReportEnabled: value('pdfReportEnabled', 'pdf_report_enabled', existing.pdf_report_enabled, nullableBoolean),
     apiAccessEnabled: value('apiAccessEnabled', 'api_access_enabled', existing.api_access_enabled, nullableBoolean),
     monthlyPriceRub: value('monthlyPriceRub', 'monthly_price_rub', existing.monthly_price_rub, nullableNumber),
   }
@@ -144,9 +149,9 @@ export function upsertCompanyLimits(db, companyId, payload) {
   db.prepare(`
     INSERT INTO company_limits (
       id, company_id, plan_code, max_vehicles, max_users, max_storage_mb, ocr_enabled,
-      accident_module_enabled, analytics_enabled, api_access_enabled, updated_at
+      accident_module_enabled, analytics_enabled, pdf_report_enabled, api_access_enabled, updated_at
     )
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
     ON CONFLICT(company_id) DO UPDATE SET
       plan_code = excluded.plan_code,
       max_vehicles = excluded.max_vehicles,
@@ -155,6 +160,7 @@ export function upsertCompanyLimits(db, companyId, payload) {
       ocr_enabled = excluded.ocr_enabled,
       accident_module_enabled = excluded.accident_module_enabled,
       analytics_enabled = excluded.analytics_enabled,
+      pdf_report_enabled = excluded.pdf_report_enabled,
       api_access_enabled = excluded.api_access_enabled,
       updated_at = datetime('now')
   `).run(
@@ -167,6 +173,7 @@ export function upsertCompanyLimits(db, companyId, payload) {
     databaseBoolean(payload.ocrEnabled),
     databaseBoolean(payload.accidentModuleEnabled),
     databaseBoolean(payload.analyticsEnabled),
+    databaseBoolean(payload.pdfReportEnabled),
     databaseBoolean(payload.apiAccessEnabled),
   )
   return mapLimit(db.prepare('SELECT * FROM company_limits WHERE company_id = ?').get(companyId))

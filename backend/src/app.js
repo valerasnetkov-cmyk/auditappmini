@@ -154,6 +154,9 @@ function getVehicleById(id, companyId = null) {
   const query = companyId
     ? db.prepare(`
       SELECT v.id, v.number, v.name, v.status, v.region, v.company_id, v.created_at,
+             c.created_at AS company_created_at,
+             v.primary_photo_url, v.primary_photo_original_url, v.primary_photo_webp_url,
+             v.primary_photo_thumb_url, v.primary_photo_source,
              v.last_scheduled_inspection, v.quick_inspection_interval_days,
              v.planned_inspection_interval_days,
              (
@@ -169,10 +172,14 @@ function getVehicleById(id, companyId = null) {
                ORDER BY COALESCE(i.completed_at, i.created_at) DESC, i.id DESC LIMIT 1
              ) AS last_planned_inspection_at
       FROM vehicles v
+      LEFT JOIN companies c ON c.id = v.company_id
       WHERE v.id = ? AND v.company_id = ?
     `)
     : db.prepare(`
     SELECT v.id, v.number, v.name, v.status, v.region, v.company_id, v.created_at,
+           c.created_at AS company_created_at,
+           v.primary_photo_url, v.primary_photo_original_url, v.primary_photo_webp_url,
+           v.primary_photo_thumb_url, v.primary_photo_source,
            v.last_scheduled_inspection, v.quick_inspection_interval_days,
            v.planned_inspection_interval_days,
            (
@@ -188,6 +195,7 @@ function getVehicleById(id, companyId = null) {
              ORDER BY COALESCE(i.completed_at, i.created_at) DESC, i.id DESC LIMIT 1
            ) AS last_planned_inspection_at
     FROM vehicles v
+    LEFT JOIN companies c ON c.id = v.company_id
     WHERE v.id = ?
   `)
 
@@ -434,6 +442,10 @@ registerVehicleRoutes({
   ensureManager,
   ensureCompanyOperationalWriteAllowed,
   inspectionSchedule,
+  uploadPhoto,
+  processUploadedPhoto,
+  removeFileIfExists,
+  removePhotoFiles,
 })
 
 // ============ INSPECTIONS ============
@@ -491,6 +503,7 @@ registerInspectionReportRoutes({
   authenticate,
   inspectionReadiness,
   PHOTO_SELECT_COLUMNS,
+  ensureCompanyFeatureEnabled,
 })
 
 registerInspectionApprovalRoutes({

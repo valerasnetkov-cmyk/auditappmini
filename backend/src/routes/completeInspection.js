@@ -32,11 +32,13 @@ export default function registerCompleteInspectionRoutes({
     }
 
     const completedAt = new Date().toISOString()
+    const startedAt = inspection.started_at || inspection.created_at || completedAt
+    const durationSeconds = Math.max(0, Math.floor((new Date(completedAt).getTime() - new Date(startedAt).getTime()) / 1000))
     db.prepare(`
       UPDATE inspections
-      SET completed = 1, completed_at = ?
+      SET completed = 1, completed_at = ?, started_at = COALESCE(started_at, created_at, ?), duration_seconds = ?
       WHERE id = ? AND company_id = ?
-    `).run(completedAt, inspectionId, companyId)
+    `).run(completedAt, completedAt, durationSeconds, inspectionId, companyId)
 
     if (inspection.type === 'scheduled') {
       db.prepare(`

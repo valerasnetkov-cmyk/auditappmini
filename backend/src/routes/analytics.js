@@ -70,6 +70,15 @@ export default function registerAnalyticsRoutes({
       LIMIT 10
     `).all(companyId)
 
+    const accidentsByMonth = db.prepare(`
+      SELECT strftime('%Y-%m', COALESCE(accident_occurred_at, created_at)) as month, COUNT(*) as count
+      FROM inspections
+      WHERE company_id = ? AND type = 'accident'
+      GROUP BY month
+      ORDER BY month DESC
+      LIMIT 12
+    `).all(companyId).reverse()
+
     const dailyInspections = db.prepare(`
       SELECT DATE(created_at) as date, COUNT(*) as count
       FROM inspections
@@ -101,6 +110,7 @@ export default function registerAnalyticsRoutes({
         total: totalAccidents,
         daysWithoutAccident,
         recent: recentAccidents,
+        byMonth: accidentsByMonth,
       },
       vehiclesByRegion: db.prepare(`
         SELECT COALESCE(region, 'Не указано') as region, COUNT(*) as count
@@ -145,20 +155,37 @@ export default function registerAnalyticsRoutes({
 
     if (type === 'vehicles') {
       data = db.prepare(`
-        SELECT v.number, v.name, v.status, v.region, v.created_at,
-               (SELECT COUNT(*) FROM inspections WHERE vehicle_id = v.id) as inspections_count,
-               (SELECT COUNT(*) FROM defects d JOIN inspections i ON d.inspection_id = i.id WHERE i.vehicle_id = v.id) as defects_count
+        SELECT v.number AS 'Госномер',
+               v.name AS 'Техника',
+               v.status AS 'Статус',
+               COALESCE(v.region, 'Не указан') AS 'Регион',
+               v.created_at AS 'Дата регистрации',
+               (SELECT COUNT(*) FROM inspections i WHERE i.vehicle_id = v.id AND i.company_id = v.company_id) AS 'Осмотров',
+               (SELECT COUNT(*) FROM defects d JOIN inspections i ON d.inspection_id = i.id WHERE i.vehicle_id = v.id AND i.company_id = v.company_id) AS 'Дефектов'
         FROM vehicles v
         WHERE v.company_id = ?
         ORDER BY v.number
       `).all(companyId)
-      filename = 'vehicles.json'
+      filename = 'vehicles.xlsx'
     } else if (type === 'inspections') {
       data = db.prepare(`
-        SELECT i.id, v.number as vehicle_number, v.name as vehicle_name,
-               i.type, i.completed, i.created_at, i.accident_occurred_at, i.accident_location,
-               u.name as inspector_name,
-               (SELECT COUNT(*) FROM defects WHERE inspection_id = i.id) as defects_count
+        SELECT i.id AS 'ID осмотра',
+               v.number AS 'Госномер',
+               v.name AS 'Техника',
+               COALESCE(v.region, 'Не указан') AS 'Регион',
+               i.type AS 'Тип',
+               CASE WHEN i.completed = 1 THEN 'Завершён' ELSE 'Не завершён' END AS 'Статус',
+               COALESCE(i.started_at, i.created_at) AS 'Начат',
+               i.completed_at AS 'Завершён',
+               CASE
+                 WHEN i.completed_at IS NULL THEN NULL
+                 ELSE COALESCE(i.duration_seconds, CAST(strftime('%s', i.completed_at) - strftime('%s', COALESCE(i.started_at, i.created_at)) AS INTEGER))
+               END AS 'Длительность, сек',
+               i.created_at AS 'Создан',
+               i.accident_occurred_at AS 'Время ДТП',
+               i.accident_location AS 'Место ДТП',
+               u.name AS 'Инспектор',
+               (SELECT COUNT(*) FROM defects WHERE inspection_id = i.id AND company_id = i.company_id) AS 'Дефектов'
         FROM inspections i
         JOIN vehicles v ON i.vehicle_id = v.id
         JOIN users u ON i.inspector_id = u.id
@@ -166,12 +193,17 @@ export default function registerAnalyticsRoutes({
         ORDER BY i.created_at DESC
         LIMIT 1000
       `).all(companyId)
-      filename = 'inspections.json'
+      filename = 'inspections.xlsx'
     } else if (type === 'defects') {
       data = db.prepare(`
-        SELECT d.title, d.comment, d.status, d.created_at,
-               v.number as vehicle_number, v.name as vehicle_name,
-               i.type as inspection_type
+        SELECT d.title AS 'Дефект',
+               d.comment AS 'Комментарий',
+               d.status AS 'Статус',
+               d.severity AS 'Критичность',
+               d.created_at AS 'Создан',
+               v.number AS 'Госномер',
+               v.name AS 'Техника',
+               i.type AS 'Тип осмотра'
         FROM defects d
         JOIN inspections i ON d.inspection_id = i.id
         JOIN vehicles v ON i.vehicle_id = v.id
@@ -179,7 +211,7 @@ export default function registerAnalyticsRoutes({
         ORDER BY d.created_at DESC
         LIMIT 1000
       `).all(companyId)
-      filename = 'defects.json'
+      filename = 'defects.xlsx'
     }
 
     res.setHeader('Content-Type', 'application/json')

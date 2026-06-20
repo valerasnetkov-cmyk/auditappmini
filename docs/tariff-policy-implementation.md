@@ -39,8 +39,8 @@
 
 | Параметр | Значение |
 |---|---:|
-| Цена в месяц | 9 900 ₽ |
-| Цена за 3 месяца пилота | 29 000 ₽ |
+| Цена в месяц | 5 000 ₽ |
+| Цена за 3 месяца пилота | 15 000 ₽ |
 | Техника | до 10 |
 | Пользователи | до 3 |
 | Осмотры в месяц | до 300 |
@@ -65,8 +65,8 @@
 
 | Параметр | Значение |
 |---|---:|
-| Цена в месяц | 24 900 ₽ |
-| Цена в год | 249 000 ₽ |
+| Цена в месяц | 15 000 ₽ |
+| Цена в год | 150 000 ₽ |
 | Техника | до 50 |
 | Пользователи | до 10 |
 | Осмотры в месяц | до 2 000 |
@@ -92,7 +92,7 @@
 
 | Параметр | Значение |
 |---|---:|
-| Цена в месяц | от 79 000 ₽ |
+| Цена в месяц | 50 000 ₽ |
 | Цена в год | индивидуально |
 | Техника | от 150 |
 | Пользователи | от 30 |
@@ -325,7 +325,7 @@ enterprise
 {
   "code": "pilot",
   "name": "Пилот",
-  "monthly_price_rub": 9900,
+  "monthly_price_rub": 5000,
   "yearly_price_rub": null,
   "trial_months": 3,
   "recommended": false,
@@ -351,8 +351,8 @@ enterprise
 {
   "code": "standard",
   "name": "Стандарт",
-  "monthly_price_rub": 24900,
-  "yearly_price_rub": 249000,
+  "monthly_price_rub": 15000,
+  "yearly_price_rub": 150000,
   "trial_months": 0,
   "recommended": true,
   "max_vehicles": 50,
@@ -377,7 +377,7 @@ enterprise
 {
   "code": "enterprise",
   "name": "Enterprise",
-  "monthly_price_rub": 79000,
+  "monthly_price_rub": 50000,
   "yearly_price_rub": null,
   "trial_months": 0,
   "recommended": false,
@@ -673,8 +673,8 @@ GET /api/company/usage
   "plan": {
     "code": "standard",
     "name": "Стандарт",
-    "monthly_price_rub": 24900,
-    "yearly_price_rub": 249000,
+    "monthly_price_rub": 15000,
+    "yearly_price_rub": 150000,
     "recommended": true
   },
   "billing": {
@@ -683,7 +683,7 @@ GET /api/company/usage
     "trial_until": null,
     "days_left": 24,
     "last_payment_date": "2026-06-30",
-    "last_payment_amount_rub": 24900
+    "last_payment_amount_rub": 15000
   },
   "usage": {
     "vehicles": { "used": 38, "limit": 50 },
@@ -768,7 +768,7 @@ Payload:
 
 ```json
 {
-  "amount_rub": 24900,
+  "amount_rub": 15000,
   "payment_date": "2026-06-30",
   "period_start": "2026-07-01",
   "period_end": "2026-07-31",

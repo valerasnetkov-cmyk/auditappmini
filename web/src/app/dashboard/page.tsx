@@ -36,6 +36,7 @@ export default function DashboardPage() {
   const exportHook = useDashboardExport()
 
   const analyticsEnabled = dashboard.usage?.features.analytics.enabled !== false
+  const exportEnabled = analyticsEnabled && dashboard.usage?.features.export?.enabled !== false
   const canSeedDemoData = isManagerRole(dashboard.user?.role)
   const createRestriction = getCompanyOperationRestriction(dashboard.usage, 'create')
 
@@ -147,9 +148,9 @@ export default function DashboardPage() {
 
         <DashboardFilters
           dateRange={dateRange} customFrom={customFrom} customTo={customTo}
-          analyticsEnabled={analyticsEnabled} onRangeChange={handleDateRangeChange}
+          analyticsEnabled={analyticsEnabled} exportEnabled={exportEnabled} onRangeChange={handleDateRangeChange}
           onCustomFromChange={setCustomFrom} onCustomToChange={setCustomTo}
-          onExport={(type) => void exportHook.exportData(type, showToast, analyticsEnabled)}
+          onExport={(type) => void exportHook.exportData(type, showToast, exportEnabled)}
         />
 
         {dashboard.loading ? (
@@ -174,6 +175,14 @@ export default function DashboardPage() {
                 value={analyticsEnabled ? dashboard.analytics?.week?.inspections || 0 : dashboard.stats.inspectionsToday} tone="purple" code="PR" />
             </section>
 
+            <section className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-5">
+              <StatCard label="Просрочено осмотров" value={dashboard.stats.overdueInspections} tone={dashboard.stats.overdueInspections ? 'danger' : 'success'} code="OD" />
+              <StatCard label="Открытых дефектов" value={dashboard.stats.openDefects} tone={dashboard.stats.openDefects ? 'warning' : 'success'} code="OP" />
+              <StatCard label="Критических дефектов" value={dashboard.stats.criticalDefects} tone={dashboard.stats.criticalDefects ? 'danger' : 'success'} code="CR" />
+              <StatCard label="Незавершённых осмотров" value={dashboard.stats.unfinishedInspections} tone={dashboard.stats.unfinishedInspections ? 'warning' : 'success'} code="DR" />
+              <StatCard label="Ошибок загрузки фото" value={dashboard.stats.failedPhotoUploads} tone={dashboard.stats.failedPhotoUploads ? 'danger' : 'success'} code="UP" />
+            </section>
+
             {!analyticsEnabled ? (
               <section className="card mb-6 border-amber-200 bg-amber-50 p-5 text-sm text-amber-900">
                 Аналитический модуль отключён тарифом компании. Основная оперативная сводка остаётся доступной, а графики, ДТП-статистика по аналитике и экспорт скрыты до включения модуля владельцем компании.
@@ -181,7 +190,7 @@ export default function DashboardPage() {
             ) : (
               <>
                 <section className="mb-6 grid grid-cols-1 gap-6 xl:grid-cols-2">
-                  {dashboard.accidentStats ? <AccidentCard stats={dashboard.accidentStats} /> : null}
+                  {dashboard.accidentStats?.total ? <AccidentCard stats={dashboard.accidentStats} /> : null}
                   {dashboard.analytics?.defectsByRegion?.length ? (
                     <ChartCard title="Дефекты по регионам" tone="danger">
                       <RegionBarChart items={dashboard.analytics.defectsByRegion} tone="danger" ariaLabel="График дефектов по регионам" />

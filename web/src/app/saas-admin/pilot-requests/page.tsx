@@ -339,6 +339,7 @@ export default function PilotRequestsPage() {
                 ['ocrEnabled', 'OCR'],
                 ['accidentModuleEnabled', 'ДТП'],
                 ['analyticsEnabled', 'Аналитика'],
+                ['pdfReportEnabled', 'PDF-отчёты'],
                 ['exportEnabled', 'Экспорт'],
               ].map(([key, label]) => (
                 <label key={key} className="flex items-center gap-2 text-sm">

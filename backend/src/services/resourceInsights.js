@@ -51,6 +51,7 @@ export function buildLimitUsage(companies) {
     ocrEnabled: Boolean(company.limits?.ocrEnabled),
     accidentModuleEnabled: Boolean(company.limits?.accidentModuleEnabled),
     analyticsEnabled: Boolean(company.limits?.analyticsEnabled),
+    pdfReportEnabled: Boolean(company.limits?.pdfReportEnabled),
     apiAccessEnabled: Boolean(company.limits?.apiAccessEnabled),
     riskLevel: getLimitRiskLevel(company.vehiclesUsagePercent, company.usersUsagePercent),
   }))
@@ -62,6 +63,7 @@ export function buildLimitUsage(companies) {
       ocr: usage.filter((company) => !company.ocrEnabled).length,
       accidentModule: usage.filter((company) => !company.accidentModuleEnabled).length,
       analytics: usage.filter((company) => !company.analyticsEnabled).length,
+      pdfReport: usage.filter((company) => !company.pdfReportEnabled).length,
       apiAccess: usage.filter((company) => !company.apiAccessEnabled).length,
     },
     usage,

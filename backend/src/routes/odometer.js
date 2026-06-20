@@ -51,6 +51,36 @@ async function removeUploadedRecognitionFile(file) {
   await fs.rm(file.path, { force: true }).catch(() => {})
 }
 
+function getPreviousOdometerReading(db, inspection) {
+  return db.prepare(`
+    SELECT id, odometer_value, odometer_unit, COALESCE(completed_at, created_at) AS measured_at
+    FROM inspections
+    WHERE company_id = ?
+      AND vehicle_id = ?
+      AND id <> ?
+      AND odometer_value IS NOT NULL
+      AND datetime(COALESCE(completed_at, created_at)) <= datetime(COALESCE(?, ?))
+    ORDER BY datetime(COALESCE(completed_at, created_at)) DESC
+    LIMIT 1
+  `).get(
+    inspection.company_id,
+    inspection.vehicle_id,
+    inspection.id,
+    inspection.completed_at,
+    inspection.created_at,
+  )
+}
+
+function validateOdometerProgression(db, inspection, nextValue) {
+  const previous = getPreviousOdometerReading(db, inspection)
+  if (!previous || Number(nextValue) >= Number(previous.odometer_value)) return null
+
+  return {
+    previous,
+    message: `Показание одометра не может быть меньше предыдущего: ${previous.odometer_value} ${previous.odometer_unit || 'km'}`,
+  }
+}
+
 // Odometer recognition routes.
 // OCR suggestions are assistive only; inspector confirmation remains required.
 export function registerOdometerRoutes({
@@ -116,6 +146,15 @@ export function registerOdometerRoutes({
       return res.status(404).json({ error: API_MESSAGES?.inspectionNotFound || 'Осмотр не найден' })
     }
     if (inspection.completed) return sendInspectionCompletedError(res)
+
+    const progressionError = validateOdometerProgression(db, inspection, Number(odometer_value))
+    if (progressionError) {
+      return res.status(400).json({
+        error: 'odometer_value_decreased',
+        message: progressionError.message,
+        previous: progressionError.previous,
+      })
+    }
 
     db.prepare(`
       UPDATE inspections

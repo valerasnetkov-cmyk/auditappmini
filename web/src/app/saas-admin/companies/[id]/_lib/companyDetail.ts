@@ -94,6 +94,7 @@ export function limitFormFromData(data: SaasCompanyDetailsResponse | null): Limi
     ocrEnabled: data?.limits?.ocrEnabled ?? true,
     accidentModuleEnabled: data?.limits?.accidentModuleEnabled ?? true,
     analyticsEnabled: data?.limits?.analyticsEnabled ?? true,
+    pdfReportEnabled: data?.limits?.pdfReportEnabled ?? true,
     apiAccessEnabled: data?.limits?.apiAccessEnabled ?? false,
   }
 }

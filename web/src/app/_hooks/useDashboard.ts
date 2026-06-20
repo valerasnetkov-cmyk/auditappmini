@@ -3,7 +3,7 @@
 import { useCallback, useState } from 'react'
 import api from '@/lib/api/client'
 import type { AnalyticsOverview, CompanyUsageResponse, AuthUser, DashboardStats, ExportType, NotificationItem } from '@/lib/types'
-import { buildExportFilename, getAnalyticsParams, makeCsv, type DateRange } from '../_lib/dashboard'
+import { buildExcelExportFilename, getAnalyticsParams, type DateRange } from '../_lib/dashboard'
 import type { ToastTone } from '../_lib/dashboard'
 
 type LoadDashboardDeps = {
@@ -20,6 +20,11 @@ export function useDashboard() {
     vehiclesWithDefects: 0,
     totalInspections: 0,
     inspectionsToday: 0,
+    overdueInspections: 0,
+    openDefects: 0,
+    criticalDefects: 0,
+    unfinishedInspections: 0,
+    failedPhotoUploads: 0,
   })
   const [notifications, setNotifications] = useState<NotificationItem[]>([])
   const [accidentStats, setAccidentStats] = useState<AnalyticsOverview['accidents'] | null>(null)
@@ -80,6 +85,11 @@ export function useDashboard() {
         vehiclesWithDefects: statsData.vehiclesWithDefects || 0,
         totalInspections: statsData.totalInspections || 0,
         inspectionsToday: statsData.inspectionsToday || 0,
+        overdueInspections: statsData.overdueInspections || 0,
+        openDefects: statsData.openDefects || 0,
+        criticalDefects: statsData.criticalDefects || 0,
+        unfinishedInspections: statsData.unfinishedInspections || 0,
+        failedPhotoUploads: statsData.failedPhotoUploads || 0,
       })
       setNotifications(notifRes.data || [])
       setAccidentStats(analyticsData?.accidents || null)
@@ -100,24 +110,60 @@ export function useDashboardExport() {
   const [seeding, setSeeding] = useState(false)
 
   const exportData = useCallback(
-    async (type: ExportType, showToast: (text: string, tone?: ToastTone) => void, analyticsEnabled: boolean) => {
-      if (!analyticsEnabled) {
-        showToast('Аналитика и экспорт отключены тарифом компании', 'info')
+    async (type: ExportType, showToast: (text: string, tone?: ToastTone) => void, exportEnabled: boolean) => {
+      if (!exportEnabled) {
+        showToast('Экспорт отчётов отключён тарифом компании', 'info')
         return
       }
 
       try {
         const result = await api.exportData(type)
-        const items = result.data ?? []
+        if (result.error) {
+          showToast(result.error, 'danger')
+          return
+        }
+
+        const items = result.data?.data ?? []
 
         if (!items.length) {
           showToast('Нет данных для экспорта', 'info')
           return
         }
 
-        const filename = buildExportFilename(type, 'csv')
-        const content = makeCsv(items)
-        const blob = new Blob([content], { type: 'text/csv;charset=utf-8' })
+        const ExcelJS = await import('exceljs')
+        const workbook = new ExcelJS.Workbook()
+        const worksheet = workbook.addWorksheet('Отчёт')
+        const headers = Object.keys(items[0])
+
+        worksheet.columns = headers.map((header) => ({
+          header,
+          key: header,
+          width: Math.min(42, Math.max(14, header.length + 4)),
+        }))
+        worksheet.addRows(items)
+        worksheet.views = [{ state: 'frozen', ySplit: 1 }]
+        worksheet.autoFilter = {
+          from: { row: 1, column: 1 },
+          to: { row: 1, column: headers.length },
+        }
+        worksheet.getRow(1).font = { bold: true }
+        worksheet.getRow(1).fill = {
+          type: 'pattern',
+          pattern: 'solid',
+          fgColor: { argb: 'FFEFF6FF' },
+        }
+        headers.forEach((header, index) => {
+          const column = worksheet.getColumn(index + 1)
+          let maxLength = header.length
+          column.values.forEach((value) => {
+            maxLength = Math.max(maxLength, String(value ?? '').length)
+          })
+          column.width = Math.min(48, Math.max(14, maxLength + 2))
+        })
+
+        const filename = buildExcelExportFilename(type)
+        const content = await workbook.xlsx.writeBuffer()
+        const blob = new Blob([content], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })
         const url = URL.createObjectURL(blob)
         const anchor = document.createElement('a')
 

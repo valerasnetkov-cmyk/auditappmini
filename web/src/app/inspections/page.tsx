@@ -21,6 +21,7 @@ type SortableInspectionKey =
   | 'vehicle_region'
   | 'inspector_name'
   | 'type'
+  | 'duration_seconds'
   | 'defects_count'
 
 type SortConfig = {
@@ -67,6 +68,15 @@ function formatDateTime(value?: string | null) {
 function getSortMarker(sortConfig: SortConfig, key: SortableInspectionKey) {
   if (sortConfig.key !== key) return '↕'
   return sortConfig.direction === 'asc' ? '↑' : '↓'
+}
+
+function formatDuration(seconds?: number | null, completed?: number | boolean) {
+  if (!completed || seconds === null || seconds === undefined) return 'Осмотр не завершён'
+  const totalMinutes = Math.max(1, Math.round(seconds / 60))
+  const hours = Math.floor(totalMinutes / 60)
+  const minutes = totalMinutes % 60
+  if (!hours) return `${minutes} мин`
+  return minutes ? `${hours} ч ${minutes} мин` : `${hours} ч`
 }
 
 export default function InspectionsPage() {
@@ -364,6 +374,7 @@ function InspectionsTable({
               <SortableHeader label="ДТП" sortKey="accident_occurred_at" sortConfig={sortConfig} onSort={onSort} />
               <SortableHeader label="Техника" sortKey="vehicle_number" sortConfig={sortConfig} onSort={onSort} />
               <SortableHeader label="Инспектор" sortKey="inspector_name" sortConfig={sortConfig} onSort={onSort} />
+              <SortableHeader label="Длительность" sortKey="duration_seconds" sortConfig={sortConfig} onSort={onSort} />
               <SortableHeader label="Дефекты" sortKey="defects_count" sortConfig={sortConfig} onSort={onSort} />
               <th className="px-5 py-3 text-left text-xs font-semibold uppercase tracking-wider text-foreground-muted">Действия</th>
             </tr>
@@ -375,7 +386,7 @@ function InspectionsTable({
               ))
             ) : (
               <tr>
-                <td colSpan={6} className="px-6 py-12 text-center text-foreground-muted">
+                <td colSpan={7} className="px-6 py-12 text-center text-foreground-muted">
                   Осмотры не найдены
                 </td>
               </tr>
@@ -447,6 +458,11 @@ function InspectionRow({
       </td>
       <td className="px-5 py-4 align-top">
         <div className="font-medium text-foreground">{inspection.inspector_name}</div>
+      </td>
+      <td className="px-5 py-4 align-top">
+        <div className={inspection.completed ? 'font-medium text-foreground' : 'text-foreground-muted'}>
+          {formatDuration(inspection.duration_seconds, inspection.completed)}
+        </div>
       </td>
       <td className="px-5 py-4 align-top">
         {inspection.defects_count > 0 ? (

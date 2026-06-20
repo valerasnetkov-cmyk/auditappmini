@@ -95,6 +95,11 @@ const DEMO_ALLOWED_UNSAFE_PATHS = new Set([
   '/api/vehicles/resolve-number',
 ])
 
+function isDemoAllowedUnsafePath(pathname) {
+  return DEMO_ALLOWED_UNSAFE_PATHS.has(pathname)
+    || /^\/api\/inspections\/[^/]+\/report$/.test(pathname)
+}
+
 export function createAuthenticateMiddleware({ getDb, getApiMessages, sendError, isTenantUserEndpoint }) {
   return (req, res, next) => {
     const apiMessages = getApiMessages()
@@ -155,7 +160,7 @@ export function createAuthenticateMiddleware({ getDb, getApiMessages, sendError,
       if (
         req.user.access_mode === 'demo_readonly'
         && isUnsafeMethod(req.method)
-        && !DEMO_ALLOWED_UNSAFE_PATHS.has(req.path)
+        && !isDemoAllowedUnsafePath(req.path)
       ) {
         return res.status(403).json({
           error: 'demo_read_only',

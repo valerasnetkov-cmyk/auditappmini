@@ -3,6 +3,11 @@
 ## Unreleased
 
 ### Changed
+- **AuditAvto product polish**: обновлены тарифы 5 000 / 15 000 / 50 000 ₽,
+  demo-контур получил Excel/PDF-выгрузки, адаптивные дефекты, реалистичную
+  историю одометра без откатов, графики ДТП/одометра и сортируемые заголовки
+  таблиц. PDF-отчёты дополнены публичной проверкой, QR и footer CTA
+  `auditavto.ru`.
 - **Mobile-only inspection web contract**: web E2E and docs now explicitly
   enforce that starting, conducting, editing checklist/photo/odometer data and
   completing inspections happens only in the mobile app. The local launch gate

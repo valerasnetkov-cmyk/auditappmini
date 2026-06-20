@@ -41,6 +41,7 @@ export default function ResourceCompanyDetailsPage() {
         ocrEnabled: Boolean(details.limitForm.ocrEnabled),
         accidentModuleEnabled: Boolean(details.limitForm.accidentModuleEnabled),
         analyticsEnabled: Boolean(details.limitForm.analyticsEnabled),
+        pdfReportEnabled: Boolean(details.limitForm.pdfReportEnabled),
         apiAccessEnabled: Boolean(details.limitForm.apiAccessEnabled),
       })
       if (result.data) {

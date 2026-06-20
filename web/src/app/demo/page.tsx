@@ -11,6 +11,7 @@ import {
   TruckIcon,
 } from '@heroicons/react/24/outline'
 import { DemoLoginButton } from './DemoLoginButton'
+import { PilotRequestButton, PilotRequestProvider } from '../_components/PilotRequestModal'
 
 export const metadata: Metadata = {
   title: 'Демо системы контроля автопарка',
@@ -25,8 +26,6 @@ export const metadata: Metadata = {
   },
 }
 
-const pilotHref = '/?pilot=1&source=demo'
-
 const demoItems = [
   [TruckIcon, 'Тестовый автопарк', '12 единиц техники с разными статусами и историей.'],
   [ClipboardDocumentCheckIcon, 'Осмотры', 'Быстрые, плановые и ДТП-осмотры с чек-листами.'],
@@ -38,6 +37,7 @@ const demoItems = [
 
 export default function DemoPage() {
   return (
+    <PilotRequestProvider>
     <main className="min-h-screen bg-[var(--color-bg-app)] px-5 py-8 text-foreground sm:px-8 lg:py-14">
       <div className="mx-auto max-w-6xl">
         <header className="flex items-center justify-between gap-4">
@@ -57,7 +57,7 @@ export default function DemoPage() {
             </p>
             <div className="mt-8 flex flex-col items-start gap-4 sm:flex-row sm:items-center">
               <DemoLoginButton />
-              <a href={pilotHref} className="btn btn-secondary min-w-44">Запросить пилот</a>
+              <PilotRequestButton source="demo" className="btn btn-secondary min-w-44">Запросить пилот</PilotRequestButton>
             </div>
             <p className="mt-5 text-sm text-foreground-muted">
               Регистрация не требуется. Демо открывается в режиме просмотра.
@@ -99,5 +99,6 @@ export default function DemoPage() {
         </section>
       </div>
     </main>
+    </PilotRequestProvider>
   )
 }

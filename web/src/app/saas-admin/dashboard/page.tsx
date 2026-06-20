@@ -140,10 +140,11 @@ export default function ResourceAdminDashboardPage() {
             <section className="overflow-hidden rounded-lg border bg-white">
               <div className="border-b px-4 py-4">
                 <SectionHeader title="Использование лимитов" description="Heatmap компаний, близких к лимитам тарифа или работающих с отключенными модулями." />
-                <div className="grid gap-3 md:grid-cols-4">
+                <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
                   <MetricCard label="Лимит техники 80%+" value={formatNumber(stats.limit_usage?.companiesNearVehicleLimit)} />
                   <MetricCard label="Лимит пользователей 80%+" value={formatNumber(stats.limit_usage?.companiesNearUserLimit)} />
                   <MetricCard label="OCR выключен" value={formatNumber(stats.limit_usage?.disabledModules?.ocr)} />
+                  <MetricCard label="PDF выключен" value={formatNumber(stats.limit_usage?.disabledModules?.pdfReport)} />
                   <MetricCard label="API выключен" value={formatNumber(stats.limit_usage?.disabledModules?.apiAccess)} />
                 </div>
               </div>

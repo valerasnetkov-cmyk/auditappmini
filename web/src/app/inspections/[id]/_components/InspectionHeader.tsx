@@ -1,5 +1,6 @@
 'use client'
 
+import { useState } from 'react'
 import Link from 'next/link'
 import { getTypeLabel, getTypeStyle } from '../_lib/checklist'
 import type { InspectionDetail } from '@/lib/types'
@@ -18,6 +19,28 @@ export default function InspectionHeader({
   onGenerateReport: () => void
   onDownloadReport: () => void
 }) {
+  const [copied, setCopied] = useState(false)
+
+  const copyPublicLink = async () => {
+    if (!report?.public_url) return
+    try {
+      await navigator.clipboard.writeText(report.public_url)
+    } catch {
+      const textarea = document.createElement('textarea')
+      textarea.value = report.public_url
+      textarea.style.position = 'fixed'
+      textarea.style.opacity = '0'
+      document.body.appendChild(textarea)
+      textarea.focus()
+      textarea.select()
+      document.execCommand('copy')
+      document.body.removeChild(textarea)
+    }
+    setCopied(true)
+    window.setTimeout(() => setCopied(false), 1800)
+  }
+  const reportReady = report?.status === 'ready' && report.integrity_status === 'valid'
+
   return (
     <div className="mb-6 flex flex-wrap items-start justify-between gap-4">
       <div>
@@ -43,7 +66,7 @@ export default function InspectionHeader({
             >
               {reportLoading ? 'Формирование…' : report ? 'Сформировать заново' : 'Сформировать отчёт'}
             </button>
-            {report?.status === 'ready' && report.integrity_status === 'valid' ? (
+            {reportReady ? (
               <button
                 onClick={onDownloadReport}
                 disabled={reportLoading}
@@ -51,6 +74,25 @@ export default function InspectionHeader({
               >
                 Скачать PDF
               </button>
+            ) : null}
+            {reportReady && report.public_url ? (
+              <>
+                <Link
+                  href={report.public_url}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="btn btn-secondary"
+                >
+                  Публичная проверка
+                </Link>
+                <button
+                  onClick={() => void copyPublicLink()}
+                  disabled={reportLoading}
+                  className="btn btn-secondary"
+                >
+                  {copied ? 'Ссылка скопирована' : 'Скопировать ссылку'}
+                </button>
+              </>
             ) : null}
             {report?.generated_at ? (
               <span className="w-full text-right text-xs text-slate-500">

@@ -218,6 +218,54 @@ function ensureVehicleNumberAvailable(db, API_MESSAGES, number, currentVehicleId
   return API_MESSAGES.vehicleNumberExists
 }
 
+function mapPrimaryPhotoUpdate(photo, source) {
+  return {
+    primary_photo_url: photo?.url || photo?.webp_url || null,
+    primary_photo_original_url: photo?.original_url || null,
+    primary_photo_webp_url: photo?.webp_url || photo?.url || null,
+    primary_photo_thumb_url: photo?.thumb_url || photo?.webp_url || photo?.url || null,
+    primary_photo_source: source,
+  }
+}
+
+function updateVehiclePrimaryPhoto(db, vehicleId, companyId, photo, source) {
+  const mapped = mapPrimaryPhotoUpdate(photo, source)
+  db.prepare(`
+    UPDATE vehicles
+    SET primary_photo_url = ?,
+        primary_photo_original_url = ?,
+        primary_photo_webp_url = ?,
+        primary_photo_thumb_url = ?,
+        primary_photo_source = ?
+    WHERE id = ? AND company_id = ?
+  `).run(
+    mapped.primary_photo_url,
+    mapped.primary_photo_original_url,
+    mapped.primary_photo_webp_url,
+    mapped.primary_photo_thumb_url,
+    mapped.primary_photo_source,
+    vehicleId,
+    companyId,
+  )
+}
+
+function getVehicleUploadedPrimaryPhoto(vehicle) {
+  if (vehicle?.primary_photo_source !== 'upload') return null
+  return {
+    url: vehicle.primary_photo_url,
+    original_url: vehicle.primary_photo_original_url,
+    webp_url: vehicle.primary_photo_webp_url,
+    thumb_url: vehicle.primary_photo_thumb_url,
+  }
+}
+
+const QUALIFIED_PHOTO_SELECT_COLUMNS = `
+  p.id, p.inspection_id, p.defect_id, p.company_id, p.photo_type, p.url, p.original_url, p.webp_url, p.thumb_url,
+  p.original_mime, p.original_name, p.width, p.height, p.size_original, p.size_webp, p.size_thumb, p.hash,
+  p.geo, p.is_required, p.client_photo_id, p.upload_status, p.captured_at, p.captured_lat, p.captured_lng,
+  p.watermark_url, p.watermark_generated_at, p.created_at
+`
+
 export default function registerVehicleRoutes({
   app,
   db,
@@ -233,6 +281,10 @@ export default function registerVehicleRoutes({
   ensureManager,
   ensureCompanyOperationalWriteAllowed,
   inspectionSchedule,
+  uploadPhoto,
+  processUploadedPhoto,
+  removeFileIfExists,
+  removePhotoFiles,
 }) {
   app.get('/api/vehicles', authenticate, (req, res) => {
     const {
@@ -289,6 +341,7 @@ export default function registerVehicleRoutes({
         v.region,
         v.company_id,
         v.created_at,
+        c.created_at AS company_created_at,
         v.last_scheduled_inspection,
         v.quick_inspection_interval_days,
         v.planned_inspection_interval_days,
@@ -312,6 +365,7 @@ export default function registerVehicleRoutes({
         li.created_at AS last_inspection_created_at,
         COALESCE(dc.count, 0) AS defects_count
       FROM vehicles v
+      LEFT JOIN companies c ON c.id = v.company_id
       LEFT JOIN latest_inspections li ON li.vehicle_id = v.id AND li.rn = 1
       LEFT JOIN defect_counts dc ON dc.vehicle_id = v.id
       WHERE ${vehicleWhereClause}
@@ -420,6 +474,89 @@ export default function registerVehicleRoutes({
       return sendError(res, 404, API_MESSAGES.vehicleNotFound)
     }
     res.json(vehicle)
+  })
+
+  app.get('/api/vehicles/:id/photo-options', authenticate, (req, res) => {
+    const companyId = req.user.company_id || 'default'
+    const vehicle = getVehicleById(req.params.id, companyId)
+    if (!vehicle) {
+      return sendError(res, 404, API_MESSAGES.vehicleNotFound)
+    }
+
+    const photos = db.prepare(`
+      SELECT ${QUALIFIED_PHOTO_SELECT_COLUMNS},
+             i.type AS inspection_type,
+             i.created_at AS inspection_created_at
+      FROM photos p
+      JOIN inspections i ON i.id = p.inspection_id AND i.company_id = p.company_id
+      WHERE i.vehicle_id = ? AND p.company_id = ?
+      ORDER BY COALESCE(p.captured_at, p.created_at) DESC, p.id DESC
+      LIMIT 120
+    `).all(req.params.id, companyId)
+
+    res.json(photos)
+  })
+
+  app.post('/api/vehicles/:id/primary-photo', authenticate, (req, res, next) => {
+    if (!ensureCompanyOperationalWriteAllowed(req, res, { mode: 'write' })) return
+    next()
+  }, uploadPhoto, async (req, res) => {
+    const companyId = req.user.company_id || 'default'
+    const vehicle = getVehicleById(req.params.id, companyId)
+    if (!vehicle) {
+      await removeFileIfExists(req.file?.path)
+      return sendError(res, 404, API_MESSAGES.vehicleNotFound)
+    }
+
+    if (!req.file) return sendError(res, 400, 'Photo is required')
+
+    try {
+      const processed = await processUploadedPhoto({
+        tempPath: req.file.path,
+        originalName: req.file.originalname,
+        mimetype: req.file.mimetype,
+        inspectionId: `vehicle-${req.params.id}`,
+        photoId: uuidv4(),
+      })
+      const previousUpload = getVehicleUploadedPrimaryPhoto(vehicle)
+      updateVehiclePrimaryPhoto(db, req.params.id, companyId, processed, 'upload')
+      await removePhotoFiles(previousUpload)
+      res.json(getVehicleById(req.params.id, companyId))
+    } catch (err) {
+      await removeFileIfExists(req.file?.path)
+      console.warn('[uploads] Failed to process vehicle primary photo:', err.message)
+      return sendError(res, 400, 'Photo could not be processed')
+    }
+  })
+
+  app.post('/api/vehicles/:id/primary-photo/from-photo', authenticate, async (req, res) => {
+    if (!ensureCompanyOperationalWriteAllowed(req, res, { mode: 'write' })) return
+
+    const companyId = req.user.company_id || 'default'
+    const vehicle = getVehicleById(req.params.id, companyId)
+    if (!vehicle) {
+      return sendError(res, 404, API_MESSAGES.vehicleNotFound)
+    }
+
+    const photoId = String(req.body?.photo_id || req.body?.photoId || '').trim()
+    if (!photoId) {
+      return sendError(res, 400, 'Photo is required')
+    }
+
+    const photo = db.prepare(`
+      SELECT ${QUALIFIED_PHOTO_SELECT_COLUMNS}
+      FROM photos p
+      JOIN inspections i ON i.id = p.inspection_id AND i.company_id = p.company_id
+      WHERE p.id = ? AND p.company_id = ? AND i.vehicle_id = ?
+    `).get(photoId, companyId, req.params.id)
+    if (!photo) {
+      return sendError(res, 404, 'Photo not found')
+    }
+
+    const previousUpload = getVehicleUploadedPrimaryPhoto(vehicle)
+    updateVehiclePrimaryPhoto(db, req.params.id, companyId, photo, 'inspection')
+    await removePhotoFiles(previousUpload)
+    res.json(getVehicleById(req.params.id, companyId))
   })
 
   app.post('/api/vehicles', authenticate, (req, res) => {

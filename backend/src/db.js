@@ -452,9 +452,9 @@ function seedDefaultPlans() {
     VALUES (?, ?, ?, ?, 1, 1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active', datetime('now'), datetime('now'))
   `)
 
-  insertPlan.run(['pilot', 'Пилот', 'Пилотное внедрение для небольшой группы техники', 10, null, 3, 0, 10, 3, 300, 10240, 10, 1, 300, 1, 0, 1, 0, 0, 0, 'basic', 9900])
-  insertPlan.run(['standard', 'Стандарт', 'Основной тариф для регулярного контроля автопарка', 20, 249000, 0, 1, 50, 10, 2000, 51200, 50, 1, 2000, 1, 1, 1, 0, 0, 0, 'priority', 24900])
-  insertPlan.run(['enterprise', 'Enterprise', 'Индивидуальные условия для крупных парков', 30, null, 0, 0, 150, 30, null, 204800, 200, 1, null, 1, 1, 1, 1, 1, 1, 'personal', 79000])
+  insertPlan.run(['pilot', 'Пилот', 'Пилотное внедрение для небольшой группы техники', 10, null, 3, 0, 10, 3, 300, 10240, 10, 1, 300, 1, 0, 1, 0, 0, 0, 'basic', 5000])
+  insertPlan.run(['standard', 'Стандарт', 'Основной тариф для регулярного контроля автопарка', 20, 150000, 0, 1, 50, 10, 2000, 51200, 50, 1, 2000, 1, 1, 1, 0, 0, 0, 'priority', 15000])
+  insertPlan.run(['enterprise', 'Enterprise', 'Индивидуальные условия для крупных парков', 30, null, 0, 0, 150, 30, null, 204800, 200, 1, null, 1, 1, 1, 1, 1, 1, 'personal', 50000])
   insertPlan.free?.()
 
   const updatePlan = db.prepare(`
@@ -468,9 +468,9 @@ function seedDefaultPlans() {
         support_level = ?, status = 'active', updated_at = datetime('now')
     WHERE code = ?
   `)
-  updatePlan.run(['Пилот', 'Пилотное внедрение для небольшой группы техники', 10, 9900, null, 3, 0, 10, 3, 300, 10240, 10, 1, 300, 1, 0, 1, 0, 0, 0, 'basic', 'pilot'])
-  updatePlan.run(['Стандарт', 'Основной тариф для регулярного контроля автопарка', 20, 24900, 249000, 0, 1, 50, 10, 2000, 51200, 50, 1, 2000, 1, 1, 1, 0, 0, 0, 'priority', 'standard'])
-  updatePlan.run(['Enterprise', 'Индивидуальные условия для крупных парков', 30, 79000, null, 0, 0, 150, 30, null, 204800, 200, 1, null, 1, 1, 1, 1, 1, 1, 'personal', 'enterprise'])
+  updatePlan.run(['Пилот', 'Пилотное внедрение для небольшой группы техники', 10, 5000, null, 3, 0, 10, 3, 300, 10240, 10, 1, 300, 1, 0, 1, 0, 0, 0, 'basic', 'pilot'])
+  updatePlan.run(['Стандарт', 'Основной тариф для регулярного контроля автопарка', 20, 15000, 150000, 0, 1, 50, 10, 2000, 51200, 50, 1, 2000, 1, 1, 1, 0, 0, 0, 'priority', 'standard'])
+  updatePlan.run(['Enterprise', 'Индивидуальные условия для крупных парков', 30, 50000, null, 0, 0, 150, 30, null, 204800, 200, 1, null, 1, 1, 1, 1, 1, 1, 'personal', 'enterprise'])
   updatePlan.free?.()
 
   db.run(`
@@ -524,6 +524,11 @@ function applySchemaMigrations() {
   ensureColumn('vehicles', 'last_scheduled_inspection', 'TEXT')
   ensureColumn('vehicles', 'quick_inspection_interval_days', 'INTEGER')
   ensureColumn('vehicles', 'planned_inspection_interval_days', 'INTEGER')
+  ensureColumn('vehicles', 'primary_photo_url', 'TEXT')
+  ensureColumn('vehicles', 'primary_photo_original_url', 'TEXT')
+  ensureColumn('vehicles', 'primary_photo_webp_url', 'TEXT')
+  ensureColumn('vehicles', 'primary_photo_thumb_url', 'TEXT')
+  ensureColumn('vehicles', 'primary_photo_source', 'TEXT')
   ensureColumn('vehicles', 'created_at', 'TEXT')
   dropVehicleQrCodeColumn()
   ensureVehicleStatusSupportsArchived()
@@ -537,7 +542,9 @@ function applySchemaMigrations() {
   ensureColumn('inspections', 'odometer_recognized_at', 'TEXT')
   ensureColumn('inspections', 'client_inspection_id', 'TEXT')
   ensureColumn('inspections', 'sync_source', "TEXT NOT NULL DEFAULT 'web'")
+  ensureColumn('inspections', 'started_at', 'TEXT')
   ensureColumn('inspections', 'completed_at', 'TEXT')
+  ensureColumn('inspections', 'duration_seconds', 'INTEGER')
   ensureColumn('inspections', 'odometer_confirmed_at', 'TEXT')
   ensureColumn('inspections', 'odometer_unavailable_reason', 'TEXT')
   ensureColumn('inspections', 'approval_status', "TEXT NOT NULL DEFAULT 'draft'")
@@ -547,6 +554,14 @@ function applySchemaMigrations() {
   ensureColumn('inspections', 'reviewed_by', 'TEXT')
   ensureColumn('inspections', 'approval_comment', 'TEXT')
   ensureColumn('inspections', 'created_at', 'TEXT')
+  db.run("UPDATE inspections SET started_at = COALESCE(started_at, created_at) WHERE started_at IS NULL")
+  db.run(`
+    UPDATE inspections
+    SET duration_seconds = CAST(strftime('%s', completed_at) - strftime('%s', COALESCE(started_at, created_at)) AS INTEGER)
+    WHERE completed_at IS NOT NULL
+      AND (duration_seconds IS NULL OR duration_seconds < 0)
+      AND strftime('%s', completed_at) >= strftime('%s', COALESCE(started_at, created_at))
+  `)
 
   db.run(`
     CREATE TABLE IF NOT EXISTS inspection_approval_history (
@@ -621,6 +636,8 @@ function applySchemaMigrations() {
       file_size INTEGER,
       status TEXT NOT NULL DEFAULT 'pending',
       integrity_status TEXT NOT NULL DEFAULT 'unverified',
+      public_token TEXT,
+      public_token_expires_at TEXT,
       verified_at TEXT,
       generated_at TEXT,
       created_at TEXT DEFAULT (datetime('now')),
@@ -635,10 +652,13 @@ function applySchemaMigrations() {
   ensureColumn('inspection_reports', 'file_size', 'INTEGER')
   ensureColumn('inspection_reports', 'status', "TEXT NOT NULL DEFAULT 'pending'")
   ensureColumn('inspection_reports', 'integrity_status', "TEXT NOT NULL DEFAULT 'unverified'")
+  ensureColumn('inspection_reports', 'public_token', 'TEXT')
+  ensureColumn('inspection_reports', 'public_token_expires_at', 'TEXT')
   ensureColumn('inspection_reports', 'verified_at', 'TEXT')
   ensureColumn('inspection_reports', 'generated_at', 'TEXT')
   ensureColumn('inspection_reports', 'created_at', 'TEXT')
   ensureColumn('inspection_reports', 'updated_at', 'TEXT')
+  db.run('CREATE UNIQUE INDEX IF NOT EXISTS idx_inspection_reports_public_token ON inspection_reports(public_token) WHERE public_token IS NOT NULL')
 
   db.run(`
     CREATE TABLE IF NOT EXISTS company_limits (
@@ -665,6 +685,7 @@ function applySchemaMigrations() {
   ensureColumn('company_limits', 'ocr_monthly_limit', 'INTEGER')
   ensureColumn('company_limits', 'accident_module_enabled', 'INTEGER')
   ensureColumn('company_limits', 'analytics_enabled', 'INTEGER')
+  ensureColumn('company_limits', 'pdf_report_enabled', 'INTEGER')
   ensureColumn('company_limits', 'export_enabled', 'INTEGER')
   ensureColumn('company_limits', 'api_access_enabled', 'INTEGER')
   ensureColumn('company_limits', 'custom_branding_enabled', 'INTEGER')
@@ -707,6 +728,7 @@ function applySchemaMigrations() {
   ensureColumn('plans', 'ocr_monthly_limit', 'INTEGER')
   ensureColumn('plans', 'accident_module_enabled', 'INTEGER')
   ensureColumn('plans', 'analytics_enabled', 'INTEGER')
+  ensureColumn('plans', 'pdf_report_enabled', 'INTEGER')
   ensureColumn('plans', 'export_enabled', 'INTEGER')
   ensureColumn('plans', 'api_access_enabled', 'INTEGER')
   ensureColumn('plans', 'custom_branding_enabled', 'INTEGER')
@@ -796,6 +818,24 @@ function applySchemaMigrations() {
       created_by_user_id TEXT,
       created_at TEXT DEFAULT (datetime('now')),
       updated_at TEXT DEFAULT (datetime('now'))
+    )
+  `)
+
+  db.run(`
+    CREATE TABLE IF NOT EXISTS company_billing_details (
+      company_id TEXT PRIMARY KEY,
+      legal_name TEXT,
+      inn TEXT,
+      kpp TEXT,
+      ogrn TEXT,
+      legal_address TEXT,
+      postal_address TEXT,
+      billing_email TEXT,
+      support_email TEXT,
+      support_phone TEXT,
+      updated_by_user_id TEXT,
+      updated_at TEXT DEFAULT (datetime('now')),
+      FOREIGN KEY (company_id) REFERENCES companies(id)
     )
   `)
 

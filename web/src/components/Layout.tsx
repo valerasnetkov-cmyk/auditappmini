@@ -24,8 +24,7 @@ import {
 } from '@heroicons/react/24/outline'
 import api from '@/lib/api/client'
 import { getAuthToken, hasAuthSession, isCompanyOwnerRole, isManagerRole, isResourceRole } from '@/lib/auth'
-
-const PILOT_HREF = '/?pilot=1&source=demo-banner'
+import { PilotRequestButton, PilotRequestProvider } from '@/app/_components/PilotRequestModal'
 
 interface LayoutProps {
   children: React.ReactNode
@@ -150,6 +149,7 @@ export default function Layout({ children, currentPage }: LayoutProps) {
   })
 
   return (
+    <PilotRequestProvider>
     <div className="app-shell flex min-h-screen flex-col lg:flex-row">
       <aside className="flex h-auto w-full shrink-0 flex-col border-b border-line bg-surface shadow-card lg:sticky lg:top-0 lg:h-screen lg:w-64 lg:border-b-0 lg:border-r">
         <div className="border-b border-line p-4 lg:p-5">
@@ -226,13 +226,14 @@ export default function Layout({ children, currentPage }: LayoutProps) {
             <p>
               <strong>Демо-режим.</strong> Вы смотрите тестовую компанию. Изменение данных ограничено.
             </p>
-            <a href={PILOT_HREF} className="font-semibold text-primary hover:text-primary-hover">
+            <PilotRequestButton source="demo-banner" className="font-semibold text-primary hover:text-primary-hover">
               Запросить пилот для своей компании
-            </a>
+            </PilotRequestButton>
           </div>
         ) : null}
         {children}
       </main>
     </div>
+    </PilotRequestProvider>
   )
 }

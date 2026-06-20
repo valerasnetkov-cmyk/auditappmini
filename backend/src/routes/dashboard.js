@@ -10,7 +10,7 @@ export default function registerDashboardRoutes({
       const companyId = req.user.company_id || 'default'
       const vehicles = db.prepare(`
         SELECT
-          v.id, v.number, v.name, v.last_scheduled_inspection,
+          v.id, v.number, v.name, v.created_at, c.created_at AS company_created_at, v.last_scheduled_inspection,
           v.quick_inspection_interval_days, v.planned_inspection_interval_days,
           (
             SELECT COALESCE(i.completed_at, i.created_at)
@@ -29,6 +29,7 @@ export default function registerDashboardRoutes({
             LIMIT 1
           ) AS last_planned_inspection_at
         FROM vehicles v
+        LEFT JOIN companies c ON c.id = v.company_id
         WHERE v.status = 'active' AND v.company_id = ?
       `).all(companyId)
       const scheduledVehicles = inspectionSchedule.enrichVehicles(vehicles, companyId)
@@ -83,12 +84,69 @@ export default function registerDashboardRoutes({
       JOIN defects d ON d.inspection_id = i.id
       WHERE v.company_id = ?
     `).get(companyId).count
+    const activeVehicles = db.prepare(`
+      SELECT
+        v.id, v.number, v.name, v.created_at, c.created_at AS company_created_at, v.last_scheduled_inspection,
+        v.quick_inspection_interval_days, v.planned_inspection_interval_days,
+        (
+          SELECT COALESCE(i.completed_at, i.created_at)
+          FROM inspections i
+          WHERE i.vehicle_id = v.id AND i.company_id = v.company_id
+            AND i.type = 'quick' AND i.completed = 1
+          ORDER BY COALESCE(i.completed_at, i.created_at) DESC, i.id DESC
+          LIMIT 1
+        ) AS last_quick_inspection_at,
+        (
+          SELECT COALESCE(i.completed_at, i.created_at)
+          FROM inspections i
+          WHERE i.vehicle_id = v.id AND i.company_id = v.company_id
+            AND i.type = 'scheduled' AND i.completed = 1
+          ORDER BY COALESCE(i.completed_at, i.created_at) DESC, i.id DESC
+          LIMIT 1
+        ) AS last_planned_inspection_at
+      FROM vehicles v
+      LEFT JOIN companies c ON c.id = v.company_id
+      WHERE v.status = 'active' AND v.company_id = ?
+    `).all(companyId)
+    const overdueInspections = inspectionSchedule.enrichVehicles(activeVehicles, companyId).reduce((count, vehicle) => (
+      count + ['quick', 'planned'].filter((inspectionType) => (
+        vehicle.inspection_schedule?.[inspectionType]?.status === 'inspection_overdue'
+      )).length
+    ), 0)
+    const openDefects = db.prepare(`
+      SELECT COUNT(*) AS count
+      FROM defects
+      WHERE company_id = ?
+        AND COALESCE(status, 'open') NOT IN ('closed', 'resolved')
+    `).get(companyId).count
+    const criticalDefects = db.prepare(`
+      SELECT COUNT(*) AS count
+      FROM defects
+      WHERE company_id = ?
+        AND severity = 'critical'
+        AND COALESCE(status, 'open') NOT IN ('closed', 'resolved')
+    `).get(companyId).count
+    const unfinishedInspections = db.prepare(`
+      SELECT COUNT(*) AS count
+      FROM inspections
+      WHERE company_id = ? AND COALESCE(completed, 0) = 0
+    `).get(companyId).count
+    const failedPhotoUploads = db.prepare(`
+      SELECT COUNT(*) AS count
+      FROM photos
+      WHERE company_id = ? AND upload_status = 'failed'
+    `).get(companyId).count
 
     res.json({
       totalVehicles,
       totalInspections,
       inspectionsToday: todayInspections,
       vehiclesWithDefects,
+      overdueInspections,
+      openDefects,
+      criticalDefects,
+      unfinishedInspections,
+      failedPhotoUploads,
     })
   })
 }

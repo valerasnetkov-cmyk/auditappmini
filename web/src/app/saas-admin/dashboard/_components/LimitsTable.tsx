@@ -41,7 +41,7 @@ export function LimitsTable({ companies }: { companies: SaasLimitUsageCompany[] 
                 <div className="text-xs text-gray-500">{formatPercent(company.usersUsagePercent)}</div>
               </td>
               <td className="px-4 py-3 text-xs text-gray-600">
-                OCR {moduleLabel(company.ocrEnabled)} · ДТП {moduleLabel(company.accidentModuleEnabled)} · API {moduleLabel(company.apiAccessEnabled)}
+                OCR {moduleLabel(company.ocrEnabled)} · ДТП {moduleLabel(company.accidentModuleEnabled)} · PDF {moduleLabel(company.pdfReportEnabled)} · API {moduleLabel(company.apiAccessEnabled)}
               </td>
               <td className="px-4 py-3">
                 <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ring-1 ${severityClass(company.riskLevel)}`}>

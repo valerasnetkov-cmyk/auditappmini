@@ -57,29 +57,8 @@ export function getRangeStart(range: Exclude<DateRange, 'week' | 'all' | 'custom
   return undefined
 }
 
-export function makeCsv(items: Record<string, unknown>[]): string {
-  if (!items.length) return ''
-  const headers = Object.keys(items[0])
-  return '\ufeff' + [
-    headers.join(';'),
-    ...items.map((row) =>
-      headers
-        .map((header) => {
-          const value = row[header]
-          if (value === null || value === undefined) return ''
-
-          const stringValue = String(value)
-          return stringValue.includes(';') || stringValue.includes(',') || stringValue.includes('"')
-            ? `"${stringValue.replace(/"/g, '""')}"`
-            : stringValue
-        })
-        .join(';'),
-    ),
-  ].join('\n')
-}
-
-export function buildExportFilename(type: ExportType, format: 'json' | 'csv'): string {
-  return `${type}_${new Date().toISOString().split('T')[0]}.${format}`
+export function buildExcelExportFilename(type: ExportType): string {
+  return `${type}_${new Date().toISOString().split('T')[0]}.xlsx`
 }
 
 export function getChartTitleToneClassName(tone: ProgressTone): string {

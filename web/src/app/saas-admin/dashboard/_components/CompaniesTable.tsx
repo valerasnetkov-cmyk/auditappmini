@@ -78,6 +78,7 @@ export function CompaniesTable({
               <td className="px-4 py-3 text-xs text-gray-600">
                 OCR {moduleLabel(Boolean(company.limits?.ocrEnabled))}<br />
                 Аналитика {moduleLabel(Boolean(company.limits?.analyticsEnabled))}<br />
+                PDF {moduleLabel(Boolean(company.limits?.pdfReportEnabled))}<br />
                 ДТП {moduleLabel(Boolean(company.limits?.accidentModuleEnabled))}
               </td>
               <td className="px-4 py-3">{formatDate(company.lastActivityAt)}</td>

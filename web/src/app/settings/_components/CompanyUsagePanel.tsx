@@ -117,8 +117,10 @@ export function CompanyUsagePanel({
         />
         <FeatureStatusCard title="ДТП-осмотры" feature={usage.features.accidentModule} />
         <FeatureStatusCard title="Аналитика" feature={usage.features.analytics} />
+        {usage.features.pdfReport ? <FeatureStatusCard title="PDF-отчёты" feature={usage.features.pdfReport} /> : null}
         {usage.features.export ? <FeatureStatusCard title="Экспорт отчётов" feature={usage.features.export} /> : null}
         {usage.features.apiAccess ? <FeatureStatusCard title="API-доступ" feature={usage.features.apiAccess} /> : null}
+        {usage.features.brandedReports ? <FeatureStatusCard title="Брендированные отчёты" feature={usage.features.brandedReports} /> : null}
         {usage.features.regionalStorage ? <FeatureStatusCard title="Региональное хранение" feature={usage.features.regionalStorage} /> : null}
       </div>
 

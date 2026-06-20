@@ -117,6 +117,7 @@ async function run() {
           ocrEnabled: true,
           accidentModuleEnabled: true,
           analyticsEnabled: true,
+          pdfReportEnabled: true,
           apiAccessEnabled: false,
         },
       }),
@@ -255,8 +256,12 @@ async function run() {
         maxVehicles: 15,
         maxUsers: 8,
         analyticsEnabled: true,
+        pdfReportEnabled: true,
       }),
     }, 201)
+    if (plan.features?.pdfReportEnabled !== true) {
+      throw new Error(`Resource admin plan did not preserve PDF report feature: ${JSON.stringify(plan)}`)
+    }
 
     const updatedLimits = await request(`/api/admin/resource/companies/${company.id}/limits`, {
       method: 'PUT',
@@ -269,11 +274,12 @@ async function run() {
         ocrEnabled: true,
         accidentModuleEnabled: true,
         analyticsEnabled: false,
+        pdfReportEnabled: true,
         apiAccessEnabled: false,
       }),
     })
 
-    if (updatedLimits.maxVehicles !== 7 || updatedLimits.analyticsEnabled !== false) {
+    if (updatedLimits.maxVehicles !== 7 || updatedLimits.analyticsEnabled !== false || updatedLimits.pdfReportEnabled !== true) {
       throw new Error(`Resource admin company limits update failed: ${JSON.stringify(updatedLimits)}`)
     }
 
@@ -387,6 +393,7 @@ async function run() {
       createdCompany.owners !== 1 ||
       createdCompany.status !== 'inactive' ||
       createdCompany.limits?.maxVehicles !== 7 ||
+      createdCompany.limits?.pdfReportEnabled !== true ||
       typeof createdCompany.healthStatus !== 'string' ||
       typeof createdCompany.riskStatus !== 'string'
     ) {
@@ -419,7 +426,7 @@ async function run() {
 
     const statsAfterPlanUpdate = await request('/api/admin/resource/stats', { headers: adminHeaders })
     const updatedPlan = statsAfterPlanUpdate.plans?.find((item) => item.code === plan.code)
-    if (!updatedPlan || updatedPlan.status !== 'archived' || updatedPlan.limits?.maxVehicles !== 15 || updatedPlan.features?.analyticsEnabled !== true) {
+    if (!updatedPlan || updatedPlan.status !== 'archived' || updatedPlan.limits?.maxVehicles !== 15 || updatedPlan.features?.analyticsEnabled !== true || updatedPlan.features?.pdfReportEnabled !== true) {
       throw new Error(`Partial plan update did not preserve existing limits/features: ${JSON.stringify(updatedPlan)}`)
     }
 
@@ -523,6 +530,7 @@ async function run() {
       adminTenantEndpointsDenied: deniedTenantEndpoints.length,
       resourceAdminDeniedForTenantRoles: Boolean(tenantManager.id),
       resourceManagerRbacOk: true,
+      pdfReportFeaturePreserved: updatedPlan.features?.pdfReportEnabled === true,
       manualMessageRecipients: manualMessage.created,
     }, null, 2))
   } finally {

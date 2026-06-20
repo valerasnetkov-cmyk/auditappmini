@@ -29,6 +29,7 @@ export const emptyLimitForm: LimitForm = {
   ocrEnabled: true,
   accidentModuleEnabled: true,
   analyticsEnabled: true,
+  pdfReportEnabled: true,
   apiAccessEnabled: false,
 }
 
@@ -97,6 +98,7 @@ export function companyLimitForm(company: SaasCompanyStats | undefined): LimitFo
     ocrEnabled: company?.limits?.ocrEnabled ?? true,
     accidentModuleEnabled: company?.limits?.accidentModuleEnabled ?? true,
     analyticsEnabled: company?.limits?.analyticsEnabled ?? true,
+    pdfReportEnabled: company?.limits?.pdfReportEnabled ?? true,
     apiAccessEnabled: company?.limits?.apiAccessEnabled ?? false,
   }
 }

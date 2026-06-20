@@ -127,6 +127,7 @@ function planLimits(plan, overrides = {}) {
     ocrMonthlyLimit: numberValue(overrides.ocrMonthlyLimit, plan.ocr_monthly_limit),
     accidentModuleEnabled: booleanValue(overrides.accidentModuleEnabled, plan.accident_module_enabled),
     analyticsEnabled: booleanValue(overrides.analyticsEnabled, plan.analytics_enabled),
+    pdfReportEnabled: booleanValue(overrides.pdfReportEnabled, plan.pdf_report_enabled),
     exportEnabled: booleanValue(overrides.exportEnabled, plan.export_enabled),
     apiAccessEnabled: booleanValue(overrides.apiAccessEnabled, plan.api_access_enabled),
     customBrandingEnabled: booleanValue(overrides.customBrandingEnabled, plan.custom_branding_enabled),
@@ -458,14 +459,15 @@ export default function registerPilotRequestRoutes({
           INSERT INTO company_limits (
             id, company_id, plan_code, max_vehicles, max_users, max_inspections_per_month,
             max_storage_mb, storage_limit_gb, ocr_enabled, ocr_monthly_limit,
-            accident_module_enabled, analytics_enabled, export_enabled, api_access_enabled,
+            accident_module_enabled, analytics_enabled, pdf_report_enabled, export_enabled, api_access_enabled,
             custom_branding_enabled, regional_storage_enabled, support_level, created_at, updated_at
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))
         `).run(
           uuidv4(), companyId, planCode, limits.maxVehicles, limits.maxUsers,
           limits.maxInspectionsPerMonth, limits.maxStorageMb, limits.storageLimitGb,
           limits.ocrEnabled ? 1 : 0, limits.ocrMonthlyLimit,
           limits.accidentModuleEnabled ? 1 : 0, limits.analyticsEnabled ? 1 : 0,
+          limits.pdfReportEnabled ? 1 : 0,
           limits.exportEnabled ? 1 : 0, limits.apiAccessEnabled ? 1 : 0,
           limits.customBrandingEnabled ? 1 : 0, limits.regionalStorageEnabled ? 1 : 0,
           limits.supportLevel,

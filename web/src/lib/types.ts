@@ -166,6 +166,7 @@ export type PilotConversionPayload = {
     ocrMonthlyLimit: number | null
     accidentModuleEnabled: boolean
     analyticsEnabled: boolean
+    pdfReportEnabled: boolean
     exportEnabled: boolean
     apiAccessEnabled: boolean
     customBrandingEnabled: boolean
@@ -299,6 +300,12 @@ export type VehicleRecord = VehicleListItem & {
 }
 
 export type VehicleDetail = VehicleListItem & {
+  created_at?: string | null
+  primary_photo_url?: string | null
+  primary_photo_original_url?: string | null
+  primary_photo_webp_url?: string | null
+  primary_photo_thumb_url?: string | null
+  primary_photo_source?: 'upload' | 'inspection' | string | null
   last_scheduled_inspection?: string | null
   quick_inspection_interval_days?: number | null
   planned_inspection_interval_days?: number | null
@@ -468,8 +475,15 @@ export type InspectionRecord = {
   type: InspectionType
   completed?: number | boolean
   created_at: string
+  started_at?: string | null
+  completed_at?: string | null
+  duration_seconds?: number | null
   accident_occurred_at?: string | null
   accident_location?: string | null
+  odometer_value?: number | null
+  odometer_unit?: string | null
+  odometer_confirmed_at?: string | null
+  odometer_unavailable_reason?: string | null
   vehicle_number: string
   vehicle_name: string
   vehicle_region?: string | null
@@ -486,6 +500,7 @@ export type InspectionDetail = {
   type: InspectionType
   completed?: number | boolean
   created_at: string
+  started_at?: string | null
   accident_occurred_at?: string | null
   accident_location?: string | null
   odometer_value?: number | null
@@ -493,6 +508,7 @@ export type InspectionDetail = {
   odometer_confirmed_at?: string | null
   odometer_unavailable_reason?: string | null
   completed_at?: string | null
+  duration_seconds?: number | null
   approval_status?: InspectionApprovalStatus
   checklist_items: ChecklistItemResponse[]
   defects: DefectRecord[]
@@ -558,6 +574,7 @@ export type InspectionReport = {
   company_id: string
   inspection_id: string
   pdf_url?: string | null
+  public_url?: string | null
   sha256?: string | null
   file_size?: number | null
   status: 'pending' | 'generating' | 'ready' | 'failed' | 'corrupted' | string
@@ -568,6 +585,30 @@ export type InspectionReport = {
   generated_at?: string | null
   created_at?: string | null
   updated_at?: string | null
+}
+
+export type PublicInspectionReport = {
+  id: string
+  status: InspectionReport['status']
+  integrity_status?: InspectionReport['integrity_status']
+  generated_at?: string | null
+  verified_at?: string | null
+  sha256?: string | null
+  file_size?: number | null
+  pdf_url?: string | null
+  inspection: {
+    id: string
+    type: InspectionType
+    created_at?: string | null
+    completed_at?: string | null
+  }
+  vehicle: {
+    number?: string | null
+    name?: string | null
+  }
+  company: {
+    name?: string | null
+  }
 }
 
 export type InspectionCreateResponse = {
@@ -584,6 +625,11 @@ export type DashboardStats = {
   vehiclesWithDefects: number
   totalInspections: number
   inspectionsToday: number
+  overdueInspections: number
+  openDefects: number
+  criticalDefects: number
+  unfinishedInspections: number
+  failedPhotoUploads: number
 }
 
 export type NotificationItem = {
@@ -699,8 +745,10 @@ export type CompanyUsageResponse = {
     ocr: CompanyFeatureAccess
     accidentModule: CompanyFeatureAccess
       analytics: CompanyFeatureAccess
+      pdfReport?: CompanyFeatureAccess
       export?: CompanyFeatureAccess
       apiAccess: CompanyFeatureAccess
+      brandedReports?: CompanyFeatureAccess
       customBranding?: CompanyFeatureAccess
       regionalStorage?: CompanyFeatureAccess
     }
@@ -785,6 +833,7 @@ export type SaasCompanyLimits = {
   ocrEnabled?: boolean | null
   accidentModuleEnabled?: boolean | null
   analyticsEnabled?: boolean | null
+  pdfReportEnabled?: boolean | null
   apiAccessEnabled?: boolean | null
   updatedAt?: string | null
 }
@@ -995,6 +1044,7 @@ export type ResourceCompanyLimitsPayload = {
   ocrEnabled?: boolean | null
   accidentModuleEnabled?: boolean | null
   analyticsEnabled?: boolean | null
+  pdfReportEnabled?: boolean | null
   apiAccessEnabled?: boolean | null
 }
 
@@ -1008,6 +1058,7 @@ export type ResourcePlanPayload = {
   ocrEnabled?: boolean | null
   accidentModuleEnabled?: boolean | null
   analyticsEnabled?: boolean | null
+  pdfReportEnabled?: boolean | null
   apiAccessEnabled?: boolean | null
   monthlyPriceRub?: number | null
 }
@@ -1026,6 +1077,7 @@ export type SaasPlan = {
     ocrEnabled?: boolean | null
     accidentModuleEnabled?: boolean | null
     analyticsEnabled?: boolean | null
+    pdfReportEnabled?: boolean | null
     apiAccessEnabled?: boolean | null
   }
   createdAt?: string | null
@@ -1176,6 +1228,7 @@ export type SaasLimitUsageCompany = {
   ocrEnabled: boolean
   accidentModuleEnabled: boolean
   analyticsEnabled: boolean
+  pdfReportEnabled: boolean
   apiAccessEnabled: boolean
   riskLevel: 'ok' | 'watch' | 'upsell' | 'blocked' | string
 }
@@ -1187,6 +1240,7 @@ export type SaasLimitUsage = {
     ocr: number
     accidentModule: number
     analytics: number
+    pdfReport: number
     apiAccess: number
   }
   usage: SaasLimitUsageCompany[]
@@ -1277,6 +1331,7 @@ export type AccidentStats = {
   total: number
   daysWithoutAccident: number
   recent: AccidentRecentItem[]
+  byMonth?: Array<{ month: string; count: number }>
 }
 
 export type AnalyticsOverview = {

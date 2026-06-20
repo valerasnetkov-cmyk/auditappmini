@@ -24,14 +24,36 @@ function dateOnly(value) {
 
 export function calculateInspectionSchedule({
   lastInspectionAt,
+  baseDate,
   intervalDays,
   dueSoonDays = DEFAULT_DUE_SOON_DAYS,
   now = new Date(),
 }) {
   const normalizedInterval = positiveInteger(intervalDays, DEFAULT_PLANNED_INTERVAL_DAYS)
   const lastDate = dateOnly(lastInspectionAt)
+  const fallbackDate = dateOnly(baseDate)
+  const today = dateOnly(now) || dateOnly(new Date())
 
   if (!lastDate) {
+    if (fallbackDate) {
+      const nextDue = new Date(fallbackDate.getTime() + normalizedInterval * DAY_MS)
+      const daysUntil = Math.round((nextDue.getTime() - today.getTime()) / DAY_MS)
+      const threshold = positiveInteger(dueSoonDays, DEFAULT_DUE_SOON_DAYS)
+      const status = daysUntil < 0
+        ? 'inspection_overdue'
+        : daysUntil <= threshold
+          ? 'inspection_due_soon'
+          : 'never_inspected'
+
+      return {
+        status,
+        interval_days: normalizedInterval,
+        last_inspection_at: null,
+        next_due: nextDue.toISOString().slice(0, 10),
+        days_until: daysUntil,
+      }
+    }
+
     return {
       status: 'never_inspected',
       interval_days: normalizedInterval,
@@ -41,7 +63,6 @@ export function calculateInspectionSchedule({
     }
   }
 
-  const today = dateOnly(now) || dateOnly(new Date())
   const nextDue = new Date(lastDate.getTime() + normalizedInterval * DAY_MS)
   const daysUntil = Math.round((nextDue.getTime() - today.getTime()) / DAY_MS)
   const threshold = positiveInteger(dueSoonDays, DEFAULT_DUE_SOON_DAYS)
@@ -86,12 +107,14 @@ export function buildVehicleInspectionSchedule(vehicle, {
   )
   const quick = calculateInspectionSchedule({
     lastInspectionAt: vehicle.last_quick_inspection_at,
+    baseDate: vehicle.created_at || vehicle.company_created_at,
     intervalDays: quickInterval,
     dueSoonDays,
     now,
   })
   const planned = calculateInspectionSchedule({
     lastInspectionAt: vehicle.last_planned_inspection_at || vehicle.last_scheduled_inspection,
+    baseDate: vehicle.created_at || vehicle.company_created_at,
     intervalDays: plannedInterval,
     dueSoonDays,
     now,

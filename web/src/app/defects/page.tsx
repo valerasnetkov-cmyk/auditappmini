@@ -10,6 +10,22 @@ import { requireAuthToken } from '@/lib/auth'
 import type { DefectRecord, InspectionType, VehicleListItem } from '@/lib/types'
 
 type VisibleRowsFilter = 'all' | 'withPhotos' | 'withoutPhotos' | 'withDescription' | 'withoutDescription'
+type SortDirection = 'asc' | 'desc'
+type SortableDefectKey =
+  | 'vehicle_number'
+  | 'vehicle_region'
+  | 'vehicle_name'
+  | 'title'
+  | 'created_at'
+  | 'inspection_type'
+  | 'status'
+  | 'severity'
+  | 'photos'
+
+type SortConfig = {
+  key: SortableDefectKey
+  direction: SortDirection
+}
 
 function getTypeLabel(type?: string) {
   if (type === 'quick') return 'Быстрый'
@@ -75,6 +91,17 @@ function getVisibleRowsLabel(value: VisibleRowsFilter) {
   return labels[value]
 }
 
+function getSortMarker(sortConfig: SortConfig, key: SortableDefectKey) {
+  if (sortConfig.key !== key) return '↕'
+  return sortConfig.direction === 'asc' ? '↑' : '↓'
+}
+
+function getSortableDefectValue(defect: DefectRecord, key: SortableDefectKey): string | number {
+  if (key === 'photos') return defect.photos?.length || 0
+  if (key === 'created_at') return new Date(defect.created_at).getTime()
+  return String(defect[key] || '').toLowerCase()
+}
+
 export default function DefectsPage() {
   const searchParams = useSearchParams()
   const [defects, setDefects] = useState<DefectRecord[]>([])
@@ -87,6 +114,7 @@ export default function DefectsPage() {
   const [typeFilter, setTypeFilter] = useState<InspectionType | ''>('')
   const [statusFilter, setStatusFilter] = useState('')
   const [severityFilter, setSeverityFilter] = useState('')
+  const [sortConfig, setSortConfig] = useState<SortConfig>({ key: 'created_at', direction: 'desc' })
 
   useEffect(() => {
     if (!requireAuthToken()) return
@@ -156,8 +184,21 @@ export default function DefectsPage() {
         break
     }
 
-    return items
-  }, [defects, regionFilter, visibleRows, typeFilter, statusFilter, severityFilter])
+    return items.sort((left, right) => {
+      const leftValue = getSortableDefectValue(left, sortConfig.key)
+      const rightValue = getSortableDefectValue(right, sortConfig.key)
+      if (leftValue < rightValue) return sortConfig.direction === 'asc' ? -1 : 1
+      if (leftValue > rightValue) return sortConfig.direction === 'asc' ? 1 : -1
+      return 0
+    })
+  }, [defects, regionFilter, visibleRows, typeFilter, statusFilter, severityFilter, sortConfig])
+
+  const handleSort = (key: SortableDefectKey) => {
+    setSortConfig((current) => ({
+      key,
+      direction: current.key === key && current.direction === 'asc' ? 'desc' : 'asc',
+    }))
+  }
 
   const openDefects = defects.filter((defect) => defect.status !== 'closed').length
   const accidentDefects = defects.filter((defect) => defect.inspection_type === 'accident').length
@@ -165,7 +206,7 @@ export default function DefectsPage() {
 
   return (
     <Layout currentPage="defects">
-      <div className="p-6">
+      <div className="min-w-0 max-w-full overflow-hidden p-4 sm:p-6">
         <header className="mb-6 flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
           <div>
             <h1 className="page-title text-2xl">Дефекты</h1>
@@ -281,23 +322,32 @@ export default function DefectsPage() {
             <Skeleton className="h-14 w-full" />
           </div>
         ) : (
-          <section className="table-card">
+          <section className="table-card min-w-0">
             <div className="border-b border-line px-4 py-3 text-sm text-foreground-muted">
               Показано {filtered.length} из {defects.length}
             </div>
-            <div className="table-scroll">
-              <table className="min-w-full divide-y divide-line">
+            <div className="grid gap-3 p-3 xl:hidden">
+              {filtered.length === 0 ? (
+                <div className="rounded-card border border-line p-6 text-center text-foreground-muted">
+                  Дефекты не найдены
+                </div>
+              ) : (
+                filtered.map((defect) => <DefectCompactCard key={defect.id} defect={defect} />)
+              )}
+            </div>
+            <div className="table-scroll hidden xl:block">
+              <table className="min-w-[1120px] divide-y divide-line">
                 <thead className="table-header">
                   <tr>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-foreground-muted">Госномер</th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-foreground-muted">Регион</th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-foreground-muted">Техника</th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-foreground-muted">Дефект</th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-foreground-muted">Выявлен</th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-foreground-muted">Осмотр</th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-foreground-muted">Статус</th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-foreground-muted">Критичность</th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-foreground-muted">Фото</th>
+                    <SortableHeader label="Госномер" sortKey="vehicle_number" sortConfig={sortConfig} onSort={handleSort} />
+                    <SortableHeader label="Регион" sortKey="vehicle_region" sortConfig={sortConfig} onSort={handleSort} />
+                    <SortableHeader label="Техника" sortKey="vehicle_name" sortConfig={sortConfig} onSort={handleSort} />
+                    <SortableHeader label="Дефект" sortKey="title" sortConfig={sortConfig} onSort={handleSort} />
+                    <SortableHeader label="Выявлен" sortKey="created_at" sortConfig={sortConfig} onSort={handleSort} />
+                    <SortableHeader label="Осмотр" sortKey="inspection_type" sortConfig={sortConfig} onSort={handleSort} />
+                    <SortableHeader label="Статус" sortKey="status" sortConfig={sortConfig} onSort={handleSort} />
+                    <SortableHeader label="Критичность" sortKey="severity" sortConfig={sortConfig} onSort={handleSort} />
+                    <SortableHeader label="Фото" sortKey="photos" sortConfig={sortConfig} onSort={handleSort} />
                     <th className="px-4 py-3 text-left text-xs font-medium text-foreground-muted">Действия</th>
                   </tr>
                 </thead>
@@ -354,6 +404,78 @@ export default function DefectsPage() {
         )}
       </div>
     </Layout>
+  )
+}
+
+function DefectCompactCard({ defect }: { defect: DefectRecord }) {
+  return (
+    <article className="rounded-card border border-line bg-surface p-4">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div className="min-w-0">
+          <div className="font-semibold text-foreground">{defect.title}</div>
+          <div className="mt-1 text-sm text-foreground-secondary">
+            {defect.vehicle_number || 'Не указан'} · {defect.vehicle_name || 'Техника не указана'}
+          </div>
+          <div className="mt-1 text-sm text-foreground-muted">{defect.vehicle_region || 'Регион не указан'}</div>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <Badge tone={getTypeBadgeTone(defect.inspection_type)}>{getTypeLabel(defect.inspection_type)}</Badge>
+          <Badge tone={getStatusBadgeTone(defect.status)}>{getStatusLabel(defect.status)}</Badge>
+          <Badge tone={getSeverityTone(defect.severity)}>{getSeverityLabel(defect.severity)}</Badge>
+        </div>
+      </div>
+
+      {defect.comment ? <p className="mt-3 text-sm leading-6 text-foreground-secondary">{defect.comment}</p> : null}
+      {defect.accident_location ? (
+        <div className="mt-2 text-xs text-status-danger">ДТП: {defect.accident_location}</div>
+      ) : null}
+
+      <div className="mt-4 grid gap-2 text-sm text-foreground-secondary sm:grid-cols-3">
+        <div>
+          <span className="text-foreground-muted">Выявлен: </span>
+          {formatDateTime(defect.created_at)}
+        </div>
+        <div>
+          <span className="text-foreground-muted">Фото: </span>
+          {defect.photos?.length ?? 0}
+        </div>
+        <div className="flex gap-3 sm:justify-end">
+          <Link href={`/defects/${defect.id}`} className="text-primary hover:underline">
+            Подробнее
+          </Link>
+          {defect.inspection_id ? (
+            <Link href={`/inspections/${defect.inspection_id}`} className="text-primary hover:underline">
+              Осмотр
+            </Link>
+          ) : null}
+        </div>
+      </div>
+    </article>
+  )
+}
+
+function SortableHeader({
+  label,
+  sortKey,
+  sortConfig,
+  onSort,
+}: {
+  label: string
+  sortKey: SortableDefectKey
+  sortConfig: SortConfig
+  onSort: (key: SortableDefectKey) => void
+}) {
+  return (
+    <th
+      className="cursor-pointer whitespace-nowrap px-4 py-3 text-left text-xs font-medium text-foreground-muted select-none"
+      onClick={() => onSort(sortKey)}
+      scope="col"
+    >
+      {label}{' '}
+      <span className={sortConfig.key === sortKey ? 'text-primary' : 'text-foreground-disabled'}>
+        {getSortMarker(sortConfig, sortKey)}
+      </span>
+    </th>
   )
 }
 

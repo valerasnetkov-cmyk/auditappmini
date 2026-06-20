@@ -7,6 +7,7 @@ export default function registerInspectionReportRoutes({
   authenticate,
   inspectionReadiness,
   PHOTO_SELECT_COLUMNS,
+  ensureCompanyFeatureEnabled,
 }) {
   const reports = createInspectionReportService({ db, PHOTO_SELECT_COLUMNS })
 
@@ -22,7 +23,7 @@ export default function registerInspectionReportRoutes({
       return null
     }
     const readiness = inspectionReadiness.getReadiness(req.params.id, companyId)
-    if (!inspection.completed || !readiness?.ready) {
+    if (!inspection.completed || (req.user.access_mode !== 'demo_readonly' && !readiness?.ready)) {
       res.status(400).json({
         error: 'INSPECTION_REPORT_BLOCKED',
         message: 'Отчёт доступен только для полного завершённого осмотра',
@@ -34,6 +35,7 @@ export default function registerInspectionReportRoutes({
   }
 
   app.post('/api/inspections/:id/report', authenticate, async (req, res) => {
+    if (!ensureCompanyFeatureEnabled(req, res, 'pdf_report_enabled', 'PDF-отчёты недоступны на текущем тарифе.')) return
     const context = getCompletedInspection(req, res)
     if (!context) return
     try {
@@ -47,6 +49,7 @@ export default function registerInspectionReportRoutes({
   })
 
   app.get('/api/inspections/:id/report', authenticate, async (req, res) => {
+    if (!ensureCompanyFeatureEnabled(req, res, 'pdf_report_enabled', 'PDF-отчёты недоступны на текущем тарифе.')) return
     const context = getCompletedInspection(req, res)
     if (!context) return
     try {
@@ -60,6 +63,7 @@ export default function registerInspectionReportRoutes({
   })
 
   app.get('/api/inspections/:id/report.pdf', authenticate, async (req, res) => {
+    if (!ensureCompanyFeatureEnabled(req, res, 'pdf_report_enabled', 'PDF-отчёты недоступны на текущем тарифе.')) return
     const context = getCompletedInspection(req, res)
     if (!context) return
     try {
@@ -82,5 +86,53 @@ export default function registerInspectionReportRoutes({
       console.error('[reports] download verification failed:', error)
       res.status(500).json({ error: 'REPORT_VERIFICATION_FAILED', message: 'Не удалось проверить PDF-отчёт' })
     }
+  })
+
+  app.get('/api/reports/public/:token', async (req, res, next) => {
+    if (String(req.params.token || '').endsWith('.pdf')) return next()
+    const report = reports.getPublicReport(req.params.token)
+    if (!report) return res.status(404).json({ error: 'REPORT_NOT_FOUND' })
+    if (report.integrity_status !== 'valid' || report.status !== 'ready') {
+      return res.status(409).json({ error: 'REPORT_INTEGRITY_FAILED' })
+    }
+
+    res.setHeader('Cache-Control', 'public, max-age=60')
+    res.json({
+      id: report.id,
+      status: report.status,
+      integrity_status: report.integrity_status,
+      generated_at: report.generated_at,
+      verified_at: report.verified_at,
+      sha256: report.sha256,
+      file_size: report.file_size,
+      inspection: {
+        id: report.inspection_id,
+        type: report.inspection_type,
+        created_at: report.inspection_created_at,
+        completed_at: report.inspection_completed_at,
+      },
+      vehicle: {
+        number: report.vehicle_number,
+        name: report.vehicle_name,
+      },
+      company: {
+        name: report.company_name,
+      },
+      pdf_url: `/api/reports/public/${req.params.token}.pdf`,
+    })
+  })
+
+  app.get('/api/reports/public/:token.pdf', async (req, res) => {
+    const report = reports.getPublicReport(req.params.token)
+    const reportPath = reports.getPublicReportPath(report)
+    if (!report || !reportPath) return res.status(404).json({ error: 'REPORT_NOT_FOUND' })
+    if (report.integrity_status !== 'valid' || report.status !== 'ready' || !fs.existsSync(reportPath)) {
+      return res.status(409).json({ error: 'REPORT_INTEGRITY_FAILED' })
+    }
+
+    res.setHeader('Content-Type', 'application/pdf')
+    res.setHeader('Content-Disposition', `inline; filename="inspection-${report.inspection_id}.pdf"`)
+    res.setHeader('Cache-Control', 'public, max-age=300')
+    res.sendFile(reportPath)
   })
 }

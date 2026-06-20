@@ -119,7 +119,7 @@ try {
     method: 'POST',
     headers: adminHeaders,
     body: JSON.stringify({
-      amountRub: 24900,
+      amountRub: 15000,
       paymentDate: '2026-06-06',
       periodStart: '2026-06-01',
       periodEnd: '2026-06-30',

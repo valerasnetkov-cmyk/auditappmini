@@ -89,6 +89,7 @@ export function createCompanyPolicy({ db, sendError, API_MESSAGES }) {
     if (featureField === 'ocr_enabled') return API_MESSAGES.ocrFeatureDisabled
     if (featureField === 'analytics_enabled') return API_MESSAGES.analyticsFeatureDisabled
     if (featureField === 'accident_module_enabled') return API_MESSAGES.accidentModuleDisabled
+    if (featureField === 'pdf_report_enabled') return 'PDF-отчёты недоступны на текущем тарифе'
 
     return API_MESSAGES.companyFeatureDisabled
   }
@@ -101,6 +102,7 @@ export function createCompanyPolicy({ db, sendError, API_MESSAGES }) {
       ocr_enabled: 'ocr_disabled_by_plan',
       analytics_enabled: 'analytics_disabled_by_plan',
       accident_module_enabled: 'accident_module_disabled_by_plan',
+      pdf_report_enabled: 'pdf_report_disabled_by_plan',
       export_enabled: 'export_disabled_by_plan',
     }
     res.status(403).json({

@@ -12,6 +12,7 @@ const FEATURE_FIELDS = [
   'ocr_enabled',
   'accident_module_enabled',
   'analytics_enabled',
+  'pdf_report_enabled',
   'export_enabled',
   'api_access_enabled',
   'custom_branding_enabled',

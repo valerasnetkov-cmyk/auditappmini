@@ -16,6 +16,7 @@ export default function VehicleInfoCard({ vehicle }: Props) {
         <InfoItem label="Госномер" value={vehicle.number} />
         <InfoItem label="Название" value={vehicle.name} />
         <InfoItem label="Регион" value={vehicle.region || 'Не указан'} />
+        <InfoItem label="Дата регистрации" value={vehicle.created_at ? formatDate(vehicle.created_at) : 'Нет данных'} />
         <InfoItem
           label="Последний плановый осмотр"
           value={vehicle.last_scheduled_inspection ? formatDate(vehicle.last_scheduled_inspection) : 'Нет данных'}

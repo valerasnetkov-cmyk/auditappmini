@@ -22,6 +22,7 @@ const emptyPlanForm: PlanForm = {
   ocrEnabled: true,
   accidentModuleEnabled: true,
   analyticsEnabled: true,
+  pdfReportEnabled: true,
   apiAccessEnabled: false,
 }
 
@@ -152,6 +153,7 @@ export default function ResourcePlansPage() {
                 <label className="flex items-center gap-2"><input type="checkbox" checked={Boolean(planForm.ocrEnabled)} onChange={(event) => setPlanForm({ ...planForm, ocrEnabled: event.target.checked })} /> OCR</label>
                 <label className="flex items-center gap-2"><input type="checkbox" checked={Boolean(planForm.accidentModuleEnabled)} onChange={(event) => setPlanForm({ ...planForm, accidentModuleEnabled: event.target.checked })} /> ДТП-модуль</label>
                 <label className="flex items-center gap-2"><input type="checkbox" checked={Boolean(planForm.analyticsEnabled)} onChange={(event) => setPlanForm({ ...planForm, analyticsEnabled: event.target.checked })} /> Аналитика</label>
+                <label className="flex items-center gap-2"><input type="checkbox" checked={Boolean(planForm.pdfReportEnabled)} onChange={(event) => setPlanForm({ ...planForm, pdfReportEnabled: event.target.checked })} /> PDF-отчёты</label>
                 <label className="flex items-center gap-2"><input type="checkbox" checked={Boolean(planForm.apiAccessEnabled)} onChange={(event) => setPlanForm({ ...planForm, apiAccessEnabled: event.target.checked })} /> API-доступ</label>
               </div>
               <StatusButton className="mt-4" status={saving ? 'loading' : 'idle'} loadingLabel="Создаём тариф…">Создать тариф</StatusButton>
@@ -191,6 +193,7 @@ export default function ResourcePlansPage() {
                           OCR: {displayFlag(plan.features.ocrEnabled)}<br />
                           ДТП: {displayFlag(plan.features.accidentModuleEnabled)}<br />
                           Аналитика: {displayFlag(plan.features.analyticsEnabled)}<br />
+                          PDF: {displayFlag(plan.features.pdfReportEnabled)}<br />
                           API: {displayFlag(plan.features.apiAccessEnabled)}
                         </td>
                         <td className="px-4 py-3">

@@ -26,6 +26,7 @@ import type {
   MFASetupResponse,
   NotificationItem,
   PhotoRequirementsResponse,
+  PhotoRecord,
   RegionRecord,
   ResourceCompanyLimitsPayload,
   ResourcePaymentPayload,
@@ -40,6 +41,7 @@ import type {
   PilotRequestAssignee,
   PilotRequestSummary,
   PilotConversionPayload,
+  PublicInspectionReport,
   SaasAlertsResponse,
   SaasAdminStats,
   SaasCompanyDetailsResponse,
@@ -261,6 +263,38 @@ class ApiClient {
     }
   }
 
+  protected async publicRequest<T>(endpoint: string, options: RequestInit = {}, retry = false): Promise<ApiResponse<T>> {
+    try {
+      const response = await fetch(`${API_URL}${endpoint}`, {
+        cache: options.cache ?? 'no-store',
+        ...options,
+        headers: {
+          'Content-Type': 'application/json',
+          ...options.headers,
+        },
+      })
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}))
+        return { error: errorData.message || errorData.error || `HTTP ${response.status}`, code: errorData.error }
+      }
+
+      if (response.status === 204) return {}
+      return { data: await response.json() }
+    } catch {
+      if (!retry) {
+        try {
+          await new Promise((resolve) => setTimeout(resolve, 400))
+          return this.publicRequest<T>(endpoint, options, true)
+        } catch {
+          // fall through
+        }
+      }
+
+      return { error: 'Ошибка соединения с сервером' }
+    }
+  }
+
   async login(email: string, password: string) {
     const result = await this.request<LoginResponse>('/auth/login', {
       method: 'POST',
@@ -408,6 +442,45 @@ class ApiClient {
 
   async getVehicle(id: string) {
     return this.request<VehicleDetail>(`/vehicles/${id}`)
+  }
+
+  async getVehiclePhotoOptions(id: string) {
+    return this.request<PhotoRecord[]>(`/vehicles/${id}/photo-options`)
+  }
+
+  async uploadVehiclePrimaryPhoto(id: string, file: File) {
+    const token = this.getToken()
+    const formData = new FormData()
+    formData.append('photo', file)
+
+    try {
+      const response = await fetch(`${API_URL}/vehicles/${id}/primary-photo`, {
+        method: 'POST',
+        body: formData,
+        headers: {
+          ...(token && { Authorization: `Bearer ${token}` }),
+        },
+        credentials: 'include',
+      })
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}))
+        const sessionError = this.handleSessionFailure(response.status, `/vehicles/${id}/primary-photo`, token, errorData.error)
+        if (sessionError) return { error: sessionError }
+        return { error: errorData.message || errorData.error || `HTTP ${response.status}` }
+      }
+
+      return { data: await response.json() as VehicleDetail }
+    } catch {
+      return { error: 'Ошибка соединения с сервером' }
+    }
+  }
+
+  async setVehiclePrimaryPhotoFromPhoto(id: string, photoId: string) {
+    return this.request<VehicleDetail>(`/vehicles/${id}/primary-photo/from-photo`, {
+      method: 'POST',
+      body: JSON.stringify({ photo_id: photoId }),
+    })
   }
 
   async createVehicle(data: CreateVehiclePayload) {
@@ -718,6 +791,10 @@ class ApiClient {
     return this.request<InspectionReport>(`/inspections/${id}/report`)
   }
 
+  async getPublicInspectionReport(token: string) {
+    return this.publicRequest<PublicInspectionReport>(`/reports/public/${encodeURIComponent(token)}`)
+  }
+
   async createInspectionReport(id: string) {
     return this.request<InspectionReport>(`/inspections/${id}/report`, {
       method: 'POST',
@@ -919,7 +996,7 @@ class ApiClient {
   }
 
   async exportData(type: ExportType) {
-    return this.request<ExportRow[]>(`/analytics/export/excel?type=${type}`)
+    return this.request<{ data: ExportRow[]; exportedAt: string }>(`/analytics/export/excel?type=${type}`)
   }
 
   async seedData(params?: { vehicles?: number; inspections?: number }) {

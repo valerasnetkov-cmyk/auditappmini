@@ -8,6 +8,7 @@ export function DashboardFilters({
   customFrom,
   customTo,
   analyticsEnabled,
+  exportEnabled,
   onRangeChange,
   onCustomFromChange,
   onCustomToChange,
@@ -17,10 +18,11 @@ export function DashboardFilters({
   customFrom: string
   customTo: string
   analyticsEnabled: boolean
+  exportEnabled: boolean
   onRangeChange: (range: DateRange) => void
   onCustomFromChange: (value: string) => void
   onCustomToChange: (value: string) => void
-  onExport: (type: ExportType, format?: 'json' | 'csv') => void
+  onExport: (type: ExportType) => void
 }) {
   return (
     <section className="card mb-6 p-4">
@@ -62,17 +64,21 @@ export function DashboardFilters({
         ) : null}
 
         <div className="flex flex-wrap gap-3 xl:ml-auto">
-          <button onClick={() => onExport('vehicles', 'csv')} disabled={!analyticsEnabled} className="btn btn-success disabled:cursor-not-allowed disabled:opacity-60">
-            CSV техники
+          <button onClick={() => onExport('vehicles')} disabled={!exportEnabled} className="btn btn-success disabled:cursor-not-allowed disabled:opacity-60">
+            Excel техники
           </button>
-          <button onClick={() => onExport('inspections', 'csv')} disabled={!analyticsEnabled} className="btn btn-primary disabled:cursor-not-allowed disabled:opacity-60">
-            CSV осмотров
+          <button onClick={() => onExport('inspections')} disabled={!exportEnabled} className="btn btn-primary disabled:cursor-not-allowed disabled:opacity-60">
+            Excel осмотров
           </button>
         </div>
       </div>
       {!analyticsEnabled ? (
         <p className="mt-3 rounded-card bg-amber-50 px-4 py-3 text-sm text-amber-800">
           Аналитика, фильтры периода и экспорт отключены текущим тарифом компании.
+        </p>
+      ) : !exportEnabled ? (
+        <p className="mt-3 rounded-card bg-amber-50 px-4 py-3 text-sm text-amber-800">
+          Экспорт отчётов отключён текущим тарифом компании.
         </p>
       ) : null}
     </section>

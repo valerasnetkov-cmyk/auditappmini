@@ -58,6 +58,36 @@ function getDefectsWithPhotos(db, PHOTO_SELECT_COLUMNS, inspectionId, companyId)
   }))
 }
 
+function getPreviousOdometerReading(db, inspection) {
+  return db.prepare(`
+    SELECT id, odometer_value, odometer_unit, COALESCE(completed_at, created_at) AS measured_at
+    FROM inspections
+    WHERE company_id = ?
+      AND vehicle_id = ?
+      AND id <> ?
+      AND odometer_value IS NOT NULL
+      AND datetime(COALESCE(completed_at, created_at)) <= datetime(COALESCE(?, ?))
+    ORDER BY datetime(COALESCE(completed_at, created_at)) DESC
+    LIMIT 1
+  `).get(
+    inspection.company_id,
+    inspection.vehicle_id,
+    inspection.id,
+    inspection.completed_at,
+    inspection.created_at,
+  )
+}
+
+function validateOdometerProgression(db, inspection, nextValue) {
+  const previous = getPreviousOdometerReading(db, inspection)
+  if (!previous || Number(nextValue) >= Number(previous.odometer_value)) return null
+
+  return {
+    previous,
+    message: `Показание одометра не может быть меньше предыдущего: ${previous.odometer_value} ${previous.odometer_unit || 'km'}`,
+  }
+}
+
 export default function registerInspectionRoutes({
   app,
   db,
@@ -105,7 +135,12 @@ export default function registerInspectionRoutes({
     const { count } = countQuery.get(...params)
 
     const query = db.prepare(`
-      SELECT i.id, i.vehicle_id, i.type, i.completed, i.created_at, i.accident_occurred_at, i.accident_location,
+      SELECT i.id, i.vehicle_id, i.type, i.completed, i.created_at, i.started_at, i.completed_at,
+             CASE
+               WHEN i.completed_at IS NULL THEN NULL
+               ELSE COALESCE(i.duration_seconds, CAST(strftime('%s', i.completed_at) - strftime('%s', COALESCE(i.started_at, i.created_at)) AS INTEGER))
+             END AS duration_seconds,
+             i.accident_occurred_at, i.accident_location,
              v.number as vehicle_number, v.name as vehicle_name, v.region as vehicle_region, u.name as inspector_name,
              (SELECT COUNT(*) FROM defects WHERE inspection_id = i.id) as defects_count
       FROM inspections i
@@ -142,7 +177,12 @@ export default function registerInspectionRoutes({
     const { count } = countQuery.get(req.params.vehicleId, companyId)
 
     const query = db.prepare(`
-      SELECT i.id, i.vehicle_id, i.type, i.completed, i.created_at,
+      SELECT i.id, i.vehicle_id, i.type, i.completed, i.created_at, i.started_at, i.completed_at,
+             CASE
+               WHEN i.completed_at IS NULL THEN NULL
+               ELSE COALESCE(i.duration_seconds, CAST(strftime('%s', i.completed_at) - strftime('%s', COALESCE(i.started_at, i.created_at)) AS INTEGER))
+             END AS duration_seconds,
+             i.odometer_value, i.odometer_unit, i.odometer_confirmed_at, i.odometer_unavailable_reason,
              v.number as vehicle_number, v.name as vehicle_name, v.region as vehicle_region,
              u.name as inspector_name,
              (SELECT COUNT(*) FROM defects WHERE inspection_id = i.id) as defects_count
@@ -209,9 +249,9 @@ export default function registerInspectionRoutes({
     db.prepare(`
       INSERT INTO inspections (
         id, vehicle_id, inspector_id, type, completed, accident_occurred_at,
-        accident_location, company_id, client_inspection_id, sync_source
+        accident_location, company_id, client_inspection_id, sync_source, started_at
       )
-      VALUES (?, ?, ?, ?, 0, ?, ?, ?, ?, ?)
+      VALUES (?, ?, ?, ?, 0, ?, ?, ?, ?, ?, datetime('now'))
     `).run(
       id,
       vehicle_id,
@@ -281,6 +321,22 @@ export default function registerInspectionRoutes({
     const accidentValidation = validateAccidentDetails(API_MESSAGES, inspection.type, accident_occurred_at, accident_location)
     if (accidentValidation.error) {
       return sendError(res, 400, accidentValidation.error)
+    }
+
+    if (req.body.odometer_value !== undefined) {
+      const nextOdometerValue = Number(req.body.odometer_value)
+      if (!Number.isFinite(nextOdometerValue)) {
+        return sendError(res, 400, API_MESSAGES.odometerValueRequired || 'Укажите корректное значение одометра')
+      }
+
+      const progressionError = validateOdometerProgression(db, inspection, nextOdometerValue)
+      if (progressionError) {
+        return res.status(400).json({
+          error: 'odometer_value_decreased',
+          message: progressionError.message,
+          previous: progressionError.previous,
+        })
+      }
     }
 
     db.prepare(`

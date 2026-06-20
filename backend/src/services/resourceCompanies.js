@@ -86,7 +86,7 @@ export function getCompanies(db) {
       COALESCE(plan.monthly_price_rub, 0) monthly_price_rub, plan.name plan_name,
       limits.plan_code, limits.max_vehicles, limits.max_users, limits.max_storage_mb,
       limits.ocr_enabled, limits.accident_module_enabled, limits.analytics_enabled,
-      limits.api_access_enabled, limits.updated_at,
+      limits.pdf_report_enabled, limits.api_access_enabled, limits.updated_at,
       subscription.id subscription_id, subscription.plan_code subscription_plan_code,
       subscription.status subscription_status, subscription.current_period_start,
       subscription.current_period_end, subscription.grace_until,

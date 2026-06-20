@@ -59,6 +59,12 @@ function dateDaysAgo(days, hour = 9) {
   return value.toISOString()
 }
 
+function demoOdometerValue(vehicleIndex, daysAgo) {
+  const baseMileage = 38_000 + vehicleIndex * 3_200
+  const activeDays = Math.max(0, 120 - daysAgo)
+  return baseMileage + activeDays * 58
+}
+
 function escapeSvgText(value) {
   return String(value)
     .replaceAll('&', '&amp;')
@@ -174,9 +180,9 @@ export async function provisionPublicDemo({ db, password }) {
     db.prepare(`
       INSERT INTO company_limits (
         id, company_id, plan_code, max_vehicles, max_users, max_inspections_per_month,
-        max_storage_mb, analytics_enabled, accident_module_enabled, export_enabled, updated_at
+        max_storage_mb, analytics_enabled, accident_module_enabled, pdf_report_enabled, export_enabled, updated_at
       )
-      VALUES (?, ?, 'standard', 20, 3, 100, 1024, 1, 1, 0, datetime('now'))
+      VALUES (?, ?, 'standard', 20, 3, 100, 1024, 1, 1, 1, 1, datetime('now'))
       ON CONFLICT(company_id) DO UPDATE SET
         plan_code = 'standard',
         max_vehicles = 20,
@@ -185,7 +191,8 @@ export async function provisionPublicDemo({ db, password }) {
         max_storage_mb = 1024,
         analytics_enabled = 1,
         accident_module_enabled = 1,
-        export_enabled = 0,
+        pdf_report_enabled = 1,
+        export_enabled = 1,
         updated_at = datetime('now')
     `).run('demo-limits', PUBLIC_DEMO_COMPANY_ID)
 
@@ -216,7 +223,8 @@ export async function provisionPublicDemo({ db, password }) {
 
     for (let index = 0; index < 36; index += 1) {
       const id = `demo-inspection-${String(index + 1).padStart(2, '0')}`
-      const vehicle = VEHICLES[index % VEHICLES.length]
+      const vehicleIndex = index % VEHICLES.length
+      const vehicle = VEHICLES[vehicleIndex]
       const type = index % 11 === 0 ? 'accident' : index % 3 === 0 ? 'scheduled' : 'quick'
       const daysAgo = index < RECENT_INSPECTION_DAY_OFFSETS.length
         ? RECENT_INSPECTION_DAY_OFFSETS[index]
@@ -225,9 +233,9 @@ export async function provisionPublicDemo({ db, password }) {
       db.prepare(`
         INSERT INTO inspections (
           id, vehicle_id, inspector_id, company_id, type, completed,
-          accident_occurred_at, accident_location, odometer_value, odometer_unit, created_at
+          accident_occurred_at, accident_location, odometer_value, odometer_unit, odometer_confirmed_at, created_at
         )
-        VALUES (?, ?, ?, ?, ?, 1, ?, ?, ?, 'km', ?)
+        VALUES (?, ?, ?, ?, ?, 1, ?, ?, ?, 'km', ?, ?)
         ON CONFLICT(id) DO UPDATE SET
           vehicle_id = excluded.vehicle_id,
           inspector_id = excluded.inspector_id,
@@ -238,6 +246,7 @@ export async function provisionPublicDemo({ db, password }) {
           accident_location = excluded.accident_location,
           odometer_value = excluded.odometer_value,
           odometer_unit = 'km',
+          odometer_confirmed_at = excluded.odometer_confirmed_at,
           created_at = excluded.created_at
       `).run(
         id,
@@ -247,7 +256,8 @@ export async function provisionPublicDemo({ db, password }) {
         type,
         type === 'accident' ? createdAt : null,
         type === 'accident' ? 'Южно-Сахалинск, проспект Мира' : null,
-        42000 + index * 1370,
+        demoOdometerValue(vehicleIndex, daysAgo),
+        createdAt,
         createdAt,
       )
 

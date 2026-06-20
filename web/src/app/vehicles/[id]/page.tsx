@@ -1,17 +1,22 @@
 'use client'
 
+import { useEffect, useState } from 'react'
 import { useParams } from 'next/navigation'
 import Link from 'next/link'
 import Layout from '@/components/Layout'
+import OdometerHistory from '@/components/OdometerHistory'
 import SubscriptionStatusBanner from '@/components/SubscriptionStatusBanner'
 import { getCompanyOperationRestriction } from '@/lib/companyAccess'
 import { useCompanyUsage } from '@/lib/useCompanyUsage'
+import type { PhotoRecord } from '@/lib/types'
+import api from '@/lib/api/client'
 import DefectsSection from './_components/DefectsSection'
 import InspectionsHistory from './_components/InspectionsHistory'
 import StatCard from './_components/StatCard'
 import StatusHistory from './_components/StatusHistory'
 import StatusModal from './_components/StatusModal'
 import VehicleInfoCard from './_components/VehicleInfoCard'
+import VehiclePrimaryPhotoCard from './_components/VehiclePrimaryPhotoCard'
 import { getVehicleStatusBadgeClass, getVehicleStatusLabel } from './_lib/vehicleDetail'
 import { useDefectActions } from './_hooks/useDefectActions'
 import { useStatusModal } from './_hooks/useStatusModal'
@@ -24,6 +29,9 @@ export default function VehicleDetailPage() {
 
   const data = useVehicleDetailData(vehicleId)
   const { toast, showToast } = useToast()
+  const [photoOptions, setPhotoOptions] = useState<PhotoRecord[]>([])
+  const [photoOptionsLoading, setPhotoOptionsLoading] = useState(false)
+  const [photoSaving, setPhotoSaving] = useState(false)
   const { usage: companyUsage, loading: companyUsageLoading } = useCompanyUsage()
   const writeRestriction = getCompanyOperationRestriction(companyUsage, 'write')
   const writeRestrictionMessage = companyUsageLoading
@@ -42,6 +50,31 @@ export default function VehicleDetailPage() {
   const defects = useDefectActions(guard)
   const statusModal = useStatusModal(guard)
 
+  useEffect(() => {
+    if (!data.vehicle) return
+    let cancelled = false
+
+    async function loadPhotoOptions() {
+      setPhotoOptionsLoading(true)
+      const result = await api.getVehiclePhotoOptions(vehicleId)
+      if (!cancelled) {
+        if (result.error) {
+          data.setError(result.error)
+        } else {
+          setPhotoOptions(result.data || [])
+        }
+        setPhotoOptionsLoading(false)
+      }
+    }
+
+    void loadPhotoOptions()
+
+    return () => {
+      cancelled = true
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [data.vehicle?.id, vehicleId])
+
   const closeDefect = (defectId: string) => void defects.closeDefect(defectId, data.reloadDefects, showToast)
   const reopenDefect = (defectId: string) => void defects.reopenDefect(defectId, data.reloadDefects, showToast)
   const handleStatusChange = () => {
@@ -53,6 +86,48 @@ export default function VehicleDetailPage() {
       (next) => data.setVehicle(next),
       data.reloadHistory,
     )
+  }
+
+  const handlePrimaryPhotoUpload = async (file: File) => {
+    if (companyUsageLoading) {
+      data.setError('Проверяем статус тарифа компании. Повторите действие через несколько секунд.')
+      return
+    }
+    if (writeRestriction) {
+      data.setError(`${writeRestriction.title}: ${writeRestriction.message}`)
+      return
+    }
+
+    setPhotoSaving(true)
+    const result = await api.uploadVehiclePrimaryPhoto(vehicleId, file)
+    if (result.error) {
+      data.setError(result.error)
+    } else if (result.data) {
+      data.setVehicle(result.data)
+      showToast('Основное фото обновлено')
+    }
+    setPhotoSaving(false)
+  }
+
+  const handlePrimaryPhotoSelect = async (photoId: string) => {
+    if (companyUsageLoading) {
+      data.setError('Проверяем статус тарифа компании. Повторите действие через несколько секунд.')
+      return
+    }
+    if (writeRestriction) {
+      data.setError(`${writeRestriction.title}: ${writeRestriction.message}`)
+      return
+    }
+
+    setPhotoSaving(true)
+    const result = await api.setVehiclePrimaryPhotoFromPhoto(vehicleId, photoId)
+    if (result.error) {
+      data.setError(result.error)
+    } else if (result.data) {
+      data.setVehicle(result.data)
+      showToast('Основное фото выбрано')
+    }
+    setPhotoSaving(false)
   }
 
   if (data.loading) {
@@ -133,7 +208,21 @@ export default function VehicleDetailPage() {
           <StatCard label="Всего дефектов" value={totalDefects} tone="warning" />
         </section>
 
-        <VehicleInfoCard vehicle={data.vehicle} />
+        <div className="grid gap-6 xl:grid-cols-[0.9fr_1.1fr]">
+          <VehiclePrimaryPhotoCard
+            vehicle={data.vehicle}
+            photos={photoOptions}
+            loading={photoOptionsLoading}
+            saving={photoSaving}
+            disabled={Boolean(writeRestrictionMessage)}
+            onUpload={handlePrimaryPhotoUpload}
+            onSelect={handlePrimaryPhotoSelect}
+          />
+          <VehicleInfoCard vehicle={data.vehicle} />
+        </div>
+        <div className="mt-6">
+          <OdometerHistory inspections={data.inspections} />
+        </div>
         <InspectionsHistory inspections={data.inspections} />
         <DefectsSection
           defects={data.defects}

@@ -76,7 +76,7 @@ export function VehicleRow({
         <td className="px-6 py-4">
           {vehicle.inspection_schedule ? (
             <span className={scheduleClasses[vehicle.inspection_schedule.status]}>
-              {scheduleLabels[vehicle.inspection_schedule.status]}
+              {formatScheduleLabel(vehicle.inspection_schedule)}
             </span>
           ) : (
             <span className="text-foreground-muted">Нет данных</span>
@@ -100,4 +100,13 @@ export function VehicleRow({
       </td>
     </tr>
   )
+}
+
+function formatScheduleLabel(schedule: NonNullable<VehicleRecord['inspection_schedule']>) {
+  const days = schedule.planned.days_until ?? schedule.quick.days_until
+  const baseLabel = scheduleLabels[schedule.status]
+  if (days === null || days === undefined) return baseLabel
+  if (days < 0) return `${baseLabel}: ${Math.abs(days)} дн.`
+  if (days === 0) return `${baseLabel}: сегодня`
+  return `${baseLabel}: ${days} дн.`
 }

@@ -66,6 +66,7 @@ export function useSaveLimits(list: { withSave: (action: () => Promise<boolean>)
         ocrEnabled: Boolean(form.ocrEnabled),
         accidentModuleEnabled: Boolean(form.accidentModuleEnabled),
         analyticsEnabled: Boolean(form.analyticsEnabled),
+        pdfReportEnabled: Boolean(form.pdfReportEnabled),
         apiAccessEnabled: Boolean(form.apiAccessEnabled),
       })
       if (result.data) {

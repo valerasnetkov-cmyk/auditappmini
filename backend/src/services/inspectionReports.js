@@ -15,6 +15,8 @@ import {
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const regularFontPath = path.resolve(__dirname, '../../node_modules/dejavu-fonts-ttf/ttf/DejaVuSans.ttf')
 const boldFontPath = path.resolve(__dirname, '../../node_modules/dejavu-fonts-ttf/ttf/DejaVuSans-Bold.ttf')
+const REPORT_FOOTER_TITLE = 'AuditAvto — цифровой контроль осмотров автопарка'
+const REPORT_FOOTER_CTA = 'Запустите контроль техники на auditavto.ru'
 
 function formatDate(value) {
   if (!value) return 'не указано'
@@ -31,7 +33,7 @@ function photoCoordinates(photo) {
 }
 
 function ensurePageSpace(doc, requiredHeight = 180) {
-  if (doc.y + requiredHeight > doc.page.height - 60) doc.addPage()
+  if (doc.y + requiredHeight > doc.page.height - 78) doc.addPage()
 }
 
 function writeHeading(doc, text) {
@@ -44,6 +46,51 @@ function writeRow(doc, label, value) {
   ensurePageSpace(doc, 30)
   doc.font('Bold').text(`${label}: `, { continued: true })
   doc.font('Regular').text(value === null || value === undefined || value === '' ? 'не указано' : String(value))
+}
+
+function writeReportFooters(doc) {
+  const range = doc.bufferedPageRange()
+  for (let pageIndex = range.start; pageIndex < range.start + range.count; pageIndex += 1) {
+    doc.switchToPage(pageIndex)
+
+    const y = doc.page.height - doc.page.margins.bottom - 16
+    const left = doc.page.margins.left
+    const width = doc.page.width - doc.page.margins.left - doc.page.margins.right
+
+    doc
+      .save()
+      .moveTo(left, y - 8)
+      .lineTo(left + width, y - 8)
+      .lineWidth(0.4)
+      .strokeColor('#d9e2ec')
+      .stroke()
+      .font('Bold')
+      .fontSize(7)
+      .fillColor('#17324d')
+      .text(REPORT_FOOTER_TITLE, left, y, { width: width * 0.58, lineBreak: false })
+      .font('Regular')
+      .fontSize(7)
+      .fillColor('#f97316')
+      .text(REPORT_FOOTER_CTA, left + width * 0.6, y, { width: width * 0.4, align: 'right', lineBreak: false })
+      .restore()
+  }
+}
+
+function makePublicToken() {
+  return crypto.randomBytes(24).toString('base64url')
+}
+
+function getPublicReportUrl(token) {
+  const baseUrl = String(process.env.WEB_URL || process.env.PUBLIC_WEB_URL || 'http://localhost:3002').replace(/\/+$/, '')
+  return `${baseUrl}/reports/public/${token}`
+}
+
+function serializeReport(report) {
+  if (!report) return null
+  return {
+    ...report,
+    public_url: report.public_token ? getPublicReportUrl(report.public_token) : null,
+  }
 }
 
 export async function hashFile(filePath) {
@@ -59,11 +106,18 @@ export function createInspectionReportService({ db, PHOTO_SELECT_COLUMNS }) {
   function getReportData(inspectionId, companyId) {
     const inspection = db.prepare(`
       SELECT i.*, v.number AS vehicle_number, v.name AS vehicle_name, v.region AS vehicle_region,
-             v.status AS vehicle_status, u.name AS inspector_name, c.name AS company_name
+             v.status AS vehicle_status, u.name AS inspector_name, c.name AS company_name,
+             COALESCE(b.legal_name, c.legal_name, c.name) AS company_legal_name,
+             b.inn AS company_tax_id,
+             COALESCE(b.support_email, b.billing_email) AS company_contact_email,
+             b.support_phone AS company_contact_phone,
+             l.custom_branding_enabled AS custom_branding_enabled
       FROM inspections i
       JOIN vehicles v ON v.id = i.vehicle_id
       JOIN users u ON u.id = i.inspector_id
       JOIN companies c ON c.id = i.company_id
+      LEFT JOIN company_billing_details b ON b.company_id = c.id
+      LEFT JOIN company_limits l ON l.company_id = c.id
       WHERE i.id = ? AND i.company_id = ?
     `).get(inspectionId, companyId)
     if (!inspection) return null
@@ -142,11 +196,13 @@ export function createInspectionReportService({ db, PHOTO_SELECT_COLUMNS }) {
     const data = getReportData(inspectionId, companyId)
     if (!data) return null
 
-    const reportId = db.prepare(`
-      SELECT id
+    const existingReport = db.prepare(`
+      SELECT id, public_token
       FROM inspection_reports
       WHERE company_id = ? AND inspection_id = ?
-    `).get(companyId, inspectionId)?.id || uuidv4()
+    `).get(companyId, inspectionId)
+    const reportId = existingReport?.id || uuidv4()
+    const publicToken = existingReport?.public_token || makePublicToken()
     const reportDir = path.join(uploadsDir, 'reports', companyId, inspectionId)
     const reportPath = path.join(reportDir, 'report.pdf')
     const temporaryReportPath = path.join(reportDir, `report-${uuidv4()}.tmp`)
@@ -154,18 +210,19 @@ export function createInspectionReportService({ db, PHOTO_SELECT_COLUMNS }) {
 
     db.prepare(`
       INSERT INTO inspection_reports (
-        id, company_id, inspection_id, status, integrity_status, created_at, updated_at
-      ) VALUES (?, ?, ?, 'generating', 'unverified', datetime('now'), datetime('now'))
+        id, company_id, inspection_id, status, integrity_status, public_token, created_at, updated_at
+      ) VALUES (?, ?, ?, 'generating', 'unverified', ?, datetime('now'), datetime('now'))
       ON CONFLICT(company_id, inspection_id) DO UPDATE SET
         status = 'generating',
         integrity_status = 'unverified',
+        public_token = COALESCE(public_token, excluded.public_token),
         verified_at = NULL,
         updated_at = datetime('now')
-    `).run(reportId, companyId, inspectionId)
+    `).run(reportId, companyId, inspectionId, publicToken)
 
-    const verificationUrl = `${String(process.env.WEB_URL || 'http://localhost:3002').replace(/\/+$/, '')}/inspections/${inspectionId}/report`
+    const verificationUrl = getPublicReportUrl(publicToken)
     const qrBuffer = await QRCode.toBuffer(verificationUrl, { type: 'png', width: 220, margin: 1 })
-    const doc = new PDFDocument({ size: 'A4', margin: 48, autoFirstPage: true })
+    const doc = new PDFDocument({ size: 'A4', margin: 48, autoFirstPage: true, bufferPages: true })
     doc.registerFont('Regular', regularFontPath)
     doc.registerFont('Bold', boldFontPath)
     const output = fs.createWriteStream(temporaryReportPath, { flags: 'wx' })
@@ -178,9 +235,14 @@ export function createInspectionReportService({ db, PHOTO_SELECT_COLUMNS }) {
 
     try {
     const { inspection, photos, checklist, defects } = data
-    doc.font('Bold').fontSize(24).fillColor('#17324d').text('Акт осмотра техники')
+    const branded = Boolean(Number(inspection.custom_branding_enabled))
+    const titleColor = branded ? '#0f766e' : '#17324d'
+    doc.font('Bold').fontSize(24).fillColor(titleColor).text('Акт осмотра техники')
     doc.moveDown(0.5).font('Regular').fontSize(12).fillColor('#222222')
-    writeRow(doc, 'Компания', inspection.company_name)
+    writeRow(doc, 'Компания', branded ? inspection.company_legal_name : inspection.company_name)
+    if (branded && inspection.company_tax_id) writeRow(doc, 'ИНН', inspection.company_tax_id)
+    if (branded && inspection.company_contact_email) writeRow(doc, 'Email', inspection.company_contact_email)
+    if (branded && inspection.company_contact_phone) writeRow(doc, 'Телефон', inspection.company_contact_phone)
     writeRow(doc, 'Номер отчёта', reportId)
     writeRow(doc, 'Тип осмотра', inspection.type)
     writeRow(doc, 'Статус', inspection.completed ? 'завершён' : 'черновик')
@@ -227,6 +289,10 @@ export function createInspectionReportService({ db, PHOTO_SELECT_COLUMNS }) {
     writeHeading(doc, 'Проверка отчёта')
     doc.image(qrBuffer, { fit: [130, 130] })
     doc.font('Regular').fontSize(8).fillColor('#555555').text(verificationUrl)
+    if (branded) {
+      doc.moveDown(0.6).font('Regular').fontSize(8).fillColor('#555555').text('Отчёт сформирован с реквизитами компании.')
+    }
+    writeReportFooters(doc)
     doc.end()
     await completed
 
@@ -245,7 +311,7 @@ export function createInspectionReportService({ db, PHOTO_SELECT_COLUMNS }) {
       WHERE id = ?
     `).run(pdfUrl, sha256, fileStats.size, generatedAt, generatedAt, generatedAt, reportId)
 
-    return db.prepare('SELECT * FROM inspection_reports WHERE id = ?').get(reportId)
+    return serializeReport(db.prepare('SELECT * FROM inspection_reports WHERE id = ?').get(reportId))
     } finally {
       await fs.promises.rm(temporaryReportPath, { force: true })
     }
@@ -265,15 +331,35 @@ export function createInspectionReportService({ db, PHOTO_SELECT_COLUMNS }) {
   }
 
   function getReport(inspectionId, companyId) {
-    return db.prepare(`
+    return serializeReport(db.prepare(`
       SELECT *
       FROM inspection_reports
       WHERE inspection_id = ? AND company_id = ?
-    `).get(inspectionId, companyId) || null
+    `).get(inspectionId, companyId) || null)
   }
 
   function getReportPath(inspectionId, companyId) {
     return path.join(uploadsDir, 'reports', companyId, inspectionId, 'report.pdf')
+  }
+
+  function getPublicReport(token) {
+    return db.prepare(`
+      SELECT r.*, i.id AS inspection_id, i.type AS inspection_type, i.created_at AS inspection_created_at,
+             i.completed_at AS inspection_completed_at,
+             v.number AS vehicle_number, v.name AS vehicle_name,
+             c.name AS company_name
+      FROM inspection_reports r
+      JOIN inspections i ON i.id = r.inspection_id AND i.company_id = r.company_id
+      JOIN vehicles v ON v.id = i.vehicle_id AND v.company_id = r.company_id
+      JOIN companies c ON c.id = r.company_id
+      WHERE r.public_token = ?
+        AND (r.public_token_expires_at IS NULL OR datetime(r.public_token_expires_at) > datetime('now'))
+    `).get(token) || null
+  }
+
+  function getPublicReportPath(report) {
+    if (!report) return null
+    return path.join(uploadsDir, 'reports', report.company_id, report.inspection_id, 'report.pdf')
   }
 
   async function verifyReport(inspectionId, companyId) {
@@ -308,11 +394,11 @@ export function createInspectionReportService({ db, PHOTO_SELECT_COLUMNS }) {
       WHERE id = ?
     `).run(status, integrityStatus, verifiedAt, verifiedAt, report.id)
 
-    return {
+    return serializeReport({
       ...getReport(inspectionId, companyId),
       actual_sha256: actualSha256,
       actual_file_size: actualFileSize,
-    }
+    })
   }
 
   function markFailed(inspectionId, companyId) {
@@ -323,5 +409,5 @@ export function createInspectionReportService({ db, PHOTO_SELECT_COLUMNS }) {
     `).run(new Date().toISOString(), inspectionId, companyId)
   }
 
-  return { generateReport, getReport, getReportPath, verifyReport, markFailed }
+  return { generateReport, getReport, getReportPath, getPublicReport, getPublicReportPath, verifyReport, markFailed }
 }

@@ -151,7 +151,7 @@ async function run() {
 
   const server = spawn(process.execPath, ['src/server.js'], {
     cwd: process.cwd(),
-    env: { ...process.env, PORT: String(PORT), DATABASE_PATH, UPLOAD_DIR, JWT_SECRET },
+    env: { ...process.env, PORT: String(PORT), DATABASE_PATH, UPLOAD_DIR, JWT_SECRET, WEB_URL: BASE_URL },
     stdio: ['ignore', 'pipe', 'pipe'],
   })
 
@@ -429,6 +429,9 @@ async function run() {
     if (report.status !== 'ready' || !report.sha256) {
       throw new Error(`Inspection report was not generated: ${JSON.stringify(report)}`)
     }
+    if (!report.public_url?.startsWith(`${BASE_URL}/reports/public/`)) {
+      throw new Error(`Inspection report public URL is missing: ${JSON.stringify(report)}`)
+    }
     const verifiedReport = await request(`/api/inspections/${quickInspection.id}/report`, {
       headers: authHeaders,
     })
@@ -484,6 +487,23 @@ async function run() {
     })
     if (regeneratedReport.integrity_status !== 'valid' || regeneratedReport.status !== 'ready') {
       throw new Error(`Regenerated report integrity failed: ${JSON.stringify(regeneratedReport)}`)
+    }
+    const publicReportToken = String(regeneratedReport.public_url || '').split('/reports/public/')[1]
+    if (!publicReportToken) {
+      throw new Error(`Regenerated report public URL is missing: ${JSON.stringify(regeneratedReport)}`)
+    }
+    const publicReport = await request(`/api/reports/public/${publicReportToken}`)
+    if (
+      publicReport.integrity_status !== 'valid'
+      || publicReport.status !== 'ready'
+      || publicReport.inspection?.id !== quickInspection.id
+      || publicReport.pdf_url !== `/api/reports/public/${publicReportToken}.pdf`
+    ) {
+      throw new Error(`Public report metadata is incomplete: ${JSON.stringify(publicReport)}`)
+    }
+    const publicReportPdf = await fetch(`${BASE_URL}/api/reports/public/${publicReportToken}.pdf`)
+    if (publicReportPdf.status !== 200 || publicReportPdf.headers.get('content-type') !== 'application/pdf') {
+      throw new Error(`Public report PDF expected 200 application/pdf, got ${publicReportPdf.status}`)
     }
     const submittedApproval = await request(`/api/inspections/${quickInspection.id}/submit`, {
       method: 'POST',
@@ -684,6 +704,8 @@ async function run() {
           reportGenerated: report.status === 'ready',
           reportIntegrityVerified: regeneratedReport.integrity_status === 'valid',
           reportTamperingDetected: corruptedReport.integrity_status === 'mismatch',
+          publicReportVerified: publicReport.integrity_status === 'valid',
+          publicReportPdfAvailable: publicReportPdf.status === 200,
           reportTenantIsolation: crossTenantReport.status === 404,
           approvalWorkflowCompleted: approvalDetails.status === 'approved',
           approvalNotificationDelivered: usageAfterSubmission.alerts.some(

@@ -32,6 +32,7 @@ export default function LimitsForm({ form, setForm, plans, onSubmit, saving }: P
               ocrEnabled: plan?.features.ocrEnabled ?? false,
               accidentModuleEnabled: plan?.features.accidentModuleEnabled ?? false,
               analyticsEnabled: plan?.features.analyticsEnabled ?? false,
+              pdfReportEnabled: plan?.features.pdfReportEnabled ?? false,
               apiAccessEnabled: plan?.features.apiAccessEnabled ?? false,
             }))
           }}
@@ -86,6 +87,14 @@ export default function LimitsForm({ form, setForm, plans, onSubmit, saving }: P
             onChange={(event) => setForm((prev) => ({ ...prev, analyticsEnabled: event.target.checked }))}
           />
           Аналитика
+        </label>
+        <label className="flex items-center gap-2">
+          <input
+            type="checkbox"
+            checked={Boolean(form.pdfReportEnabled)}
+            onChange={(event) => setForm((prev) => ({ ...prev, pdfReportEnabled: event.target.checked }))}
+          />
+          PDF-отчёты
         </label>
         <label className="flex items-center gap-2">
           <input
