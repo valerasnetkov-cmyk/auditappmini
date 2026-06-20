@@ -59,7 +59,7 @@ export default function VehicleDetailPage() {
       const result = await api.getVehiclePhotoOptions(vehicleId)
       if (!cancelled) {
         if (result.error) {
-          data.setError(result.error)
+          setPhotoOptions([])
         } else {
           setPhotoOptions(result.data || [])
         }

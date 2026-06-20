@@ -12,6 +12,10 @@
   обязательного набора demo-данных, включая `demo-vehicle-01`, и автоматически
   переподготавливает демо-компанию, чтобы production не отдавал 404 на карточку
   тестовой техники после частичного или устаревшего seed.
+- **Vehicle detail optional media fallback**: карточка техники больше не
+  заменяется экраном `HTTP 404`, если дополнительный запрос списка фото
+  `/vehicles/:id/photo-options` недоступен на production; основная карточка
+  продолжает отображаться, а выбор фото остаётся пустым.
 - **Mobile-only inspection web contract**: web E2E and docs now explicitly
   enforce that starting, conducting, editing checklist/photo/odometer data and
   completing inspections happens only in the mobile app. The local launch gate
