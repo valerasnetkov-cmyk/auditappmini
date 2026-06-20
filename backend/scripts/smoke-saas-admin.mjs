@@ -309,6 +309,19 @@ async function run() {
       throw new Error(`Resource admin company limits update failed: ${JSON.stringify(updatedLimits)}`)
     }
 
+    const trialDetails = await request(`/api/admin/resource/companies/${company.id}`, { headers: adminHeaders })
+    const trialDays = trialDetails.subscription?.daysUntilEnd
+    if (
+      trialDetails.subscription?.status !== 'trial' ||
+      trialDetails.subscription?.planCode !== 'pilot' ||
+      trialDays === null ||
+      trialDays === undefined ||
+      trialDays < 29 ||
+      trialDays > 30
+    ) {
+      throw new Error(`New company should start with a 30-day trial subscription: ${JSON.stringify(trialDetails.subscription)}`)
+    }
+
     const payment = await request('/api/admin/resource/payments', {
       method: 'POST',
       headers: jsonHeaders,

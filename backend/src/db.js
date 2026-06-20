@@ -452,7 +452,7 @@ function seedDefaultPlans() {
     VALUES (?, ?, ?, ?, 1, 1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active', datetime('now'), datetime('now'))
   `)
 
-  insertPlan.run(['pilot', 'Пилот', 'Пилотное внедрение для небольшой группы техники', 10, null, 3, 0, 10, 3, 300, 10240, 10, 1, 300, 1, 0, 1, 0, 0, 0, 'basic', 5000])
+  insertPlan.run(['pilot', 'Пилот', 'Пилотное внедрение для небольшой группы техники', 10, null, 1, 0, 10, 3, 300, 10240, 10, 1, 300, 1, 0, 1, 0, 0, 0, 'basic', 5000])
   insertPlan.run(['standard', 'Стандарт', 'Основной тариф для регулярного контроля автопарка', 20, 150000, 0, 1, 50, 10, 2000, 51200, 50, 1, 2000, 1, 1, 1, 0, 0, 0, 'priority', 15000])
   insertPlan.run(['enterprise', 'Enterprise', 'Индивидуальные условия для крупных парков', 30, null, 0, 0, 150, 30, null, 204800, 200, 1, null, 1, 1, 1, 1, 1, 1, 'personal', 50000])
   insertPlan.free?.()
@@ -468,7 +468,7 @@ function seedDefaultPlans() {
         support_level = ?, status = 'active', updated_at = datetime('now')
     WHERE code = ?
   `)
-  updatePlan.run(['Пилот', 'Пилотное внедрение для небольшой группы техники', 10, 5000, null, 3, 0, 10, 3, 300, 10240, 10, 1, 300, 1, 0, 1, 0, 0, 0, 'basic', 'pilot'])
+  updatePlan.run(['Пилот', 'Пилотное внедрение для небольшой группы техники', 10, 5000, null, 1, 0, 10, 3, 300, 10240, 10, 1, 300, 1, 0, 1, 0, 0, 0, 'basic', 'pilot'])
   updatePlan.run(['Стандарт', 'Основной тариф для регулярного контроля автопарка', 20, 15000, 150000, 0, 1, 50, 10, 2000, 51200, 50, 1, 2000, 1, 1, 1, 0, 0, 0, 'priority', 'standard'])
   updatePlan.run(['Enterprise', 'Индивидуальные условия для крупных парков', 30, 50000, null, 0, 0, 150, 30, null, 204800, 200, 1, null, 1, 1, 1, 1, 1, 1, 'personal', 'enterprise'])
   updatePlan.free?.()
@@ -491,7 +491,7 @@ function seedDefaultPlans() {
       CASE WHEN s.status = 'suspended' THEN 'suspended' ELSE 'trial' END,
       CASE
         WHEN s.current_period_end IS NOT NULL THEN s.current_period_end
-        ELSE date('now', '+3 months')
+        ELSE date('now', '+30 days')
       END,
       datetime('now'),
       datetime('now')

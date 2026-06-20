@@ -13,6 +13,7 @@ export function useCreateCompany(list: { withSave: (action: () => Promise<boolea
         id: form.id || undefined,
         slug: form.slug || '',
         name: form.name,
+        trialDays: form.trialDays,
         limits: {
           planCode: 'pilot',
         },

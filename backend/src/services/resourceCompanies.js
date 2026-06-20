@@ -48,7 +48,7 @@ export function getActivityDropPercent(current, previous) {
 
 function mapSubscription(row) {
   if (!row?.subscription_id) return null
-  const status = ['active', 'expiring', 'grace', 'expired', 'suspended'].includes(row.subscription_status)
+  const status = ['trial', 'active', 'expiring', 'grace', 'expired', 'suspended'].includes(row.subscription_status)
     ? row.subscription_status
     : 'active'
   return {

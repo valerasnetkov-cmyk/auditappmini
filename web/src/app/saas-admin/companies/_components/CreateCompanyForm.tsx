@@ -36,6 +36,13 @@ export default function CreateCompanyForm({ form, setForm, onSubmit, saving }: P
           required
         />
       </div>
+      <div className="mt-4 rounded-lg border border-orange-200 bg-orange-50 px-3 py-3 text-sm text-orange-900">
+        <div className="font-semibold">Пилот для новой компании: {form.trialDays} дней бесплатно</div>
+        <p className="mt-1 text-xs leading-5">
+          При создании компании будет открыт тариф “Пилот” с обратным отсчётом от даты регистрации.
+          Владелец увидит оставшиеся дни в своём кабинете.
+        </p>
+      </div>
       <StatusButton className="mt-4" status={saving ? 'loading' : 'idle'} loadingLabel="Создаём компанию…">
         Создать
       </StatusButton>

@@ -28,7 +28,7 @@ export default function CompaniesTable({
             <th className="px-4 py-3">Статус</th>
             <th className="px-4 py-3">Владелец</th>
             <th className="px-4 py-3">Тариф</th>
-            <th className="px-4 py-3">Оплачено до</th>
+            <th className="px-4 py-3">Период до</th>
             <th className="px-4 py-3">Техника / лимит</th>
             <th className="px-4 py-3">Пользователи / лимит</th>
             <th className="px-4 py-3">MRR</th>

@@ -152,10 +152,13 @@ export function createCompanyPolicy({ db, sendError, API_MESSAGES }) {
 
     const policy = planLimits.getResolvedPolicy(companyId)
     const billingStatus = policy.billing?.billing_status
+    const trialExpired = billingStatus === 'trial'
+      && policy.billing?.trial_until
+      && String(policy.billing.trial_until).slice(0, 10) < new Date().toISOString().slice(0, 10)
     const legacyStatus = policy.subscription?.status
     const status = legacyStatus === 'suspended' || legacyStatus === 'expired'
       ? legacyStatus
-      : billingStatus || legacyStatus
+      : trialExpired ? 'expired' : billingStatus || legacyStatus
 
     if (status === 'suspended' || status === 'archived') {
       return {

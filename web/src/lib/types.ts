@@ -233,6 +233,7 @@ export type CreateCompanyPayload = {
   api_cluster_key?: string
   storage_cluster_key?: string
   ocr_cluster_key?: string
+  trialDays?: number
 }
 
 export type UpdateCompanyPayload = Partial<CreateCompanyPayload> & { status?: 'active' | 'inactive' }
@@ -748,7 +749,7 @@ export type CompanyUsageResponse = {
   subscription?: {
     id?: string | null
     planCode?: string | null
-    status: 'active' | 'expiring' | 'grace' | 'expired' | 'suspended' | string
+    status: 'trial' | 'active' | 'expiring' | 'grace' | 'expired' | 'suspended' | string
     currentPeriodStart?: string | null
     currentPeriodEnd?: string | null
     graceUntil?: string | null
@@ -926,7 +927,7 @@ export type SaasSubscription = {
   id: string
   companyId: string
   planCode?: string | null
-  status: 'active' | 'expiring' | 'grace' | 'expired' | 'suspended' | string
+  status: 'trial' | 'active' | 'expiring' | 'grace' | 'expired' | 'suspended' | string
   currentPeriodStart?: string | null
   currentPeriodEnd?: string | null
   graceUntil?: string | null
@@ -964,7 +965,7 @@ export type SaasExpiringSubscription = {
   ownerEmail?: string | null
   ownerName?: string | null
   planCode?: string | null
-  status: 'active' | 'expiring' | 'grace' | 'expired' | 'suspended' | string
+    status: 'trial' | 'active' | 'expiring' | 'grace' | 'expired' | 'suspended' | string
   currentPeriodStart?: string | null
   currentPeriodEnd?: string | null
   graceUntil?: string | null

@@ -9,6 +9,7 @@ type Props = {
 }
 
 const STATUS_LABELS: Record<string, string> = {
+  trial: 'Пилот',
   active: 'Активен',
   expiring: 'Скоро закончится',
   grace: 'Льготный период',
@@ -36,15 +37,17 @@ function getTone(warnings: CompanyServiceWarning[]): UiTone {
 }
 
 export default function SubscriptionStatusBanner({ usage, compact = false }: Props) {
-  if (!usage?.subscription && !usage?.serviceWarnings?.length) return null
+  if (!usage?.subscription && !usage?.billing && !usage?.serviceWarnings?.length) return null
 
   const subscription = usage.subscription
+  const billing = usage.billing
   const warnings = usage.serviceWarnings || []
   const tone = getTone(warnings)
-  const status = subscription?.status || 'active'
-  const periodEnd = formatDate(subscription?.currentPeriodEnd)
+  const status = subscription?.status || billing?.status || 'active'
+  const periodEnd = formatDate(subscription?.currentPeriodEnd || billing?.paidUntil || billing?.trialUntil)
   const graceUntil = formatDate(subscription?.graceUntil)
   const hasWarnings = warnings.length > 0
+  const daysLeft = subscription?.daysUntilEnd ?? billing?.daysLeft ?? null
 
   return (
     <div className="mb-4">
@@ -57,11 +60,16 @@ export default function SubscriptionStatusBanner({ usage, compact = false }: Pro
           <p>
             {usage.company.name}
             {usage.plan.code ? ` · ${usage.plan.code.toUpperCase()}` : ''}
-            {periodEnd ? ` · оплачен до ${periodEnd}` : ''}
+            {periodEnd ? ` · ${status === 'trial' ? 'пилот до' : 'оплачен до'} ${periodEnd}` : ''}
+            {daysLeft !== null && daysLeft !== undefined ? ` · осталось ${Math.max(daysLeft, 0)} дн.` : ''}
             {graceUntil ? ` · льготный период до ${graceUntil}` : ''}
           </p>
 
-        {subscription?.mrrRub ? (
+        {status === 'trial' ? (
+          <p className="mt-2 font-semibold">
+            30 дней бесплатно для новых компаний
+          </p>
+        ) : subscription?.mrrRub ? (
           <p className="mt-2 font-semibold">
             {formatMoney(subscription.mrrRub)}
           </p>

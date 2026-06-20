@@ -116,7 +116,7 @@ export function getExpiringSubscriptions(db, { limit = 20 } = {}) {
     id: row.subscription_id, companyId: row.company_id, companyName: row.company_name,
     companySlug: row.company_slug || null, ownerEmail: row.owner_email || null,
     ownerName: row.owner_name || null, planCode: row.plan_code || null,
-    status: ['active', 'expiring', 'grace', 'expired', 'suspended'].includes(row.status) ? row.status : 'active',
+    status: ['trial', 'active', 'expiring', 'grace', 'expired', 'suspended'].includes(row.status) ? row.status : 'active',
     currentPeriodStart: row.current_period_start || null, currentPeriodEnd: row.current_period_end || null,
     graceUntil: row.grace_until || null, daysUntilEnd: daysUntil(row.current_period_end),
     lastPaymentId: row.last_payment_id || null, lastPaymentDate: row.last_payment_date || null,

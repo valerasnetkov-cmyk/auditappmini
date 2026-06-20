@@ -27,6 +27,12 @@ function normalizeSource(value) {
   return SOURCE_PATTERN.test(normalized) ? normalized : 'landing'
 }
 
+function addDaysDate(days, now = new Date()) {
+  const date = new Date(now)
+  date.setUTCDate(date.getUTCDate() + days)
+  return date.toISOString().slice(0, 10)
+}
+
 function writeAudit(db, req, action, entityId, payload = null, companyId = null) {
   db.prepare(`
     INSERT INTO audit_logs (
@@ -447,6 +453,8 @@ export default function registerPilotRequestRoutes({
       const companyId = uuidv4()
       const ownerId = uuidv4()
       const limits = planLimits(plan, req.body?.limits || {})
+      const trialPeriodStart = new Date().toISOString().slice(0, 10)
+      const trialPeriodEnd = addDaysDate(30)
       let setup = null
 
       db.exec('BEGIN IMMEDIATE')
@@ -476,8 +484,14 @@ export default function registerPilotRequestRoutes({
           INSERT INTO company_billing (
             id, company_id, plan_code, billing_status, trial_until,
             created_by_user_id, created_at, updated_at
-          ) VALUES (?, ?, ?, 'trial', date('now', '+3 months'), ?, datetime('now'), datetime('now'))
-        `).run(uuidv4(), companyId, planCode, req.user.id)
+          ) VALUES (?, ?, ?, 'trial', ?, ?, datetime('now'), datetime('now'))
+        `).run(uuidv4(), companyId, planCode, trialPeriodEnd, req.user.id)
+        db.prepare(`
+          INSERT INTO company_subscriptions (
+            id, company_id, plan_code, status, current_period_start, current_period_end,
+            grace_until, mrr_rub, auto_suspend_enabled, created_at, updated_at
+          ) VALUES (?, ?, ?, 'trial', ?, ?, NULL, 0, 0, datetime('now'), datetime('now'))
+        `).run(uuidv4(), companyId, planCode, trialPeriodStart, trialPeriodEnd)
         db.prepare(`
           INSERT INTO users (id, email, password, name, role, status, company_id)
           VALUES (?, ?, ?, ?, 'owner', 'active', ?)
@@ -493,6 +507,8 @@ export default function registerPilotRequestRoutes({
           companyId,
           planCode,
           ownerId,
+          trialDays: 30,
+          trialUntil: trialPeriodEnd,
         }, companyId)
         db.exec('COMMIT')
       } catch (error) {

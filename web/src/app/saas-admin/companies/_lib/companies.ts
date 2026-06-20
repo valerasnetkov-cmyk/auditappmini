@@ -4,6 +4,7 @@ export type CompanyForm = {
   id: string
   slug: string
   name: string
+  trialDays: number
 }
 
 export type OwnerForm = {
@@ -16,7 +17,7 @@ export type LimitForm = ResourceCompanyLimitsPayload & {
   companyId: string
 }
 
-export const emptyCompanyForm: CompanyForm = { id: '', slug: '', name: '' }
+export const emptyCompanyForm: CompanyForm = { id: '', slug: '', name: '', trialDays: 30 }
 
 export const emptyOwnerForm: OwnerForm = { companyId: '', email: '', name: '' }
 
@@ -101,6 +102,23 @@ export function companyLimitForm(company: SaasCompanyStats | undefined): LimitFo
     pdfReportEnabled: company?.limits?.pdfReportEnabled ?? true,
     apiAccessEnabled: company?.limits?.apiAccessEnabled ?? false,
   }
+}
+
+export function subscriptionStatusLabel(status?: string | null) {
+  if (status === 'trial') return 'Пилот'
+  if (status === 'active') return 'Активен'
+  if (status === 'expiring') return 'Скоро закончится'
+  if (status === 'grace') return 'Льготный период'
+  if (status === 'expired') return 'Истёк'
+  if (status === 'suspended') return 'Приостановлен'
+  return status || 'не задан'
+}
+
+export function subscriptionEndLabel(status?: string | null) {
+  if (status === 'trial') return 'Пилот до'
+  if (status === 'active' || status === 'expiring') return 'Оплачено до'
+  if (status === 'grace') return 'Grace до'
+  return 'Период до'
 }
 
 export function filterCompanies(companies: SaasCompanyStats[], search: string, statusFilter: string) {

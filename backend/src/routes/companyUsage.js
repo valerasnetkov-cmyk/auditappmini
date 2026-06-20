@@ -91,7 +91,19 @@ function buildCompanyServiceWarnings(API_MESSAGES, company, subscription, billin
     return warnings
   }
 
-  if (billing?.status === 'payment_due') {
+  if (billing?.status === 'trial') {
+    const trialExpired = billing.daysLeft !== null && billing.daysLeft < 0
+    warnings.push({
+      type: 'billing_trial',
+      severity: trialExpired ? 'danger' : billing.daysLeft !== null && billing.daysLeft <= 3 ? 'warning' : 'info',
+      title: trialExpired ? 'Пилотный период истёк' : 'Пилотный период',
+      message: trialExpired
+        ? 'Бесплатный пилот завершён. Свяжитесь с поддержкой для продления тарифа.'
+        : billing.daysLeft !== null
+        ? `Бесплатный пилот действует ещё ${Math.max(billing.daysLeft, 0)} дн.`
+        : 'Бесплатный пилот активен.',
+    })
+  } else if (billing?.status === 'payment_due') {
     warnings.push({
       type: 'billing_payment_due',
       severity: 'warning',

@@ -41,6 +41,10 @@
   описанием сценария осмотра и более сильными CTA для пилота/демонстрации.
 - **Landing PDF report messaging**: в блок “AuditAvto хранит” и карточки
   тарифов добавлена выгрузка PDF-отчётов как явная возможность продукта.
+- **30-day free pilot for new companies**: новые компании и конвертация заявок
+  на пилот получают 30 дней бесплатного тарифа “Пилот” от даты регистрации;
+  обратный отсчёт показывается в админском реестре компаний и в панели
+  владельца, а лендинг подчёркивает бесплатный период для новых компаний.
 - **Mobile-only inspection web contract**: web E2E and docs now explicitly
   enforce that starting, conducting, editing checklist/photo/odometer data and
   completing inspections happens only in the mobile app. The local launch gate

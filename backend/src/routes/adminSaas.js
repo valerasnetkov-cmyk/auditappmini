@@ -66,6 +66,12 @@ function normalizeStatus(value) {
   return value === 'inactive' ? 'inactive' : 'active'
 }
 
+function addDaysDate(days, now = new Date()) {
+  const date = new Date(now)
+  date.setUTCDate(date.getUTCDate() + days)
+  return date.toISOString().slice(0, 10)
+}
+
 function count(db, sql, params = []) {
   const row = db.prepare(sql).get(...params)
   return toNumber(row?.count)
@@ -299,18 +305,26 @@ export default function registerSaasAdminRoutes({ app, db, authenticate, ensureA
     )
 
     upsertCompanyLimits(db, id, buildLimitPayload(req.body?.limits || { planCode: 'pilot' }))
+    const trialPeriodStart = new Date().toISOString().slice(0, 10)
+    const trialPeriodEnd = addDaysDate(30)
     db.prepare(`
       INSERT OR IGNORE INTO company_billing (
         id, company_id, plan_code, billing_status, trial_until, created_by_user_id, created_at, updated_at
-      ) VALUES (?, ?, ?, 'trial', date('now', '+3 months'), ?, datetime('now'), datetime('now'))
-    `).run(uuidv4(), id, req.body?.limits?.planCode || 'pilot', req.user.id)
+      ) VALUES (?, ?, ?, 'trial', ?, ?, datetime('now'), datetime('now'))
+    `).run(uuidv4(), id, req.body?.limits?.planCode || 'pilot', trialPeriodEnd, req.user.id)
+    db.prepare(`
+      INSERT OR IGNORE INTO company_subscriptions (
+        id, company_id, plan_code, status, current_period_start, current_period_end,
+        grace_until, mrr_rub, auto_suspend_enabled, created_at, updated_at
+      ) VALUES (?, ?, ?, 'trial', ?, ?, NULL, 0, 0, datetime('now'), datetime('now'))
+    `).run(uuidv4(), id, req.body?.limits?.planCode || 'pilot', trialPeriodStart, trialPeriodEnd)
 
     writeAuditLog(db, req, {
       companyId: id,
       action: 'company_created',
       entityType: 'company',
       entityId: id,
-      payload: { slug, name },
+      payload: { slug, name, trialDays: 30, trialUntil: trialPeriodEnd },
     })
 
     res.status(201).json(getCompany(db, id))
