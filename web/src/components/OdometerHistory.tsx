@@ -22,12 +22,15 @@ const numberFormatter = new Intl.NumberFormat('ru-RU')
 export default function OdometerHistory({ inspections }: OdometerHistoryProps) {
   const points = useMemo(() => {
     return inspections
-      .filter((inspection) => typeof inspection.odometer_value === 'number' && Number.isFinite(inspection.odometer_value))
-      .sort((a, b) => new Date(a.completed_at || a.created_at).getTime() - new Date(b.completed_at || b.created_at).getTime())
-      .map((inspection, index, ordered): OdometerPoint => {
+      .map((inspection) => ({ inspection, value: Number(inspection.odometer_value) }))
+      .filter(({ value }) => Number.isFinite(value))
+      .sort((a, b) => (
+        new Date(a.inspection.completed_at || a.inspection.created_at).getTime()
+        - new Date(b.inspection.completed_at || b.inspection.created_at).getTime()
+      ))
+      .map(({ inspection, value }, index, ordered): OdometerPoint => {
         const date = inspection.completed_at || inspection.created_at
-        const previousValue = index > 0 ? Number(ordered[index - 1].odometer_value) : null
-        const value = Number(inspection.odometer_value)
+        const previousValue = index > 0 ? ordered[index - 1].value : null
         return {
           id: inspection.id,
           date,
@@ -66,7 +69,7 @@ export default function OdometerHistory({ inspections }: OdometerHistoryProps) {
 
       {points.length === 0 ? (
         <div className="rounded-card border border-dashed border-line p-6 text-sm text-foreground-muted">
-          Данных одометра пока нет. Они появятся после подтверждения пробега в осмотре.
+          Данных одометра пока нет. Они появятся после сохранения показаний пробега в осмотре.
         </div>
       ) : (
         <>

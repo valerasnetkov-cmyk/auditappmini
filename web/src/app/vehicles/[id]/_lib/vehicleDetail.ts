@@ -15,6 +15,10 @@ export function getPhotoThumbUrl(photo: { url: string; webp_url?: string | null;
   return photo.thumb_url || photo.webp_url || photo.url
 }
 
+export function getPhotoFullUrl(photo: { url: string; original_url?: string | null; webp_url?: string | null }) {
+  return photo.original_url || photo.webp_url || photo.url
+}
+
 export function getInspectionTypeLabel(type: string) {
   if (type === 'quick') return 'Быстрый'
   if (type === 'scheduled') return 'Плановый'

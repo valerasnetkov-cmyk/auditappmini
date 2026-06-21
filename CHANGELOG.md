@@ -45,6 +45,11 @@
   на пилот получают 30 дней бесплатного тарифа “Пилот” от даты регистрации;
   обратный отсчёт показывается в админском реестре компаний и в панели
   владельца, а лендинг подчёркивает бесплатный период для новых компаний.
+- **Vehicle detail inspection evidence fixes**: карточка техники теперь
+  нормализует одометр/длительность в истории осмотров, строит график по
+  сохранённым показаниям пробега даже при строковом ответе API, показывает
+  длительность в минутах при наличии `duration_seconds` и открывает фото
+  дефекта по клику.
 - **Mobile-only inspection web contract**: web E2E and docs now explicitly
   enforce that starting, conducting, editing checklist/photo/odometer data and
   completing inspections happens only in the mobile app. The local launch gate

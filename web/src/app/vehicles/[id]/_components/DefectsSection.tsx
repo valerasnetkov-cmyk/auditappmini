@@ -4,7 +4,7 @@
 import Link from 'next/link'
 import { buildApiUrl } from '@/lib/api/client'
 import type { VehicleDefectHistoryItem } from '@/lib/types'
-import { formatDateTime, getPhotoThumbUrl } from '../_lib/vehicleDetail'
+import { formatDateTime, getPhotoFullUrl, getPhotoThumbUrl } from '../_lib/vehicleDetail'
 import type { DefectHistoryEntry } from '../_lib/vehicleDetail'
 
 type Props = {
@@ -138,12 +138,20 @@ function DefectCard({
       {defect.photos.length ? (
         <div className="mt-3 grid grid-cols-3 gap-2">
           {defect.photos.map((photo) => (
-            <img
+            <a
               key={photo.url}
-              src={buildApiUrl(getPhotoThumbUrl(photo))}
-              alt="Фото дефекта"
-              className="h-20 w-full rounded-control object-cover"
-            />
+              href={buildApiUrl(getPhotoFullUrl(photo))}
+              target="_blank"
+              rel="noreferrer"
+              className="block rounded-control focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary"
+              title="Открыть фото дефекта"
+            >
+              <img
+                src={buildApiUrl(getPhotoThumbUrl(photo))}
+                alt="Фото дефекта"
+                className="h-20 w-full rounded-control object-cover transition-opacity hover:opacity-90"
+              />
+            </a>
           ))}
         </div>
       ) : null}

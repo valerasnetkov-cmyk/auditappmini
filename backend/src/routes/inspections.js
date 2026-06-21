@@ -135,7 +135,9 @@ export default function registerInspectionRoutes({
     const { count } = countQuery.get(...params)
 
     const query = db.prepare(`
-      SELECT i.id, i.vehicle_id, i.type, i.completed, i.created_at, i.started_at, i.completed_at,
+      SELECT i.id, i.vehicle_id, i.type,
+             CASE WHEN i.completed = 1 OR i.completed_at IS NOT NULL THEN 1 ELSE 0 END AS completed,
+             i.created_at, i.started_at, i.completed_at,
              CASE
                WHEN i.completed_at IS NULL THEN NULL
                ELSE COALESCE(i.duration_seconds, CAST(strftime('%s', i.completed_at) - strftime('%s', COALESCE(i.started_at, i.created_at)) AS INTEGER))
@@ -177,7 +179,9 @@ export default function registerInspectionRoutes({
     const { count } = countQuery.get(req.params.vehicleId, companyId)
 
     const query = db.prepare(`
-      SELECT i.id, i.vehicle_id, i.type, i.completed, i.created_at, i.started_at, i.completed_at,
+      SELECT i.id, i.vehicle_id, i.type,
+             CASE WHEN i.completed = 1 OR i.completed_at IS NOT NULL THEN 1 ELSE 0 END AS completed,
+             i.created_at, i.started_at, i.completed_at,
              CASE
                WHEN i.completed_at IS NULL THEN NULL
                ELSE COALESCE(i.duration_seconds, CAST(strftime('%s', i.completed_at) - strftime('%s', COALESCE(i.started_at, i.created_at)) AS INTEGER))

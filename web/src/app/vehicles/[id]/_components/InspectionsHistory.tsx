@@ -128,7 +128,7 @@ function SortableHeader({
 }
 
 function formatDuration(seconds?: number | null, completed?: number | boolean) {
-  if (!completed || seconds === null || seconds === undefined) return 'Осмотр не завершён'
+  if (seconds === null || seconds === undefined) return completed ? 'менее 1 мин' : 'Осмотр не завершён'
   const totalMinutes = Math.max(1, Math.round(seconds / 60))
   const hours = Math.floor(totalMinutes / 60)
   const minutes = totalMinutes % 60

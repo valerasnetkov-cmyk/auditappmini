@@ -100,6 +100,13 @@ type RawInspectionDetail = Omit<InspectionDetail, 'defects' | 'photos'> & {
   photos?: RawPhotoRecord[]
 }
 
+type RawInspectionRecord = Omit<InspectionRecord, 'completed' | 'duration_seconds' | 'odometer_value' | 'defects_count'> & {
+  completed?: number | boolean | string | null
+  duration_seconds?: number | string | null
+  odometer_value?: number | string | null
+  defects_count?: number | string | null
+}
+
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api'
 export const API_BASE_URL = API_URL.replace(/\/api\/?$/, '')
 const INACTIVE_USER_ERROR = 'User is inactive'
@@ -153,12 +160,37 @@ function normalizePhotos(source: RawDefectRecord['photos']) {
 function normalizeInspectionDetail(raw: RawInspectionDetail): InspectionDetail {
   return {
     ...raw,
+    completed: normalizeBooleanish(raw.completed),
+    duration_seconds: normalizeNullableNumber(raw.duration_seconds),
+    odometer_value: normalizeNullableNumber(raw.odometer_value),
     photos: normalizePhotos(raw.photos),
     defects: (raw.defects || []).map((defect) => ({
       ...defect,
       photos: normalizePhotos(defect.photos),
     })),
   }
+}
+
+function normalizeInspectionRecord(raw: RawInspectionRecord): InspectionRecord {
+  const durationSeconds = normalizeNullableNumber(raw.duration_seconds)
+  const completed = normalizeBooleanish(raw.completed) || Boolean(raw.completed_at) || durationSeconds !== null
+  return {
+    ...raw,
+    completed,
+    duration_seconds: durationSeconds,
+    odometer_value: normalizeNullableNumber(raw.odometer_value),
+    defects_count: normalizeNullableNumber(raw.defects_count) || 0,
+  }
+}
+
+function normalizeNullableNumber(value: unknown) {
+  if (value === null || value === undefined || value === '') return null
+  const parsed = Number(value)
+  return Number.isFinite(parsed) ? parsed : null
+}
+
+function normalizeBooleanish(value: unknown) {
+  return value === true || value === 1 || value === '1' || value === 'true'
 }
 
 function isUploadPhotoResponse(data: unknown): data is UploadPhotoResponse {
@@ -556,7 +588,11 @@ class ApiClient {
     if (params?.from) query.set('from', params.from)
     if (params?.to) query.set('to', params.to)
 
-    return this.request<InspectionRecord[]>(`/inspections?${query}`)
+    const result = await this.request<RawInspectionRecord[]>(`/inspections?${query}`)
+    return {
+      ...result,
+      data: result.data?.map(normalizeInspectionRecord),
+    }
   }
 
   async getVehicleInspections(vehicleId: string, params?: { page?: number; limit?: number }) {
@@ -564,7 +600,11 @@ class ApiClient {
     if (params?.page) query.set('page', String(params.page))
     if (params?.limit) query.set('limit', String(params.limit))
 
-    return this.request<InspectionRecord[]>(`/vehicles/${vehicleId}/inspections?${query}`)
+    const result = await this.request<RawInspectionRecord[]>(`/vehicles/${vehicleId}/inspections?${query}`)
+    return {
+      ...result,
+      data: result.data?.map(normalizeInspectionRecord),
+    }
   }
 
   async getInspection(id: string) {
