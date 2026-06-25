@@ -33,6 +33,8 @@ export default function ResourceCompaniesPage() {
   const handleDeactivateOwner = useDeactivateOwner(list)
   const handleIssueOwnerSetupLink = useIssueOwnerSetupLink(list)
   const handleCopySetupLink = useCopySetupLink(list)
+  const setCompanyForm = companyForm.setForm
+  const setLimitForm = limitForm.setForm
 
   const onCreateCompany = useCallback(() => {
     companyForm.reset()
@@ -45,6 +47,20 @@ export default function ResourceCompaniesPage() {
   const onEditLimits = useCallback((form: ReturnType<typeof import('./_lib/companies').companyLimitForm>) => {
     limitForm.setForm(() => form)
   }, [limitForm])
+
+  useEffect(() => {
+    if (searchParams.get('create') !== 'company') return
+    const companyName = searchParams.get('name') || ''
+    const planCode = searchParams.get('plan') || 'pilot'
+    setCompanyForm((current) => ({
+      ...current,
+      name: companyName || current.name,
+    }))
+    setLimitForm((current) => ({
+      ...current,
+      planCode,
+    }))
+  }, [searchParams, setCompanyForm, setLimitForm])
 
   useEffect(() => {
     const timer = window.setTimeout(() => {

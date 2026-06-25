@@ -155,6 +155,43 @@ export default function PilotRequestsPage() {
     await reload()
   }
 
+  const rejectRequest = async () => {
+    if (!selected) return
+    const reason = window.prompt('Укажите причину отказа', selected.rejectionReason || '')
+    if (reason === null) return
+    const rejectionReason = reason.trim()
+    if (!rejectionReason) {
+      setError('Для отклонения заявки укажите причину отказа')
+      return
+    }
+    setSaving(true)
+    setError('')
+    const result = await api.updatePilotRequest(selected.id, {
+      ...selected,
+      status: 'rejected',
+      rejectionReason,
+    })
+    setSaving(false)
+    if (!result.data) {
+      setError(result.error || 'Не удалось отклонить заявку')
+      return
+    }
+    setSelected(result.data)
+    setMessage('Заявка отклонена')
+    await reload()
+  }
+
+  const openCompanyCreateFromRequest = () => {
+    if (!selected) return
+    const params = new URLSearchParams({
+      create: 'company',
+      pilotRequestId: selected.id,
+      name: selected.companyName,
+    })
+    if (selected.preferredPlanCode) params.set('plan', selected.preferredPlanCode)
+    router.push(`/saas-admin/companies?${params}`)
+  }
+
   const openConversion = async () => {
     if (!selected) return
     setSaving(true)
@@ -319,6 +356,8 @@ export default function PilotRequestsPage() {
             <div className="mt-6 flex flex-wrap justify-between gap-3">
               <div>{selected.status === 'rejected' && !selected.anonymizedAt ? <button type="button" className="btn btn-secondary" disabled={saving} onClick={() => void anonymize()}>Обезличить</button> : null}</div>
               <div className="flex flex-wrap gap-3">
+                {selected.status !== 'converted' ? <button type="button" className="btn btn-secondary" disabled={saving} onClick={openCompanyCreateFromRequest}>Добавить компанию</button> : null}
+                {selected.status !== 'converted' && selected.status !== 'rejected' ? <button type="button" className="btn btn-secondary" disabled={saving} onClick={() => void rejectRequest()}>Отклонить</button> : null}
                 {selected.status === 'approved' ? <button type="button" className="btn btn-secondary" disabled={saving} onClick={() => void openConversion()}>Создать пилотную компанию</button> : null}
                 {selected.status !== 'converted' ? <button type="button" className="btn btn-primary" disabled={saving} onClick={() => void saveRequest()}>{saving ? 'Сохраняем…' : 'Сохранить'}</button> : null}
               </div>
