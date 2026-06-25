@@ -212,6 +212,30 @@ async function run() {
     const otherAuthHeaders = { Authorization: `Bearer ${otherLogin.token}` }
     const suffix = Date.now()
     const inspectorEmail = `inspection-approver-${suffix}@example.com`
+    const managerEmail = `inspection-manager-${suffix}@example.com`
+    await request('/api/users', {
+      method: 'POST',
+      headers: jsonHeaders,
+      body: JSON.stringify({
+        email: managerEmail,
+        password: 'inspection-manager-123',
+        name: 'Inspection smoke manager',
+        role: 'manager',
+      }),
+    }, 201)
+    const managerLogin = await request('/api/auth/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        email: managerEmail,
+        password: 'inspection-manager-123',
+      }),
+    })
+    const managerHeaders = {
+      Authorization: `Bearer ${managerLogin.token}`,
+      'Content-Type': 'application/json',
+    }
+
     await request('/api/users', {
       method: 'POST',
       headers: jsonHeaders,
@@ -358,6 +382,20 @@ async function run() {
     })
     if (!usageWithCriticalAlert.alerts?.some((item) => item.type === 'critical_defect_created')) {
       throw new Error('Critical defect notification was not delivered to company owner')
+    }
+    const managerNavigationBadges = await request('/api/company/navigation-badges', {
+      headers: managerHeaders,
+    })
+    if (managerNavigationBadges.inspections !== 1 || managerNavigationBadges.defects !== 2) {
+      throw new Error(`Manager navigation badges mismatch: ${JSON.stringify(managerNavigationBadges)}`)
+    }
+    const badgesAfterDefectsRead = await request('/api/company/navigation-badges/read', {
+      method: 'POST',
+      headers: managerHeaders,
+      body: JSON.stringify({ section: 'defects' }),
+    })
+    if (badgesAfterDefectsRead.defects !== 0 || badgesAfterDefectsRead.inspections !== 1) {
+      throw new Error(`Defect navigation badge was not marked read: ${JSON.stringify(badgesAfterDefectsRead)}`)
     }
 
     const quickInspection = await request('/api/inspections', {
@@ -754,6 +792,8 @@ async function run() {
             criticalDefect.id
             && usageWithCriticalAlert.alerts?.some((item) => item.type === 'critical_defect_created')
           ),
+          managerNavigationBadgesDelivered: managerNavigationBadges.inspections === 1 && managerNavigationBadges.defects === 2,
+          managerDefectBadgeMarkedRead: badgesAfterDefectsRead.defects === 0 && badgesAfterDefectsRead.inspections === 1,
           accidentValidationStatus: invalidAccidentInspectionResponse.status,
           requiredPhotoMissingCount: incompleteBody.missing.filter((item) => item.code === 'missing_required_photo').length,
           invalidPhotoRejected: invalidPhotoStatus === 400,

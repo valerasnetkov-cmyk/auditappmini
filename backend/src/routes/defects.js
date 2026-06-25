@@ -18,6 +18,27 @@ function rejectCompletedInspection(db, res, inspectionId, companyId) {
   return false
 }
 
+const COMPANY_ACTIVITY_RECIPIENT_ROLES = ['company_owner', 'manager']
+
+function createCompanyActivityNotifications(db, {
+  companyId,
+  type,
+  title,
+  message,
+  actorUserId,
+}) {
+  const insertNotification = db.prepare(`
+    INSERT INTO company_notifications (
+      id, company_id, recipient_role, type, channel, title, message,
+      status, created_by_user_id, source, created_at
+    ) VALUES (?, ?, ?, ?, 'in_app', ?, ?, 'new', ?, 'system', datetime('now'))
+  `)
+
+  COMPANY_ACTIVITY_RECIPIENT_ROLES.forEach((recipientRole) => {
+    insertNotification.run(uuidv4(), companyId, recipientRole, type, title, message, actorUserId)
+  })
+}
+
 export default function registerDefectRoutes({
   app,
   db,
@@ -49,6 +70,16 @@ export default function registerDefectRoutes({
       INSERT INTO defects (id, inspection_id, title, comment, status, severity, company_id, created_at)
       VALUES (?, ?, ?, ?, 'open', ?, ?, datetime('now'))
     `).run(defectId, inspectionId, title, comment || null, severity, companyId)
+
+    const vehicle = db.prepare('SELECT number, name FROM vehicles WHERE id = ? AND company_id = ?').get(inspection.vehicle_id, companyId)
+    const vehicleLabel = vehicle?.number || vehicle?.name || inspection.vehicle_id
+    createCompanyActivityNotifications(db, {
+      companyId,
+      type: 'defect_created',
+      title: 'Новый дефект',
+      message: `${vehicleLabel}: ${title}`,
+      actorUserId: req.user.id,
+    })
 
     if (severity === 'critical') {
       const insertNotification = db.prepare(`

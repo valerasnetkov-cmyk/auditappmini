@@ -191,6 +191,35 @@ function getCompanyServiceNotifications(db, companyId, user) {
   }))
 }
 
+function getVisibleNotificationCondition() {
+  return `
+    (
+      recipient_user_id = ?
+      OR (recipient_user_id IS NULL AND recipient_role = ?)
+      OR (recipient_user_id IS NULL AND recipient_role IN ('company_owner', 'tenant') AND ? = 'owner')
+    )
+    AND COALESCE(recipient_role, '') != 'admin'
+  `
+}
+
+function getNavigationBadges(db, companyId, user) {
+  const rows = db.prepare(`
+    SELECT type, COUNT(*) AS count
+    FROM company_notifications
+    WHERE company_id = ?
+      AND status = 'new'
+      AND type IN ('inspection_created', 'defect_created')
+      AND ${getVisibleNotificationCondition()}
+    GROUP BY type
+  `).all(companyId, user?.id || '', user?.role || '', user?.role || '')
+
+  return rows.reduce((acc, row) => {
+    if (row.type === 'inspection_created') acc.inspections = Number(row.count || 0)
+    if (row.type === 'defect_created') acc.defects = Number(row.count || 0)
+    return acc
+  }, { inspections: 0, defects: 0 })
+}
+
 function parseJsonArray(value) {
   if (!value) return []
   try {
@@ -355,6 +384,37 @@ export default function registerCompanyUsageRoutes({
       supportLevel: policy.supportLevel,
       updatedAt: limits?.updated_at || null,
     })
+  })
+
+  app.get('/api/company/navigation-badges', authenticate, (req, res) => {
+    const companyId = req.user.company_id || 'default'
+    res.json(getNavigationBadges(db, companyId, req.user))
+  })
+
+  app.post('/api/company/navigation-badges/read', authenticate, (req, res) => {
+    const companyId = req.user.company_id || 'default'
+    const section = typeof req.body?.section === 'string' ? req.body.section : ''
+    const typesBySection = {
+      inspections: ['inspection_created'],
+      defects: ['defect_created'],
+    }
+    const types = typesBySection[section]
+
+    if (!types) {
+      return res.status(400).json({ error: 'INVALID_BADGE_SECTION', message: 'Неизвестный раздел уведомлений' })
+    }
+
+    db.prepare(`
+      UPDATE company_notifications
+      SET status = 'read',
+          read_at = datetime('now')
+      WHERE company_id = ?
+        AND status = 'new'
+        AND type IN (${types.map(() => '?').join(',')})
+        AND ${getVisibleNotificationCondition()}
+    `).run(companyId, ...types, req.user?.id || '', req.user?.role || '', req.user?.role || '')
+
+    res.json(getNavigationBadges(db, companyId, req.user))
   })
 
   app.get('/api/company/service-notification-recipients', authenticate, (req, res) => {

@@ -43,6 +43,11 @@ type MenuItem = {
   badge?: number
 }
 
+type NavigationBadges = {
+  inspections: number
+  defects: number
+}
+
 function readStoredRole() {
   const token = getAuthToken()
   if (!token) return null
@@ -62,6 +67,7 @@ export default function Layout({ children, currentPage }: LayoutProps) {
   const [accessMode, setAccessMode] = useState<string>('standard')
   const [resourcePermissions, setResourcePermissions] = useState<string[]>([])
   const [newPilotRequests, setNewPilotRequests] = useState(0)
+  const [navigationBadges, setNavigationBadges] = useState<NavigationBadges>({ inspections: 0, defects: 0 })
 
   useEffect(() => {
     if (!hasAuthSession()) return
@@ -80,6 +86,9 @@ export default function Layout({ children, currentPage }: LayoutProps) {
           ])
           if (!cancelled && access.data) setResourcePermissions(access.data.permissions)
           if (!cancelled && pilotSummary.data) setNewPilotRequests(pilotSummary.data.new)
+        } else if (isManagerRole(result.data.role)) {
+          const badges = await api.getNavigationBadges()
+          if (!cancelled && badges.data) setNavigationBadges(badges.data)
         }
       } else if (!cancelled) {
         setCurrentRole(readStoredRole())
@@ -103,6 +112,24 @@ export default function Layout({ children, currentPage }: LayoutProps) {
     return () => window.removeEventListener('pilot-requests-updated', refreshPilotRequestBadge)
   }, [currentRole])
 
+  useEffect(() => {
+    if (!currentPage || !isManagerRole(currentRole) || isResourceRole(currentRole)) return
+    if (currentPage !== 'inspections' && currentPage !== 'defects') return
+    if (!navigationBadges[currentPage]) return
+
+    let cancelled = false
+    const markCurrentSectionRead = async () => {
+      const result = await api.markNavigationBadgeRead(currentPage)
+      if (!cancelled && result.data) setNavigationBadges(result.data)
+    }
+
+    void markCurrentSectionRead()
+
+    return () => {
+      cancelled = true
+    }
+  }, [currentPage, currentRole, navigationBadges])
+
   const handleQuickSearch = (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault()
     if (!quickSearch.trim()) return
@@ -117,8 +144,8 @@ export default function Layout({ children, currentPage }: LayoutProps) {
   const menuItems: MenuItem[] = [
     { href: '/dashboard', label: 'Дашборд', icon: ChartBarSquareIcon, key: 'dashboard' },
     { href: '/vehicles', label: 'Техника', icon: TruckIcon, key: 'vehicles' },
-    { href: '/inspections', label: 'Осмотры', icon: ClipboardDocumentCheckIcon, key: 'inspections' },
-    { href: '/defects', label: 'Дефекты', icon: ExclamationTriangleIcon, key: 'defects' },
+    { href: '/inspections', label: 'Осмотры', icon: ClipboardDocumentCheckIcon, key: 'inspections', badge: navigationBadges.inspections },
+    { href: '/defects', label: 'Дефекты', icon: ExclamationTriangleIcon, key: 'defects', badge: navigationBadges.defects },
     { href: '/users', label: 'Пользователи', icon: UserGroupIcon, key: 'users', ownerOnly: true },
     { href: '/saas-admin', label: 'Обзор', icon: RectangleGroupIcon, key: 'saas-admin', adminOnly: true, permission: 'dashboard.view' },
     { href: '/saas-admin/dashboard', label: 'Дашборд', icon: ChartBarSquareIcon, key: 'resource-dashboard', adminOnly: true, permission: 'dashboard.view' },

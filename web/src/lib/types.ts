@@ -717,6 +717,11 @@ export type CompanyServiceAlert = {
   createdAt?: string | null
 }
 
+export type NavigationBadgesResponse = {
+  inspections: number
+  defects: number
+}
+
 export type ServiceNotificationRecipient = {
   id: string
   email: string

@@ -24,6 +24,7 @@ import type {
   LoginResponse,
   MFAVerifyResponse,
   MFASetupResponse,
+  NavigationBadgesResponse,
   NotificationItem,
   PhotoRequirementsResponse,
   PhotoRecord,
@@ -778,6 +779,17 @@ class ApiClient {
 
   async getCompanyUsage() {
     return this.request<CompanyUsageResponse>('/company/usage')
+  }
+
+  async getNavigationBadges() {
+    return this.request<NavigationBadgesResponse>('/company/navigation-badges')
+  }
+
+  async markNavigationBadgeRead(section: 'inspections' | 'defects') {
+    return this.request<NavigationBadgesResponse>('/company/navigation-badges/read', {
+      method: 'POST',
+      body: JSON.stringify({ section }),
+    })
   }
 
   async getServiceNotificationRecipients() {

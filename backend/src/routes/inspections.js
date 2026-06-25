@@ -88,6 +88,27 @@ function validateOdometerProgression(db, inspection, nextValue) {
   }
 }
 
+const COMPANY_ACTIVITY_RECIPIENT_ROLES = ['company_owner', 'manager']
+
+function createCompanyActivityNotifications(db, {
+  companyId,
+  type,
+  title,
+  message,
+  actorUserId,
+}) {
+  const insertNotification = db.prepare(`
+    INSERT INTO company_notifications (
+      id, company_id, recipient_role, type, channel, title, message,
+      status, created_by_user_id, source, created_at
+    ) VALUES (?, ?, ?, ?, 'in_app', ?, ?, 'new', ?, 'system', datetime('now'))
+  `)
+
+  COMPANY_ACTIVITY_RECIPIENT_ROLES.forEach((recipientRole) => {
+    insertNotification.run(uuidv4(), companyId, recipientRole, type, title, message, actorUserId)
+  })
+}
+
 export default function registerInspectionRoutes({
   app,
   db,
@@ -279,6 +300,15 @@ export default function registerInspectionRoutes({
       insertChecklist.run(itemId, id, item.title, result, item.comment || null)
     })
 
+    const vehicleLabel = vehicle.number || vehicle.name || vehicle_id
+    createCompanyActivityNotifications(db, {
+      companyId,
+      type: 'inspection_created',
+      title: 'Новый осмотр',
+      message: `${vehicleLabel}: создан новый осмотр`,
+      actorUserId: req.user.id,
+    })
+
     const inspection = getInspectionById(id, companyId)
     res.status(201).json(inspection)
   })
@@ -320,6 +350,8 @@ export default function registerInspectionRoutes({
       return sendError(res, 404, API_MESSAGES.inspectionNotFound)
     }
     if (inspection.completed) return sendInspectionCompletedError(res)
+    const vehicle = getVehicleById(inspection.vehicle_id, companyId)
+    const vehicleLabel = vehicle?.number || vehicle?.name || inspection.vehicle_id
 
     const { checklist = [], accident_occurred_at = null, accident_location = null } = req.body
     const accidentValidation = validateAccidentDetails(API_MESSAGES, inspection.type, accident_occurred_at, accident_location)
@@ -438,6 +470,13 @@ export default function registerInspectionRoutes({
           updateDefect.run(checklistItemId, item.title, item.comment || null, existingDefect.id, companyId)
         } else {
           insertDefect.run(uuidv4(), req.params.id, checklistItemId, item.title, item.comment || null, companyId)
+          createCompanyActivityNotifications(db, {
+            companyId,
+            type: 'defect_created',
+            title: 'Новый дефект',
+            message: `${vehicleLabel}: ${item.title}`,
+            actorUserId: req.user.id,
+          })
         }
         return
       }
