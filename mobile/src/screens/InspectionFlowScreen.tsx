@@ -1,4 +1,4 @@
-import { Alert, Modal, StyleSheet, View } from 'react-native'
+import { Alert, Modal, StyleSheet, Text, TouchableOpacity, View } from 'react-native'
 import { useTheme } from '../theme'
 import { api } from '../api'
 import type { Company } from '../types'
@@ -41,6 +41,22 @@ export function InspectionFlowScreen({ company }: { company: Company }) {
   } = flow
 
   const checklistTitles = inspectionType ? getChecklistTitles(inspectionType) : []
+  const showFlowControls = step !== 'home' && step !== 'complete'
+
+  const confirmDiscardInspection = () => {
+    Alert.alert(
+      'Сбросить осмотр?',
+      'Данные текущего осмотра, черновик и загруженные фото будут удалены. Это действие нельзя отменить.',
+      [
+        { text: 'Отмена', style: 'cancel' },
+        {
+          text: 'Сбросить',
+          style: 'destructive',
+          onPress: () => void actions.discardInspection(),
+        },
+      ],
+    )
+  }
 
   const handleCameraCapture = async (photo: { base64: string; uri: string }) => {
     const target = camera.cameraTarget
@@ -88,6 +104,25 @@ export function InspectionFlowScreen({ company }: { company: Company }) {
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
+      {showFlowControls ? (
+        <View style={styles.flowControls}>
+          <TouchableOpacity
+            style={[styles.backButton, { borderColor: colors.border, backgroundColor: colors.card }]}
+            onPress={actions.goBack}
+            disabled={loading}
+          >
+            <Text style={[styles.backButtonText, { color: loading ? colors.mutedText : colors.text }]}>← Назад</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.resetButton, { borderColor: colors.danger }]}
+            onPress={confirmDiscardInspection}
+            disabled={loading}
+          >
+            <Text style={[styles.resetButtonText, { color: loading ? colors.mutedText : colors.danger }]}>Сбросить осмотр</Text>
+          </TouchableOpacity>
+        </View>
+      ) : null}
+
       {step === 'home' && (
         <HomeStep companyName={company.name} onStart={() => actions.setStep('number')} />
       )}
@@ -201,5 +236,33 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: 'center',
     padding: 20,
+  },
+  flowControls: {
+    width: '100%',
+    maxWidth: 520,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    gap: 12,
+    marginBottom: 12,
+  },
+  backButton: {
+    borderWidth: 1,
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+  },
+  backButtonText: {
+    fontSize: 15,
+    fontWeight: '700',
+  },
+  resetButton: {
+    borderWidth: 1,
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+  },
+  resetButtonText: {
+    fontSize: 15,
+    fontWeight: '700',
   },
 })

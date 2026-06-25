@@ -47,6 +47,16 @@ function missingMessage(error: unknown) {
   return error instanceof Error ? error.message : 'Не удалось завершить осмотр'
 }
 
+function previousStep(step: FlowStep, inspectionType: InspectionType | null): FlowStep | null {
+  if (step === 'number') return 'home'
+  if (step === 'type') return 'number'
+  if (step === 'accident') return 'type'
+  if (step === 'photos') return inspectionType === 'accident' ? 'accident' : 'type'
+  if (step === 'odometer') return 'photos'
+  if (step === 'checklist') return 'odometer'
+  return null
+}
+
 export function useInspectionFlow() {
   const [step, setStep] = useState<FlowStep>('home')
   const [vehicleNumber, setVehicleNumber] = useState('')
@@ -458,7 +468,7 @@ export function useInspectionFlow() {
     }))
   }
 
-  const resetFlow = () => {
+  const clearFlowState = () => {
     const previousInspectionId = inspectionId
     setStep('home')
     setVehicleNumber('')
@@ -476,6 +486,32 @@ export function useInspectionFlow() {
     setAccidentLocation('')
     setSyncStatus('draft_local')
     void inspectionDraftStore.clear(previousInspectionId || undefined)
+  }
+
+  const resetFlow = () => {
+    clearFlowState()
+  }
+
+  const discardInspection = async () => {
+    const previousInspectionId = inspectionId
+    setLoading(true)
+    try {
+      if (previousInspectionId) {
+        await api.deleteInspection(previousInspectionId)
+      }
+    } catch (error) {
+      if (!(error instanceof ApiRequestError && error.status === 404)) {
+        Alert.alert('Осмотр сброшен локально', 'Не удалось удалить осмотр на сервере. Проверьте связь и список осмотров.')
+      }
+    } finally {
+      setLoading(false)
+      clearFlowState()
+    }
+  }
+
+  const goBack = () => {
+    const target = previousStep(step, inspectionType)
+    if (target) setStep(target)
   }
 
   return {
@@ -509,6 +545,8 @@ export function useInspectionFlow() {
       createInspection,
       finishInspection,
       resetFlow,
+      discardInspection,
+      goBack,
       enqueueInspectionPhoto,
       retryInspectionPhoto,
       retryFailedUploads,

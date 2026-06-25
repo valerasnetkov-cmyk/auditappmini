@@ -145,6 +145,10 @@ async function request<T>(endpoint: string, options: RequestInit = {}): Promise<
     )
   }
 
+  if (response.status === 204) {
+    return undefined as T
+  }
+
   return response.json()
 }
 
@@ -247,6 +251,12 @@ export const api = {
   async completeInspection(id: string): Promise<Inspection> {
     return request<Inspection>(`/inspections/${id}/complete`, {
       method: 'POST',
+    })
+  },
+
+  async deleteInspection(id: string): Promise<void> {
+    await request<void>(`/inspections/${id}`, {
+      method: 'DELETE',
     })
   },
 
