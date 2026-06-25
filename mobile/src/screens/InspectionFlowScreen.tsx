@@ -81,7 +81,8 @@ export function InspectionFlowScreen({ company }: { company: Company }) {
     if (target.kind === 'inspection') {
       if (!inspectionId) return
       try {
-        await actions.enqueueInspectionPhoto(target.photoType, photo.uri, accident.currentLocation)
+        const coordinates = accident.currentLocation || await accident.getCurrentLocation(undefined, { silent: true })
+        await actions.enqueueInspectionPhoto(target.photoType, photo.uri, coordinates)
       } catch (error: unknown) {
         const err = error as { message?: string }
         Alert.alert('Ошибка', err.message || 'Не удалось загрузить фото осмотра')
@@ -90,7 +91,8 @@ export function InspectionFlowScreen({ company }: { company: Company }) {
     }
 
     if (target.kind === 'defect') {
-      await actions.setDefectPhoto(target.title, photo.uri)
+      const coordinates = accident.currentLocation || await accident.getCurrentLocation(undefined, { silent: true })
+      await actions.setDefectPhoto(target.title, photo.uri, coordinates)
     }
   }
 

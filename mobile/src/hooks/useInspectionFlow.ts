@@ -20,6 +20,8 @@ export type ChecklistEntry = {
   photoStatus?: PhotoUploadStatus
   photoError?: string
   capturedAt?: string
+  capturedLat?: number | null
+  capturedLng?: number | null
 }
 
 export type InspectionPhotoPreview = StoredPhotoDraft
@@ -303,7 +305,11 @@ export function useInspectionFlow() {
     setSyncStatus('sync_pending')
   }
 
-  const setDefectPhoto = async (title: string, uri: string) => {
+  const setDefectPhoto = async (
+    title: string,
+    uri: string,
+    coordinates?: { latitude: number; longitude: number } | null,
+  ) => {
     if (!inspectionId) return
     const clientPhotoId = inspectionDraftStore.createClientId('defect-photo')
     const localUri = await inspectionDraftStore.persistCapturedPhoto(inspectionId, uri, clientPhotoId)
@@ -317,6 +323,8 @@ export function useInspectionFlow() {
         photoStatus: 'local_pending',
         photoError: undefined,
         capturedAt: new Date().toISOString(),
+        capturedLat: coordinates?.latitude ?? null,
+        capturedLng: coordinates?.longitude ?? null,
       },
     }))
     setSyncStatus('sync_pending')
@@ -406,6 +414,8 @@ export function useInspectionFlow() {
             await api.uploadDefectPhoto(defectId, draft.photo!, {
               clientPhotoId: draft.clientPhotoId,
               capturedAt: draft.capturedAt,
+              capturedLat: draft.capturedLat,
+              capturedLng: draft.capturedLng,
             })
             setChecklist((current) => ({
               ...current,

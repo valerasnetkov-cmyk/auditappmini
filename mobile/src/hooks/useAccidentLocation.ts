@@ -15,13 +15,16 @@ export function useAccidentLocation() {
   const [currentLocation, setCurrentLocation] = useState<AccidentLocation>(null)
   const [locationLoading, setLocationLoading] = useState(false)
 
-  const getCurrentLocation = async (onResolved?: (coords: { latitude: number; longitude: number }) => void) => {
+  const getCurrentLocation = async (
+    onResolved?: (coords: { latitude: number; longitude: number }) => void,
+    options: { silent?: boolean } = {},
+  ): Promise<AccidentLocation> => {
     setLocationLoading(true)
     try {
       const { status } = await Location.requestForegroundPermissionsAsync()
       if (status !== 'granted') {
-        Alert.alert('Ошибка', 'Нет доступа к геолокации')
-        return
+        if (!options.silent) Alert.alert('Ошибка', 'Нет доступа к геолокации')
+        return null
       }
       const location = await Location.getCurrentPositionAsync({})
       const coordinates = {
@@ -30,8 +33,10 @@ export function useAccidentLocation() {
       }
       setCurrentLocation(coordinates)
       onResolved?.(coordinates)
+      return coordinates
     } catch {
-      Alert.alert('Ошибка', 'Не удалось получить координаты')
+      if (!options.silent) Alert.alert('Ошибка', 'Не удалось получить координаты')
+      return null
     } finally {
       setLocationLoading(false)
     }

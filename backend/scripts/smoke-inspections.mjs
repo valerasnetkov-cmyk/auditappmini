@@ -154,6 +154,9 @@ async function uploadInvalidInspectionPhoto(inspectionId, headers) {
 async function uploadDefectPhoto(defectId, headers) {
   const formData = new FormData()
   formData.append('photo', new Blob([VALID_PNG_BYTES], { type: 'image/png' }), 'defect.png')
+  formData.append('captured_at', '2026-05-01T10:25:00.000Z')
+  formData.append('captured_lat', '46.9602')
+  formData.append('captured_lng', '142.7391')
 
   return request(`/api/defects/${defectId}/photos`, {
     method: 'POST',
@@ -306,6 +309,9 @@ async function run() {
     if (!uploadedDefectPhoto.webp_url?.endsWith('/main.webp') || !uploadedDefectPhoto.thumb_url?.endsWith('/thumb.webp') || !uploadedDefectPhoto.original_url?.endsWith('/original.png')) {
       throw new Error(`Defect photo WebP metadata is incomplete: ${JSON.stringify(uploadedDefectPhoto)}`)
     }
+    if (uploadedDefectPhoto.captured_lat !== 46.9602 || uploadedDefectPhoto.captured_lng !== 142.7391) {
+      throw new Error(`Defect photo coordinates were not stored: ${JSON.stringify(uploadedDefectPhoto)}`)
+    }
     await assertPhotoFilesExist(uploadedDefectPhoto, 'uploaded defect photo')
 
     await request(`/api/inspections/${inspection.id}`, {
@@ -405,6 +411,9 @@ async function run() {
     )
     if (!uploadedInspectionPhoto.webp_url?.endsWith('/main.webp') || !uploadedInspectionPhoto.thumb_url?.endsWith('/thumb.webp') || !uploadedInspectionPhoto.original_url?.endsWith('/original.png')) {
       throw new Error(`Inspection photo WebP metadata is incomplete: ${JSON.stringify(uploadedInspectionPhoto)}`)
+    }
+    if (uploadedInspectionPhoto.captured_lat !== 46.9591 || uploadedInspectionPhoto.captured_lng !== 142.738) {
+      throw new Error(`Inspection photo coordinates were not stored: ${JSON.stringify(uploadedInspectionPhoto)}`)
     }
     await assertPhotoFilesExist(uploadedInspectionPhoto, 'uploaded inspection photo')
     uploadedInspectionPhoto = await assertWatermarkGenerated(uploadedInspectionPhoto, authHeaders, otherAuthHeaders)

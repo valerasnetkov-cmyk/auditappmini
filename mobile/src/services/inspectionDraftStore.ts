@@ -30,6 +30,8 @@ export type StoredChecklistEntry = {
   photoStatus?: PhotoUploadStatus
   photoError?: string
   capturedAt?: string
+  capturedLat?: number | null
+  capturedLng?: number | null
 }
 
 export type StoredInspectionDraft = {
