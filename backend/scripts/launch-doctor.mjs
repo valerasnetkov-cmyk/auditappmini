@@ -112,6 +112,27 @@ function looksPlaceholder(value) {
   return PLACEHOLDER_PATTERNS.some((pattern) => pattern.test(value || ''))
 }
 
+function parseAbsoluteUrl(value) {
+  try {
+    return new URL(value)
+  } catch {
+    return null
+  }
+}
+
+function isPrivateHostname(hostname) {
+  const normalized = String(hostname || '').toLowerCase()
+  return normalized === 'localhost'
+    || normalized === '127.0.0.1'
+    || normalized === '::1'
+    || normalized === '0.0.0.0'
+    || normalized.endsWith('.local')
+    || normalized.endsWith('.localhost')
+    || /^10\./.test(normalized)
+    || /^192\.168\./.test(normalized)
+    || /^172\.(1[6-9]|2\d|3[01])\./.test(normalized)
+}
+
 function readBooleanEnv(name, defaultValue = false) {
   const value = process.env[name]
   if (value == null || value === '') return defaultValue
@@ -127,6 +148,13 @@ function readPositiveIntegerEnv(name, defaultValue) {
 
   const parsed = Number(process.env[name])
   return Number.isInteger(parsed) && parsed > 0 ? parsed : Number.NaN
+}
+
+function readNonNegativeIntegerEnv(name, defaultValue) {
+  if (!hasEnvValue(name)) return defaultValue
+
+  const parsed = Number(process.env[name])
+  return Number.isInteger(parsed) && parsed >= 0 ? parsed : Number.NaN
 }
 
 function readCsvEnv(name) {
@@ -193,8 +221,14 @@ requireProduction(Boolean(process.env.DATABASE_PATH), 'DATABASE_PATH must point 
 requireProduction(Boolean(process.env.UPLOAD_DIR), 'UPLOAD_DIR must point to persistent storage')
 requireProduction(Boolean(process.env.BACKUP_DIR), 'BACKUP_DIR must be configured')
 
-if (process.env.WEB_APP_URL) {
-  requireProduction(!looksPlaceholder(process.env.WEB_APP_URL), 'WEB_APP_URL must not use a placeholder value')
+const publicWebAppUrl = process.env.WEB_APP_URL || process.env.WEB_URL || process.env.PUBLIC_WEB_URL || ''
+const parsedPublicWebAppUrl = parseAbsoluteUrl(publicWebAppUrl)
+requireProduction(Boolean(process.env.WEB_APP_URL), 'WEB_APP_URL must be configured for public report QR links')
+if (publicWebAppUrl) {
+  requireProduction(!looksPlaceholder(publicWebAppUrl), 'WEB_APP_URL must not use a placeholder value')
+  requireProduction(Boolean(parsedPublicWebAppUrl), 'WEB_APP_URL must be a valid absolute URL')
+  requireProduction(parsedPublicWebAppUrl?.protocol === 'https:', 'WEB_APP_URL must use HTTPS in production')
+  requireProduction(!isPrivateHostname(parsedPublicWebAppUrl?.hostname), 'WEB_APP_URL must use a public hostname in production')
 }
 
 const publicRegistrationEnabled = readBooleanEnv('PUBLIC_REGISTRATION_ENABLED', false)
@@ -222,6 +256,7 @@ const accessLogSkipPaths = readCsvEnv('ACCESS_LOG_SKIP_PATHS')
 const ocrOdometerProvider = process.env.OCR_ODOMETER_PROVIDER || 'mock'
 const tesseractCmd = process.env.TESSERACT_CMD || 'tesseract'
 const tesseractTimeoutMs = readPositiveIntegerEnv('TESSERACT_TIMEOUT_MS', 10000)
+const publicReportTokenTtlDays = readNonNegativeIntegerEnv('PUBLIC_REPORT_TOKEN_TTL_DAYS', 30)
 
 requireProduction(Number.isInteger(securityHstsMaxAge), 'SECURITY_HSTS_MAX_AGE must be a positive integer')
 requireProduction(Boolean(securityCsp.trim()), 'SECURITY_CSP must not be empty')
@@ -246,6 +281,7 @@ requireProduction(/^[a-z0-9!#$%&'*+.^_`|~-]+$/.test(requestIdHeader), 'REQUEST_I
 requireProduction(accessLogSkipPaths.every(isValidAccessLogSkipPath), 'ACCESS_LOG_SKIP_PATHS must contain comma-separated absolute URL paths')
 requireProduction(['mock', 'tesseract-cli'].includes(ocrOdometerProvider), 'OCR_ODOMETER_PROVIDER must be mock or tesseract-cli')
 requireProduction(Number.isInteger(tesseractTimeoutMs), 'TESSERACT_TIMEOUT_MS must be a positive integer')
+requireProduction(Number.isInteger(publicReportTokenTtlDays), 'PUBLIC_REPORT_TOKEN_TTL_DAYS must be a non-negative integer')
 
 if (ocrOdometerProvider === 'tesseract-cli') {
   requireProduction(Boolean(tesseractCmd.trim()), 'TESSERACT_CMD must not be empty when OCR_ODOMETER_PROVIDER=tesseract-cli')
@@ -293,6 +329,8 @@ const result = {
     backupDir,
     adminSeedConfigured: Boolean(process.env.ADMIN_EMAIL),
     publicRegistrationEnabled,
+    publicWebAppUrl: publicWebAppUrl || null,
+    publicReportTokenTtlDays,
     trustProxy: process.env.TRUST_PROXY || null,
     securityHstsEnabled,
     securityHstsMaxAge,

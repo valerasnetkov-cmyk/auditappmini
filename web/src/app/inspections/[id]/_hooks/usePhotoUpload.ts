@@ -29,6 +29,21 @@ function syncPhotos(
   setInspection(byType)
 }
 
+async function getCurrentCoordinates() {
+  if (typeof navigator === 'undefined' || !navigator.geolocation) return null
+
+  return new Promise<{ lat: number; lng: number } | null>((resolve) => {
+    navigator.geolocation.getCurrentPosition(
+      (position) => resolve({
+        lat: position.coords.latitude,
+        lng: position.coords.longitude,
+      }),
+      () => resolve(null),
+      { enableHighAccuracy: true, timeout: 5000, maximumAge: 60000 },
+    )
+  })
+}
+
 export function usePhotoUpload(inspection: InspectionDetail | null) {
   const [defectPhotos, setDefectPhotos] = useState<Record<string, PhotoRecord[]>>({})
   const [inspectionPhotos, setInspectionPhotos] = useState<Record<string, PhotoRecord[]>>({})
@@ -53,7 +68,9 @@ export function usePhotoUpload(inspection: InspectionDetail | null) {
 
       setUploadingPhoto(defectTitle)
       try {
-        const result = await api.uploadPhoto(defect.id, file)
+        const coordinates = await getCurrentCoordinates()
+        const geo = coordinates ? `${coordinates.lat}, ${coordinates.lng}` : undefined
+        const result = await api.uploadPhoto(defect.id, file, geo, coordinates || undefined)
         if (result.error || !result.data?.url) {
           onError?.(result.error || 'Не удалось загрузить фото')
           return
@@ -76,7 +93,9 @@ export function usePhotoUpload(inspection: InspectionDetail | null) {
 
       setUploadingPhoto(photoType)
       try {
-        const result = await api.uploadInspectionPhoto(inspection.id, photoType, file)
+        const coordinates = await getCurrentCoordinates()
+        const geo = coordinates ? `${coordinates.lat}, ${coordinates.lng}` : undefined
+        const result = await api.uploadInspectionPhoto(inspection.id, photoType, file, geo, coordinates || undefined)
         if (result.error || !result.data?.url) {
           onError?.(result.error || 'Не удалось загрузить фото осмотра')
           return

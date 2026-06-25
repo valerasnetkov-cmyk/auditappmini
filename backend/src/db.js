@@ -638,6 +638,7 @@ function applySchemaMigrations() {
       integrity_status TEXT NOT NULL DEFAULT 'unverified',
       public_token TEXT,
       public_token_expires_at TEXT,
+      public_pdf_enabled INTEGER NOT NULL DEFAULT 0,
       verified_at TEXT,
       generated_at TEXT,
       created_at TEXT DEFAULT (datetime('now')),
@@ -654,6 +655,7 @@ function applySchemaMigrations() {
   ensureColumn('inspection_reports', 'integrity_status', "TEXT NOT NULL DEFAULT 'unverified'")
   ensureColumn('inspection_reports', 'public_token', 'TEXT')
   ensureColumn('inspection_reports', 'public_token_expires_at', 'TEXT')
+  ensureColumn('inspection_reports', 'public_pdf_enabled', 'INTEGER NOT NULL DEFAULT 0')
   ensureColumn('inspection_reports', 'verified_at', 'TEXT')
   ensureColumn('inspection_reports', 'generated_at', 'TEXT')
   ensureColumn('inspection_reports', 'created_at', 'TEXT')

@@ -422,6 +422,18 @@ export type PhotoRecord = {
   captured_lng?: number | null
   watermark_url?: string | null
   watermark_generated_at?: string | null
+  created_at?: string | null
+}
+
+export type ResourceCompanyPhoto = PhotoRecord & {
+  company_id?: string | null
+  inspection_id?: string | null
+  defect_id?: string | null
+  inspection_type?: InspectionType | string | null
+  inspection_completed_at?: string | null
+  vehicle_number?: string | null
+  vehicle_name?: string | null
+  defect_title?: string | null
 }
 
 export type PhotoRequirementsResponse = {
@@ -603,6 +615,8 @@ export type InspectionReport = {
   inspection_id: string
   pdf_url?: string | null
   public_url?: string | null
+  public_pdf_enabled?: boolean | number | null
+  public_token_expires_at?: string | null
   sha256?: string | null
   file_size?: number | null
   status: 'pending' | 'generating' | 'ready' | 'failed' | 'corrupted' | string
@@ -624,6 +638,8 @@ export type PublicInspectionReport = {
   sha256?: string | null
   file_size?: number | null
   pdf_url?: string | null
+  public_pdf_enabled?: boolean | null
+  public_token_expires_at?: string | null
   inspection: {
     id: string
     type: InspectionType
@@ -1048,6 +1064,7 @@ export type SaasCompanyDetailsResponse = {
   payments: SaasPayment[]
   alerts: SaasAlert[]
   auditLogs: SaasAuditLog[]
+  recentPhotos?: ResourceCompanyPhoto[]
   plans: SaasPlan[]
 }
 

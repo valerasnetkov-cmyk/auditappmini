@@ -34,6 +34,7 @@ import type {
   ResourceAccess,
   ResourceSessionCookies,
   ResourceServiceUser,
+  ResourceCompanyPhoto,
   CompanyBillingDetails,
   ServiceProfile,
   NotificationTemplate,
@@ -623,11 +624,15 @@ class ApiClient {
     }
   }
 
-  async uploadPhoto(defectId: string, file: File, geo?: string) {
+  async uploadPhoto(defectId: string, file: File, geo?: string, coordinates?: { lat: number; lng: number }) {
     const token = this.getToken()
     const formData = new FormData()
     formData.append('photo', file)
     if (geo) formData.append('geo', geo)
+    if (coordinates) {
+      formData.append('captured_lat', String(coordinates.lat))
+      formData.append('captured_lng', String(coordinates.lng))
+    }
 
     const response = await fetch(`${API_URL}/defects/${defectId}/photos`, {
       method: 'POST',
@@ -648,12 +653,16 @@ class ApiClient {
     return { data: isUploadPhotoResponse(data) ? data : {} }
   }
 
-  async uploadInspectionPhoto(inspectionId: string, photoType: string, file: File, geo?: string) {
+  async uploadInspectionPhoto(inspectionId: string, photoType: string, file: File, geo?: string, coordinates?: { lat: number; lng: number }) {
     const token = this.getToken()
     const formData = new FormData()
     formData.append('photo', file)
     formData.append('photo_type', photoType)
     if (geo) formData.append('geo', geo)
+    if (coordinates) {
+      formData.append('captured_lat', String(coordinates.lat))
+      formData.append('captured_lng', String(coordinates.lng))
+    }
 
     const response = await fetch(`${API_URL}/inspections/${inspectionId}/photos`, {
       method: 'POST',
@@ -978,6 +987,12 @@ class ApiClient {
 
   async getResourceCompanyDetails(id: string) {
     return this.request<SaasCompanyDetailsResponse>(`/admin/resource/companies/${id}`)
+  }
+
+  async createResourceCompanyPhotoWatermark(companyId: string, photoId: string) {
+    return this.request<ResourceCompanyPhoto>(`/admin/resource/companies/${companyId}/photos/${photoId}/watermark`, {
+      method: 'POST',
+    })
   }
 
   async updateResourceCompany(id: string, data: UpdateCompanyPayload) {

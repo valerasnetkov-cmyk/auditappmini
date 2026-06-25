@@ -11,6 +11,11 @@ import {
   resolveUploadPath,
   uploadsDir,
 } from './photoUpload.js'
+import {
+  getPublicReportTokenExpiresAt,
+  getPublicReportUrl,
+} from '../utils/publicReportLinks.js'
+import { buildPhotoWatermarkLines } from '../utils/photoWatermark.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const regularFontPath = path.resolve(__dirname, '../../node_modules/dejavu-fonts-ttf/ttf/DejaVuSans.ttf')
@@ -22,14 +27,6 @@ function formatDate(value) {
   if (!value) return 'не указано'
   const date = new Date(value)
   return Number.isNaN(date.getTime()) ? String(value) : date.toLocaleString('ru-RU')
-}
-
-function photoCoordinates(photo) {
-  if (photo.captured_lat !== null && photo.captured_lat !== undefined
-    && photo.captured_lng !== null && photo.captured_lng !== undefined) {
-    return `${photo.captured_lat}, ${photo.captured_lng}`
-  }
-  return String(photo.geo || '').trim() || 'недоступны'
 }
 
 function ensurePageSpace(doc, requiredHeight = 180) {
@@ -78,11 +75,6 @@ function writeReportFooters(doc) {
 
 function makePublicToken() {
   return crypto.randomBytes(24).toString('base64url')
-}
-
-function getPublicReportUrl(token) {
-  const baseUrl = String(process.env.WEB_URL || process.env.PUBLIC_WEB_URL || 'http://localhost:3002').replace(/\/+$/, '')
-  return `${baseUrl}/reports/public/${token}`
 }
 
 function serializeReport(report) {
@@ -160,15 +152,7 @@ export function createInspectionReportService({ db, PHOTO_SELECT_COLUMNS }) {
 
     const watermarkUrl = await generateWatermarkedPhoto({
       photo,
-      lines: [
-        'auditavto.ru',
-        `Компания: ${inspection.company_name}`,
-        `Техника: ${inspection.vehicle_number}`,
-        `Осмотр: ${inspection.id}`,
-        `Тип: ${inspection.type}`,
-        `Дата/время: ${formatDate(photo.captured_at || photo.created_at)}`,
-        `Координаты: ${photoCoordinates(photo)}`,
-      ],
+      lines: buildPhotoWatermarkLines({ photo, inspection }),
     })
     const generatedAt = new Date().toISOString()
     db.prepare(`
@@ -197,12 +181,13 @@ export function createInspectionReportService({ db, PHOTO_SELECT_COLUMNS }) {
     if (!data) return null
 
     const existingReport = db.prepare(`
-      SELECT id, public_token
+      SELECT id, public_token, public_token_expires_at
       FROM inspection_reports
       WHERE company_id = ? AND inspection_id = ?
     `).get(companyId, inspectionId)
     const reportId = existingReport?.id || uuidv4()
     const publicToken = existingReport?.public_token || makePublicToken()
+    const publicTokenExpiresAt = existingReport?.public_token_expires_at || getPublicReportTokenExpiresAt()
     const reportDir = path.join(uploadsDir, 'reports', companyId, inspectionId)
     const reportPath = path.join(reportDir, 'report.pdf')
     const temporaryReportPath = path.join(reportDir, `report-${uuidv4()}.tmp`)
@@ -210,15 +195,16 @@ export function createInspectionReportService({ db, PHOTO_SELECT_COLUMNS }) {
 
     db.prepare(`
       INSERT INTO inspection_reports (
-        id, company_id, inspection_id, status, integrity_status, public_token, created_at, updated_at
-      ) VALUES (?, ?, ?, 'generating', 'unverified', ?, datetime('now'), datetime('now'))
+        id, company_id, inspection_id, status, integrity_status, public_token, public_token_expires_at, created_at, updated_at
+      ) VALUES (?, ?, ?, 'generating', 'unverified', ?, ?, datetime('now'), datetime('now'))
       ON CONFLICT(company_id, inspection_id) DO UPDATE SET
         status = 'generating',
         integrity_status = 'unverified',
         public_token = COALESCE(public_token, excluded.public_token),
+        public_token_expires_at = COALESCE(public_token_expires_at, excluded.public_token_expires_at),
         verified_at = NULL,
         updated_at = datetime('now')
-    `).run(reportId, companyId, inspectionId, publicToken)
+    `).run(reportId, companyId, inspectionId, publicToken, publicTokenExpiresAt)
 
     const verificationUrl = getPublicReportUrl(publicToken)
     const qrBuffer = await QRCode.toBuffer(verificationUrl, { type: 'png', width: 220, margin: 1 })
@@ -362,6 +348,36 @@ export function createInspectionReportService({ db, PHOTO_SELECT_COLUMNS }) {
     return path.join(uploadsDir, 'reports', report.company_id, report.inspection_id, 'report.pdf')
   }
 
+  function setPublicReportAccess(inspectionId, companyId, {
+    publicPdfEnabled,
+    publicTokenExpiresAt,
+  }) {
+    const report = getReport(inspectionId, companyId)
+    if (!report) return null
+
+    const enabled = publicPdfEnabled === undefined
+      ? Number(report.public_pdf_enabled || 0)
+      : publicPdfEnabled ? 1 : 0
+    const expiresAt = publicTokenExpiresAt === undefined
+      ? report.public_token_expires_at
+      : publicTokenExpiresAt
+
+    db.prepare(`
+      UPDATE inspection_reports
+      SET public_pdf_enabled = ?, public_token_expires_at = ?, updated_at = ?
+      WHERE id = ?
+    `).run(enabled, expiresAt, new Date().toISOString(), report.id)
+
+    return getReport(inspectionId, companyId)
+  }
+
+  function revokePublicReportLink(inspectionId, companyId) {
+    return setPublicReportAccess(inspectionId, companyId, {
+      publicPdfEnabled: false,
+      publicTokenExpiresAt: new Date(0).toISOString(),
+    })
+  }
+
   async function verifyReport(inspectionId, companyId) {
     const report = getReport(inspectionId, companyId)
     if (!report) return null
@@ -409,5 +425,17 @@ export function createInspectionReportService({ db, PHOTO_SELECT_COLUMNS }) {
     `).run(new Date().toISOString(), inspectionId, companyId)
   }
 
-  return { generateReport, getReport, getReportPath, getPublicReport, getPublicReportPath, verifyReport, markFailed }
+  return {
+    generateReport,
+    getReport,
+    getReportPath,
+    getPublicReport,
+    getPublicReportPath,
+    setPublicReportAccess,
+    revokePublicReportLink,
+    verifyReport,
+    markFailed,
+  }
 }
+
+export { getPublicReportUrl }

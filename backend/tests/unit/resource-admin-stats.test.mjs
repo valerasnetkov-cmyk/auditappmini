@@ -60,6 +60,20 @@ function makeFakeDb() {
           }
           if (sql.includes('FROM company_notifications')) return []
           if (sql.includes('FROM audit_logs')) return []
+          if (sql.includes('FROM photos p')) {
+            assert.equal(params[0], 'company-1')
+            return [{
+              id: 'photo-1',
+              company_id: 'company-1',
+              inspection_id: 'inspection-1',
+              url: '/uploads/inspections/inspection-1/photos/photo-1/main.webp',
+              thumb_url: '/uploads/inspections/inspection-1/photos/photo-1/thumb.webp',
+              captured_lat: 46.959,
+              captured_lng: 142.738,
+              vehicle_number: 'А123ВС65',
+              inspection_type: 'quick',
+            }]
+          }
           if (sql.includes('FROM plans')) {
             return [{
               code: 'pilot',
@@ -85,5 +99,7 @@ test('resource company details preserve company overview contract', () => {
   assert.equal(details.payments[0].id, 'payment-1')
   assert.equal(details.alerts.length, 0)
   assert.equal(details.auditLogs.length, 0)
+  assert.equal(details.recentPhotos[0].id, 'photo-1')
+  assert.equal(details.recentPhotos[0].captured_lat, 46.959)
   assert.equal(details.plans[0].code, 'pilot')
 })

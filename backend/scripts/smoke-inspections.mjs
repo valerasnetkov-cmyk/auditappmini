@@ -151,7 +151,7 @@ async function run() {
 
   const server = spawn(process.execPath, ['src/server.js'], {
     cwd: process.cwd(),
-    env: { ...process.env, PORT: String(PORT), DATABASE_PATH, UPLOAD_DIR, JWT_SECRET, WEB_URL: BASE_URL },
+    env: { ...process.env, PORT: String(PORT), DATABASE_PATH, UPLOAD_DIR, JWT_SECRET, WEB_APP_URL: BASE_URL },
     stdio: ['ignore', 'pipe', 'pipe'],
   })
 
@@ -497,13 +497,39 @@ async function run() {
       publicReport.integrity_status !== 'valid'
       || publicReport.status !== 'ready'
       || publicReport.inspection?.id !== quickInspection.id
-      || publicReport.pdf_url !== `/api/reports/public/${publicReportToken}.pdf`
+      || publicReport.pdf_url !== null
+      || publicReport.public_pdf_enabled !== false
     ) {
       throw new Error(`Public report metadata is incomplete: ${JSON.stringify(publicReport)}`)
     }
     const publicReportPdf = await fetch(`${BASE_URL}/api/reports/public/${publicReportToken}.pdf`)
-    if (publicReportPdf.status !== 200 || publicReportPdf.headers.get('content-type') !== 'application/pdf') {
-      throw new Error(`Public report PDF expected 200 application/pdf, got ${publicReportPdf.status}`)
+    if (publicReportPdf.status !== 403) {
+      throw new Error(`Public report PDF expected 403 before opt-in, got ${publicReportPdf.status}`)
+    }
+    const enabledPublicReport = await request(`/api/inspections/${quickInspection.id}/report/public-access`, {
+      method: 'PATCH',
+      headers: jsonHeaders,
+      body: JSON.stringify({ public_pdf_enabled: true }),
+    })
+    if (!enabledPublicReport.public_pdf_enabled) {
+      throw new Error(`Public PDF opt-in was not persisted: ${JSON.stringify(enabledPublicReport)}`)
+    }
+    const publicReportAfterOptIn = await request(`/api/reports/public/${publicReportToken}`)
+    if (publicReportAfterOptIn.pdf_url !== `/api/reports/public/${publicReportToken}.pdf`) {
+      throw new Error(`Public report PDF URL was not exposed after opt-in: ${JSON.stringify(publicReportAfterOptIn)}`)
+    }
+    const publicReportPdfAfterOptIn = await fetch(`${BASE_URL}/api/reports/public/${publicReportToken}.pdf`)
+    if (publicReportPdfAfterOptIn.status !== 200 || publicReportPdfAfterOptIn.headers.get('content-type') !== 'application/pdf') {
+      throw new Error(`Public report PDF expected 200 application/pdf after opt-in, got ${publicReportPdfAfterOptIn.status}`)
+    }
+    await request(`/api/inspections/${quickInspection.id}/report/public-access`, {
+      method: 'PATCH',
+      headers: jsonHeaders,
+      body: JSON.stringify({ public_token_expires_at: '2000-01-01T00:00:00.000Z' }),
+    })
+    const expiredPublicReport = await fetch(`${BASE_URL}/api/reports/public/${publicReportToken}`)
+    if (expiredPublicReport.status !== 404) {
+      throw new Error(`Expired public report expected 404, got ${expiredPublicReport.status}`)
     }
     const submittedApproval = await request(`/api/inspections/${quickInspection.id}/submit`, {
       method: 'POST',
@@ -705,7 +731,8 @@ async function run() {
           reportIntegrityVerified: regeneratedReport.integrity_status === 'valid',
           reportTamperingDetected: corruptedReport.integrity_status === 'mismatch',
           publicReportVerified: publicReport.integrity_status === 'valid',
-          publicReportPdfAvailable: publicReportPdf.status === 200,
+          publicReportPdfBlockedByDefault: publicReportPdf.status === 403,
+          publicReportPdfAvailableAfterOptIn: publicReportPdfAfterOptIn.status === 200,
           reportTenantIsolation: crossTenantReport.status === 404,
           approvalWorkflowCompleted: approvalDetails.status === 'approved',
           approvalNotificationDelivered: usageAfterSubmission.alerts.some(

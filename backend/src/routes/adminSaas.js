@@ -43,6 +43,8 @@ import {
   buildResourceAdminStats,
   buildResourceCompanyDetails,
 } from '../services/resourceAdminStats.js'
+import { generateWatermarkedPhoto } from '../services/photoUpload.js'
+import { buildPhotoWatermarkLines } from '../utils/photoWatermark.js'
 import { uniqueCompanySlug } from './adminOperations.js'
 
 export { buildResourceAdminStats, buildSaasAdminStats } from '../services/resourceAdminStats.js'
@@ -153,6 +155,53 @@ export default function registerSaasAdminRoutes({ app, db, authenticate, ensureA
       details.alerts = []
     }
     res.json(details)
+  })
+
+  app.post('/api/admin/resource/companies/:id/photos/:photoId/watermark', authenticate, async (req, res) => {
+    if (!requireAdmin(req, res)) return
+    const photo = db.prepare(`
+      SELECT p.*, c.name AS company_name, i.type AS inspection_type,
+             v.number AS vehicle_number, v.name AS vehicle_name,
+             d.title AS defect_title
+      FROM photos p
+      JOIN companies c ON c.id = p.company_id
+      LEFT JOIN inspections i ON i.id = p.inspection_id AND i.company_id = p.company_id
+      LEFT JOIN vehicles v ON v.id = i.vehicle_id AND v.company_id = p.company_id
+      LEFT JOIN defects d ON d.id = p.defect_id AND d.company_id = p.company_id
+      WHERE p.company_id = ? AND p.id = ?
+    `).get(req.params.id, req.params.photoId)
+
+    if (!photo) return sendError(res, 404, 'Photo not found')
+
+    try {
+      const watermarkUrl = await generateWatermarkedPhoto({
+        photo,
+        lines: buildPhotoWatermarkLines({
+          photo,
+          companyName: photo.company_name,
+          vehicleNumber: photo.vehicle_number,
+          inspection: {
+            id: photo.inspection_id,
+            type: photo.inspection_type,
+          },
+        }),
+      })
+      const generatedAt = new Date().toISOString()
+      db.prepare(`
+        UPDATE photos
+        SET watermark_url = ?, watermark_generated_at = ?
+        WHERE id = ? AND company_id = ?
+      `).run(watermarkUrl, generatedAt, photo.id, photo.company_id)
+
+      res.json({
+        ...photo,
+        watermark_url: watermarkUrl,
+        watermark_generated_at: generatedAt,
+      })
+    } catch (error) {
+      console.error('[resource-admin] failed to watermark photo:', error)
+      sendError(res, 500, 'Не удалось сформировать фото с водяным знаком')
+    }
   })
 
   app.get(['/api/admin/resource/alerts', '/api/admin/saas/alerts'], authenticate, (req, res) => {

@@ -11,6 +11,10 @@ import {
   isValidAccessLogSkipPath,
 } from './utils/env.js'
 import { assertPositiveInteger, assertOneOf } from './utils/asserts.js'
+import {
+  getPublicReportTokenExpiresAt,
+  resolvePublicWebAppUrl,
+} from './utils/publicReportLinks.js'
 
 export const isProduction = process.env.NODE_ENV === 'production'
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
@@ -174,6 +178,9 @@ export function assertProductionConfig() {
   if (PUBLIC_DEMO_ENABLED && String(process.env.PUBLIC_DEMO_PASSWORD || '').trim().length < 12) {
     throw new Error('PUBLIC_DEMO_PASSWORD must contain at least 12 characters when public demo is enabled')
   }
+
+  resolvePublicWebAppUrl(process.env)
+  getPublicReportTokenExpiresAt(new Date(), process.env)
 
   if (!hasEnvValue('TRUST_PROXY')) {
     throw new Error('TRUST_PROXY must be set explicitly in production')

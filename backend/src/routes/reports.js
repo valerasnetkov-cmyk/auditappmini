@@ -11,6 +11,18 @@ export default function registerInspectionReportRoutes({
 }) {
   const reports = createInspectionReportService({ db, PHOTO_SELECT_COLUMNS })
 
+  function parseOptionalBoolean(value, fieldName, res) {
+    if (typeof value === 'boolean') return value
+    if (value === 1 || value === 'true') return true
+    if (value === 0 || value === 'false') return false
+
+    res.status(400).json({
+      error: 'INVALID_BOOLEAN_FIELD',
+      message: `${fieldName} должен быть boolean-значением`,
+    })
+    return null
+  }
+
   function getCompletedInspection(req, res) {
     const companyId = req.user.company_id || 'default'
     const inspection = db.prepare(`
@@ -88,6 +100,40 @@ export default function registerInspectionReportRoutes({
     }
   })
 
+  app.patch('/api/inspections/:id/report/public-access', authenticate, async (req, res) => {
+    if (!ensureCompanyFeatureEnabled(req, res, 'pdf_report_enabled', 'PDF-отчёты недоступны на текущем тарифе.')) return
+    const context = getCompletedInspection(req, res)
+    if (!context) return
+
+    const body = req.body || {}
+    const patch = {}
+
+    if (Object.prototype.hasOwnProperty.call(body, 'public_pdf_enabled')) {
+      const parsed = parseOptionalBoolean(body.public_pdf_enabled, 'public_pdf_enabled', res)
+      if (parsed === null) return
+      patch.publicPdfEnabled = parsed
+    }
+
+    if (Object.prototype.hasOwnProperty.call(body, 'public_token_expires_at')) {
+      if (body.public_token_expires_at === null || body.public_token_expires_at === '') {
+        patch.publicTokenExpiresAt = null
+      } else {
+        const expiresAt = new Date(body.public_token_expires_at)
+        if (Number.isNaN(expiresAt.getTime())) {
+          return res.status(400).json({
+            error: 'INVALID_PUBLIC_TOKEN_EXPIRY',
+            message: 'Срок действия публичной ссылки должен быть ISO-датой или null',
+          })
+        }
+        patch.publicTokenExpiresAt = expiresAt.toISOString()
+      }
+    }
+
+    const report = reports.setPublicReportAccess(req.params.id, context.companyId, patch)
+    if (!report) return res.status(404).json({ error: 'REPORT_NOT_GENERATED' })
+    res.json(report)
+  })
+
   app.get('/api/reports/public/:token', async (req, res, next) => {
     if (String(req.params.token || '').endsWith('.pdf')) return next()
     const report = reports.getPublicReport(req.params.token)
@@ -118,7 +164,11 @@ export default function registerInspectionReportRoutes({
       company: {
         name: report.company_name,
       },
-      pdf_url: `/api/reports/public/${req.params.token}.pdf`,
+      public_pdf_enabled: Boolean(Number(report.public_pdf_enabled || 0)),
+      public_token_expires_at: report.public_token_expires_at,
+      pdf_url: Number(report.public_pdf_enabled || 0) === 1
+        ? `/api/reports/public/${req.params.token}.pdf`
+        : null,
     })
   })
 
@@ -126,6 +176,12 @@ export default function registerInspectionReportRoutes({
     const report = reports.getPublicReport(req.params.token)
     const reportPath = reports.getPublicReportPath(report)
     if (!report || !reportPath) return res.status(404).json({ error: 'REPORT_NOT_FOUND' })
+    if (Number(report.public_pdf_enabled || 0) !== 1) {
+      return res.status(403).json({
+        error: 'PUBLIC_REPORT_PDF_DISABLED',
+        message: 'PDF доступен только авторизованным пользователям или по разрешённой публичной ссылке.',
+      })
+    }
     if (report.integrity_status !== 'valid' || report.status !== 'ready' || !fs.existsSync(reportPath)) {
       return res.status(409).json({ error: 'REPORT_INTEGRITY_FAILED' })
     }

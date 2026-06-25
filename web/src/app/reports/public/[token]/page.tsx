@@ -127,7 +127,11 @@ export default function PublicReportPage() {
                 >
                   Открыть PDF
                 </a>
-              ) : null}
+              ) : (
+                <NoticeCard title="PDF закрыт" tone="info">
+                  PDF доступен только авторизованным пользователям или по разрешённой публичной ссылке.
+                </NoticeCard>
+              )}
             </div>
           ) : null}
         </section>
