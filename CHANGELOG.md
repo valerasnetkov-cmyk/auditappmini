@@ -3,6 +3,10 @@
 ## Unreleased
 
 ### Changed
+- **Vehicle number repair tenant scope**: startup-repair номеров техники больше
+  не считает одинаковые валидные госномера в разных компаниях глобальным
+  дубликатом; исправленный номер вроде `К002МК65` теперь не откатывается в
+  сгенерированный `К002МК265` после повторной инициализации backend.
 - **Inspection photo modal moved to tenant inspection page**: ошибочный доступ
   resource-admin к фото компаний откатан; карточка компании сервиса больше не
   получает `recentPhotos` и не генерирует watermark для чужих файлов, а

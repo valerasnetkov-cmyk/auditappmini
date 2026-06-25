@@ -48,3 +48,38 @@ test('operational vehicle list indexes are created repeat-safely', async () => {
     'idx_vehicles_company_status_created',
   ])
 })
+
+test('vehicle number repair keeps valid duplicate numbers scoped per company', async () => {
+  const db = databaseModule.getDb()
+  db.prepare(`
+    INSERT OR IGNORE INTO companies (id, slug, name, status)
+    VALUES (?, ?, ?, 'active')
+  `).run('repair-company-a', 'repair-company-a', 'Repair Company A')
+  db.prepare(`
+    INSERT OR IGNORE INTO companies (id, slug, name, status)
+    VALUES (?, ?, ?, 'active')
+  `).run('repair-company-b', 'repair-company-b', 'Repair Company B')
+
+  db.prepare(`
+    INSERT INTO vehicles (id, number, name, status, company_id)
+    VALUES (?, ?, ?, 'active', ?)
+  `).run('repair-vehicle-a', 'К002МК65', 'Vehicle A', 'repair-company-a')
+  db.prepare(`
+    INSERT INTO vehicles (id, number, name, status, company_id)
+    VALUES (?, ?, ?, 'active', ?)
+  `).run('repair-vehicle-b', 'К002МК65', 'Vehicle B', 'repair-company-b')
+
+  await databaseModule.initDatabase()
+
+  const numbers = db.prepare(`
+    SELECT company_id, number
+    FROM vehicles
+    WHERE id IN ('repair-vehicle-a', 'repair-vehicle-b')
+    ORDER BY company_id
+  `).all()
+
+  assert.deepEqual(numbers, [
+    { company_id: 'repair-company-a', number: 'К002МК65' },
+    { company_id: 'repair-company-b', number: 'К002МК65' },
+  ])
+})

@@ -142,7 +142,7 @@ function buildCompliantVehicleNumber(source, salt = '') {
 }
 
 function repairVehicleNumbers() {
-  const select = db.prepare('SELECT rowid, number FROM vehicles WHERE number IS NOT NULL')
+  const select = db.prepare("SELECT rowid, number, COALESCE(company_id, 'default') AS company_id FROM vehicles WHERE number IS NOT NULL")
   const update = db.prepare('UPDATE vehicles SET number = ? WHERE rowid = ?')
   const rows = []
   const usedNumbers = new Set()
@@ -154,12 +154,13 @@ function repairVehicleNumbers() {
 
   rows.forEach((row) => {
     let candidate = normalizeVehicleNumber(row.number)
+    const companyId = row.company_id || 'default'
     if (!LICENSE_PLATE_PATTERN.test(candidate)) {
       candidate = buildCompliantVehicleNumber(String(row.number), String(row.rowid))
     }
 
     let suffix = 1
-    while (usedNumbers.has(candidate)) {
+    while (usedNumbers.has(`${companyId}:${candidate}`)) {
       candidate = buildCompliantVehicleNumber(String(row.number), `${row.rowid}-${suffix}`)
       suffix += 1
     }
@@ -169,7 +170,7 @@ function repairVehicleNumbers() {
       repaired += 1
     }
 
-    usedNumbers.add(candidate)
+    usedNumbers.add(`${companyId}:${candidate}`)
   })
 
   select.free()
