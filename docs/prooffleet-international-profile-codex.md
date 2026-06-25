@@ -1,35 +1,35 @@
-# Задача Codex: разделение РФ и международного профиля AuditAvto / ProofFleet
+# Задача Codex: финальное разделение AuditAvto RF и ProofFleet International
 
 ## Контекст
 
 Сейчас проект AuditAvto работает для РФ-пользователей на домене:
 
-- `auditavto.ru`
-- `api.auditavto.ru`
+* `auditavto.ru`
+* `api.auditavto.ru`
 
 Для международного рынка выбран отдельный бренд и домен:
 
-- `ProofFleet.com`
-- `api.ProofFleet.com`
+* `ProofFleet.com`
+* `api.ProofFleet.com`
 
 Международный контур должен быть отдельным runtime/deployment-контуром, но может использовать общую кодовую базу текущего проекта.
 
 Проект уже имеет рабочие контуры:
 
-- backend;
-- web;
-- mobile Expo;
-- resource-admin;
-- тарифы и лимиты;
-- offline billing;
-- PDF-отчёты;
-- фотофиксацию;
-- mobile-only проведение осмотров;
-- роли `admin`, `resource_manager`, `owner`, `manager`, `inspector`;
-- legal-контур РФ;
-- публичный лендинг;
-- demo-контур;
-- production doctor / release readiness / backup verification.
+* backend;
+* web;
+* mobile Expo;
+* resource-admin / админ-система сервиса;
+* тарифы и лимиты;
+* offline billing;
+* PDF-отчёты;
+* фотофиксацию;
+* mobile-only проведение осмотров;
+* роли `admin`, `resource_manager`, `owner`, `manager`, `inspector`;
+* legal-контур РФ;
+* публичный лендинг;
+* demo-контур;
+* production doctor / release readiness / backup verification.
 
 Теперь необходимо подготовить архитектурное разделение проекта на два профиля:
 
@@ -58,7 +58,8 @@ International profile:
 ProofFleet.com
 api.ProofFleet.com
 ProofFleet brand
-EN language
+EN language for public/tenant/product surfaces
+Russian language for service admin/resource-admin
 USD/EUR tariffs
 International legal documents
 GDPR/cookie-ready public contour
@@ -66,6 +67,52 @@ International fleet inspection positioning
 ```
 
 Кодовая база может оставаться общей, но runtime-среды должны быть независимыми.
+
+---
+
+## Ключевое правило по языкам
+
+### Админ-система сервиса остаётся на русском
+
+Resource-admin / админ-система сервиса должна оставаться на русском языке во всех профилях:
+
+* RF / AuditAvto;
+* International / ProofFleet.
+
+Это осознанное продуктовое решение: сервисной командой управляет русскоязычный оператор/владелец проекта, поэтому внутренний backoffice, управление компаниями, тарифами, платежами, заявками, уведомлениями, командой сервиса и health-индикаторами должны оставаться на русском.
+
+### Где нужен английский язык
+
+Английский язык нужен для ProofFleet international-профиля в следующих пользовательских поверхностях:
+
+* публичный лендинг `ProofFleet.com`;
+* login / owner setup, если ими пользуется международный клиент;
+* tenant web-кабинет владельца/менеджера/инспектора;
+* mobile app для инспектора;
+* PDF-отчёты;
+* email/service notification templates для клиентов;
+* legal pages;
+* cookie consent;
+* validation errors, видимые клиентам.
+
+### Где русский язык сохраняется
+
+Русский язык сохраняется:
+
+* `/saas-admin`;
+* resource-admin dashboard;
+* управление компаниями;
+* карточки компаний;
+* тарифы и лимиты в сервисной админке;
+* офлайн-платежи;
+* заявки на пилот;
+* команда сервиса;
+* внутренние сервисные уведомления;
+* audit log;
+* health center;
+* release / launch diagnostics UI, если они видны только сервисной команде.
+
+Не переводить resource-admin на английский в рамках этой задачи.
 
 ---
 
@@ -113,6 +160,8 @@ api.ProofFleet.com
 10. Не проводить осмотр через web: текущий контракт сохраняется — проведение осмотра только в mobile app, web остаётся контуром контроля, истории, согласования и отчётов.
 11. Не использовать `ProofFleet.com` внутри РФ-профиля.
 12. Не использовать `auditavto.ru` внутри international production-профиля, кроме документации миграции/истории.
+13. Не переводить resource-admin / админ-систему сервиса на английский.
+14. Не смешивать язык сервисной админки с языком клиентского tenant-контура.
 
 ---
 
@@ -137,10 +186,10 @@ international
 
 Поведение:
 
-- если переменная не задана — использовать `rf`;
-- если задано неизвестное значение — production doctor должен возвращать ошибку;
-- international-режим должен быть явно включаемым;
-- все зависящие от рынка настройки должны читаться централизованно, а не через scattered checks по коду.
+* если переменная не задана — использовать `rf`;
+* если задано неизвестное значение — production doctor должен возвращать ошибку;
+* international-режим должен быть явно включаемым;
+* все зависящие от рынка настройки должны читаться централизованно, а не через scattered checks по коду.
 
 Нужно создать helper/service, например:
 
@@ -176,14 +225,16 @@ apiDomain=api.ProofFleet.com
 
 Бренд должен использоваться в:
 
-- title/meta;
-- public landing;
-- footer;
-- legal pages;
-- email/service notification templates;
-- PDF report footer/CTA;
-- mobile app display configuration where applicable;
-- resource-admin display.
+* title/meta;
+* public landing;
+* footer;
+* legal pages;
+* email/service notification templates для клиентов;
+* PDF report footer/CTA;
+* mobile app display configuration where applicable;
+* tenant-facing web surfaces.
+
+Важно: resource-admin может показывать бренд `ProofFleet` как значение профиля/домена, но интерфейс resource-admin остаётся на русском.
 
 Не хардкодить `AuditAvto` там, где текст зависит от market profile.
 
@@ -235,19 +286,39 @@ locales/
 
 На первом этапе не обязательно переводить абсолютно всё, но нужно заложить правильный слой для:
 
-- public landing;
-- login;
-- MFA;
-- owner setup;
-- dashboard;
-- vehicles;
-- inspections;
-- defects;
-- PDF labels;
-- service notifications;
-- validation errors.
+* public landing;
+* login;
+* MFA;
+* owner setup;
+* tenant dashboard;
+* vehicles;
+* inspections;
+* defects;
+* PDF labels;
+* client-facing service notifications;
+* validation errors, видимых клиентам.
 
 Не делать простую замену русских строк на английские в компонентах. Нужно подготовить расширяемый механизм.
+
+### Важное исключение
+
+Resource-admin / `/saas-admin` не должен становиться англоязычным из-за i18n-слоя.
+
+Для resource-admin должно быть явно зафиксировано:
+
+```txt
+resourceAdminLocale=ru
+```
+
+или аналогичное правило.
+
+Даже при:
+
+```txt
+APP_MARKET_PROFILE=international
+```
+
+админ-система сервиса должна оставаться на русском.
 
 ---
 
@@ -292,6 +363,12 @@ distance_unit=mi или km — через env/default setting
 timezone=UTC
 ```
 
+Важно:
+
+* `company.locale` управляет клиентским tenant UI;
+* `resourceAdminLocale` остаётся `ru`;
+* язык админки сервиса не должен зависеть от `company.locale`.
+
 ---
 
 ### 6. Vehicle number / license plate policy
@@ -302,11 +379,11 @@ timezone=UTC
 
 Нужно:
 
-- сохранить РФ-валидацию там, где она нужна РФ-профилю;
-- добавить international-friendly режим свободного vehicle identifier;
-- не ломать поиск техники по номеру;
-- не ломать существующие vehicle APIs;
-- не ломать smoke-тесты РФ-контура.
+* сохранить РФ-валидацию там, где она нужна РФ-профилю;
+* добавить international-friendly режим свободного vehicle identifier;
+* не ломать поиск техники по номеру;
+* не ломать существующие vehicle APIs;
+* не ломать smoke-тесты РФ-контура.
 
 Пример поведения:
 
@@ -349,11 +426,11 @@ Enterprise: custom
 
 На этом этапе не обязательно подключать Stripe/Paddle, но нужно подготовить структуру, чтобы:
 
-- тарифы не были жёстко привязаны к RUB;
-- currency отображалась корректно;
-- resource-admin видел профиль рынка;
-- tenant usage показывал валюту текущей компании;
-- РФ billing не изменился.
+* тарифы не были жёстко привязаны к RUB;
+* currency отображалась корректно;
+* resource-admin видел профиль рынка на русском языке;
+* tenant usage показывал валюту текущей компании;
+* РФ billing не изменился.
 
 ---
 
@@ -384,19 +461,23 @@ Draft international legal document for ProofFleet. Requires legal review before 
 
 Для РФ-профиля footer должен остаться на текущих РФ-документах.
 
+Resource-admin legal/admin notices остаются на русском, если они предназначены для сервисной команды.
+
 ---
 
 ### 9. Cookie consent separation
 
 Для ProofFleet international-профиля подготовить cookie consent, совместимый с международным запуском:
 
-- Accept all;
-- Reject all;
-- Manage preferences;
-- strictly necessary cookies отдельно;
-- analytics/marketing cookies только после согласия.
+* Accept all;
+* Reject all;
+* Manage preferences;
+* strictly necessary cookies отдельно;
+* analytics/marketing cookies только после согласия.
 
 Для РФ-профиля текущий cookie banner не ломать.
+
+Resource-admin cookie/session diagnostics, если есть, остаются на русском.
 
 ---
 
@@ -433,17 +514,19 @@ NEXT_PUBLIC_APP_MARKET_PROFILE=international
 NEXT_PUBLIC_APP_BRAND=ProofFleet
 NEXT_PUBLIC_APP_URL=https://ProofFleet.com
 NEXT_PUBLIC_API_URL=https://api.ProofFleet.com/api
+NEXT_PUBLIC_RESOURCE_ADMIN_LOCALE=ru
 ```
 
 Нужно убедиться, что `doctor:production` проверяет:
 
-- корректный `APP_MARKET_PROFILE`;
-- production URLs без placeholder;
-- persistent absolute paths;
-- strong secrets;
-- корректный CORS;
-- отсутствие смешивания `auditavto.ru` в international-профиле, если это production international env;
-- отсутствие смешивания `ProofFleet.com` в РФ production-профиле.
+* корректный `APP_MARKET_PROFILE`;
+* production URLs без placeholder;
+* persistent absolute paths;
+* strong secrets;
+* корректный CORS;
+* отсутствие смешивания `auditavto.ru` в international-профиле, если это production international env;
+* отсутствие смешивания `ProofFleet.com` в РФ production-профиле;
+* resource-admin locale остаётся `ru`, если такая env-настройка добавляется.
 
 ---
 
@@ -475,27 +558,34 @@ new privacy policy URL: https://ProofFleet.com/privacy
 new support URL: https://ProofFleet.com/support или https://ProofFleet.com
 ```
 
+Mobile app для ProofFleet должен быть англоязычным для клиентов/инспекторов.
+
 ---
 
 ### 12. Resource-admin awareness
 
-Resource-admin должен понимать market profile компании или deployment.
+Resource-admin должен понимать market profile компании или deployment, но сам интерфейс остаётся русским.
 
-Нужно добавить отображение:
+Нужно добавить отображение на русском:
 
 ```txt
-Market profile: RF / International
-Brand: AuditAvto / ProofFleet
-Locale
-Currency
-Distance unit
-Country
-Timezone
-Public domain
-API domain
+Профиль рынка: РФ / Международный
+Бренд: AuditAvto / ProofFleet
+Локаль клиента
+Валюта
+Единицы пробега
+Страна
+Часовой пояс
+Публичный домен
+API-домен
 ```
 
-Важно: resource-admin не должен получать доступ к tenant operational endpoints. Текущую tenant isolation не ломать.
+Важно:
+
+* resource-admin не должен получать доступ к tenant operational endpoints;
+* текущую tenant isolation не ломать;
+* resource-admin не переводить на английский;
+* все новые labels/buttons/help text в resource-admin писать на русском.
 
 ---
 
@@ -520,14 +610,15 @@ docs/backend.md
 
 В документации зафиксировать:
 
-- РФ и ProofFleet international — разные runtime-среды;
-- общая кодовая база допустима;
-- данные не смешиваются;
-- ProofFleet запускается на отдельном сервере, домене и БД;
-- production env должен проходить doctor до запуска;
-- ProofFleet international legal documents требуют юридической проверки перед публичным запуском;
-- `ProofFleet.com` является международным доменом;
-- `api.ProofFleet.com` является международным API-доменом.
+* РФ и ProofFleet international — разные runtime-среды;
+* общая кодовая база допустима;
+* данные не смешиваются;
+* ProofFleet запускается на отдельном сервере, домене и БД;
+* production env должен проходить doctor до запуска;
+* ProofFleet international legal documents требуют юридической проверки перед публичным запуском;
+* `ProofFleet.com` является международным доменом;
+* `api.ProofFleet.com` является международным API-доменом;
+* resource-admin / админ-система сервиса остаётся на русском языке для обоих профилей.
 
 ---
 
@@ -556,15 +647,17 @@ npm --prefix mobile run typecheck
 
 Если новых smoke-команд ещё нет, добавить минимальный smoke для проверки:
 
-- `APP_MARKET_PROFILE=rf`;
-- `APP_MARKET_PROFILE=international`;
-- неизвестный profile падает в production doctor;
-- РФ-тарифы остаются в RUB;
-- ProofFleet international-тарифы отображаются в USD/EUR;
-- international vehicle identifier не требует российского формата;
-- РФ vehicle behavior не сломан;
-- РФ production env не содержит `ProofFleet.com`;
-- ProofFleet production env не содержит `auditavto.ru`, кроме явно разрешённых исторических/документационных ссылок.
+* `APP_MARKET_PROFILE=rf`;
+* `APP_MARKET_PROFILE=international`;
+* неизвестный profile падает в production doctor;
+* РФ-тарифы остаются в RUB;
+* ProofFleet international-тарифы отображаются в USD/EUR;
+* international vehicle identifier не требует российского формата;
+* РФ vehicle behavior не сломан;
+* РФ production env не содержит `ProofFleet.com`;
+* ProofFleet production env не содержит `auditavto.ru`, кроме явно разрешённых исторических/документационных ссылок;
+* resource-admin остаётся русскоязычным при `APP_MARKET_PROFILE=international`;
+* tenant/client ProofFleet UI может быть англоязычным при `company.locale=en`.
 
 ---
 
@@ -578,15 +671,17 @@ npm --prefix mobile run typecheck
 4. Есть единая точка чтения brand profile.
 5. `ProofFleet.com` используется как international public domain.
 6. `api.ProofFleet.com` используется как international API domain.
-7. Публичные тексты можно разделять по профилю.
+7. Публичные и tenant-facing тексты можно разделять по профилю/локали.
 8. Legal footer может вести на разные документы для РФ и ProofFleet.
 9. Тарифы и currency не смешиваются.
 10. Vehicle identifier для international не требует российского формата.
 11. Production doctor проверяет profile-sensitive env.
-12. Документация обновлена.
-13. `npm run verify:launch` проходит или все blockers честно зафиксированы.
-14. В `CHANGELOG.md` есть запись о разделении AuditAvto RF / ProofFleet International.
-15. В daily docs есть запись о выполненных изменениях и технических решениях.
+12. Resource-admin остаётся на русском языке в RF и International профилях.
+13. В resource-admin новые поля/лейблы/кнопки написаны на русском.
+14. Документация обновлена.
+15. `npm run verify:launch` проходит или все blockers честно зафиксированы.
+16. В `CHANGELOG.md` есть запись о разделении AuditAvto RF / ProofFleet International.
+17. В daily docs есть запись о выполненных изменениях и технических решений.
 
 ---
 
@@ -594,18 +689,20 @@ npm --prefix mobile run typecheck
 
 Не делать:
 
-- не создавать новый backend с нуля;
-- не добавлять CMS;
-- не смешивать РФ и international данные;
-- не переносить текущий production на ProofFleet.com;
-- не менять `auditavto.ru` без отдельного задания;
-- не удалять РФ legal documents;
-- не заменять все русские тексты английскими напрямую;
-- не ломать mobile-only inspection contract;
-- не включать публичную регистрацию по умолчанию;
-- не хранить production secrets в Git;
-- не использовать одну и ту же SQLite БД для РФ и ProofFleet;
-- не использовать один и тот же uploads/backups каталог для РФ и ProofFleet.
+* не создавать новый backend с нуля;
+* не добавлять CMS;
+* не смешивать РФ и international данные;
+* не переносить текущий production на ProofFleet.com;
+* не менять `auditavto.ru` без отдельного задания;
+* не удалять РФ legal documents;
+* не заменять все русские тексты английскими напрямую;
+* не ломать mobile-only inspection contract;
+* не включать публичную регистрацию по умолчанию;
+* не хранить production secrets в Git;
+* не использовать одну и ту же SQLite БД для РФ и ProofFleet;
+* не использовать один и тот же uploads/backups каталог для РФ и ProofFleet;
+* не переводить resource-admin / `/saas-admin` на английский;
+* не привязывать язык resource-admin к `company.locale`.
 
 ---
 
@@ -622,6 +719,8 @@ api.auditavto.ru
 RUB
 RU legal
 RU landing
+RU tenant UI
+RU resource-admin
 
 International deployment:
 APP_MARKET_PROFILE=international
@@ -631,7 +730,12 @@ api.ProofFleet.com
 USD/EUR
 EN legal
 EN landing
+EN tenant UI
+EN mobile app
+RU resource-admin
 independent server/database/uploads/backups
 ```
 
 Кодовая база остаётся общей, но production-среды, данные, домены, legal, brand и billing-профили разделены.
+
+Админ-система сервиса остаётся русскоязычной независимо от рыночного профиля.
