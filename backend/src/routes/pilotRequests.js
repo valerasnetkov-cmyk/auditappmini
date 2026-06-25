@@ -9,6 +9,7 @@ import { slugifyCompanyName, uniqueCompanySlug } from './adminOperations.js'
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 const PHONE_PATTERN = /^[+\d][\d\s()-]{6,24}$/
 const SOURCE_PATTERN = /^[a-z0-9_.:-]{1,80}$/i
+const PREFERRED_PLAN_CODES = new Set(['pilot', 'standard', 'enterprise'])
 
 function text(value, maxLength = 1000) {
   return typeof value === 'string' ? value.trim().slice(0, maxLength) : ''
@@ -25,6 +26,11 @@ function normalizeEmail(value) {
 function normalizeSource(value) {
   const normalized = text(value, 80)
   return SOURCE_PATTERN.test(normalized) ? normalized : 'landing'
+}
+
+function normalizePreferredPlanCode(value) {
+  const normalized = text(value, 80).toLowerCase()
+  return PREFERRED_PLAN_CODES.has(normalized) ? normalized : 'pilot'
 }
 
 function addDaysDate(days, now = new Date()) {
@@ -66,6 +72,7 @@ function mapPilotRequest(row) {
     contactPhone: row.contact_phone,
     vehicleCount: row.vehicle_count,
     region: row.region,
+    preferredPlanCode: row.preferred_plan_code || null,
     comment: row.comment,
     status: row.status,
     assignedUserId: row.assigned_user_id,
@@ -190,9 +197,9 @@ export default function registerPilotRequestRoutes({
     db.prepare(`
       INSERT INTO pilot_requests (
         id, company_name, contact_name, contact_email, contact_phone, vehicle_count,
-        region, comment, status, source, utm_source, utm_medium, utm_campaign,
+        region, preferred_plan_code, comment, status, source, utm_source, utm_medium, utm_campaign,
         utm_content, utm_term, consent_given, consent_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'new', ?, ?, ?, ?, ?, ?, 1, datetime('now'))
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'new', ?, ?, ?, ?, ?, ?, 1, datetime('now'))
     `).run(
       id,
       companyName,
@@ -201,6 +208,7 @@ export default function registerPilotRequestRoutes({
       contactPhone,
       vehicleCount,
       nullableText(req.body?.region, 160),
+      normalizePreferredPlanCode(req.body?.preferredPlanCode || req.body?.planCode),
       nullableText(req.body?.comment, 2000),
       normalizeSource(req.body?.source),
       nullableText(req.body?.utmSource, 160),
@@ -209,7 +217,10 @@ export default function registerPilotRequestRoutes({
       nullableText(req.body?.utmContent, 160),
       nullableText(req.body?.utmTerm, 160),
     )
-    writeAudit(db, req, 'pilot_request.created', id, { source: normalizeSource(req.body?.source) })
+    writeAudit(db, req, 'pilot_request.created', id, {
+      source: normalizeSource(req.body?.source),
+      preferredPlanCode: normalizePreferredPlanCode(req.body?.preferredPlanCode || req.body?.planCode),
+    })
     return res.status(201).json({ accepted: true })
   })
 
@@ -308,7 +319,9 @@ export default function registerPilotRequestRoutes({
     (req, res) => {
       const request = getRequest(db, req.params.id)
       if (!request) return res.status(404).json({ error: 'Заявка не найдена' })
-      const plan = db.prepare('SELECT * FROM plans WHERE code = ? AND status = ?').get('pilot', 'active')
+      const preferredPlanCode = normalizePreferredPlanCode(request.preferredPlanCode)
+      const plan = db.prepare('SELECT * FROM plans WHERE code = ? AND status = ?').get(preferredPlanCode, 'active')
+        || db.prepare('SELECT * FROM plans WHERE code = ? AND status = ?').get('pilot', 'active')
       if (!plan) return res.status(409).json({ error: 'Тариф pilot недоступен' })
       res.json({
         companyName: request.companyName,
@@ -364,11 +377,14 @@ export default function registerPilotRequestRoutes({
       if (!Number.isInteger(vehicleCount) || vehicleCount < 1 || vehicleCount > 100000) {
         return res.status(400).json({ error: 'Количество техники должно быть от 1 до 100 000' })
       }
+      const preferredPlanCode = req.body?.preferredPlanCode === undefined
+        ? normalizePreferredPlanCode(existing.preferredPlanCode)
+        : normalizePreferredPlanCode(req.body.preferredPlanCode)
 
       db.prepare(`
         UPDATE pilot_requests
         SET company_name = ?, contact_name = ?, contact_email = ?, contact_phone = ?,
-            vehicle_count = ?, region = ?, comment = ?, status = ?, assigned_user_id = ?,
+            vehicle_count = ?, region = ?, preferred_plan_code = ?, comment = ?, status = ?, assigned_user_id = ?,
             internal_comment = ?, rejection_reason = ?, updated_at = datetime('now')
         WHERE id = ?
       `).run(
@@ -378,6 +394,7 @@ export default function registerPilotRequestRoutes({
         contactPhone,
         vehicleCount,
         req.body?.region === undefined ? existing.region : nullableText(req.body.region, 160),
+        preferredPlanCode,
         req.body?.comment === undefined ? existing.comment : nullableText(req.body.comment, 2000),
         nextStatus,
         assignedUserId,
@@ -391,6 +408,7 @@ export default function registerPilotRequestRoutes({
         statusFrom: existing.status,
         statusTo: nextStatus,
         assignedUserId,
+        preferredPlanCode,
       })
       res.json(getRequest(db, existing.id))
     },

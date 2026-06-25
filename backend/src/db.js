@@ -953,6 +953,7 @@ function applySchemaMigrations() {
       contact_phone TEXT,
       vehicle_count INTEGER NOT NULL,
       region TEXT,
+      preferred_plan_code TEXT,
       comment TEXT,
       status TEXT NOT NULL DEFAULT 'new'
         CHECK (status IN ('new', 'in_progress', 'approved', 'rejected', 'converted')),
@@ -981,6 +982,7 @@ function applySchemaMigrations() {
   ensureColumn('pilot_requests', 'contact_phone', 'TEXT')
   ensureColumn('pilot_requests', 'vehicle_count', 'INTEGER')
   ensureColumn('pilot_requests', 'region', 'TEXT')
+  ensureColumn('pilot_requests', 'preferred_plan_code', 'TEXT')
   ensureColumn('pilot_requests', 'comment', 'TEXT')
   ensureColumn('pilot_requests', 'status', "TEXT NOT NULL DEFAULT 'new'")
   ensureColumn('pilot_requests', 'assigned_user_id', 'TEXT')

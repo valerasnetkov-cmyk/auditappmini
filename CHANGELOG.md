@@ -3,6 +3,10 @@
 ## Unreleased
 
 ### Changed
+- **Landing pilot modal tariff routing**: все CTA пилота, демонстрации и
+  тарифов на лендинге теперь открывают модальное окно заявки вместо mailto;
+  модалка содержит выбор тарифа, а переход из карточки тарифа автоматически
+  подставляет `pilot`, `standard` или `enterprise` и сохраняет выбор в заявке.
 - **Secure report links and photo evidence viewer**: PDF QR-ссылки теперь
   строятся от публичного `WEB_APP_URL` с production-защитой от localhost,
   публичный PDF закрыт по умолчанию и включается только opt-in, а карточка

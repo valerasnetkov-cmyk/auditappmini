@@ -169,6 +169,7 @@ const tariffs = [
     features: ['30 дней бесплатно для новых компаний', 'До 10 единиц техники', 'До 3 пользователей', 'До 300 осмотров в месяц', '10 ГБ фото-хранилища', 'OCR и ДТП-осмотры', 'Выгрузка PDF-отчётов'],
     action: 'Запросить пилот',
     pilotSource: 'tariff-pilot',
+    planCode: 'pilot',
   },
   {
     code: 'standard',
@@ -179,7 +180,8 @@ const tariffs = [
     description: 'Основной тариф для регулярного контроля автопарка.',
     features: ['До 50 единиц техники', 'До 10 пользователей', 'До 2 000 осмотров в месяц', '50 ГБ фото-хранилища', 'OCR, аналитика и экспорт', 'Выгрузка PDF-отчётов'],
     action: 'Выбрать Стандарт',
-    href: 'mailto:info@auditavto.ru?subject=Подключить тариф Стандарт AuditAvto',
+    pilotSource: 'tariff-standard',
+    planCode: 'standard',
     recommended: true,
   },
   {
@@ -190,7 +192,8 @@ const tariffs = [
     description: 'Для крупных парков, филиалов и индивидуальных требований.',
     features: ['От 150 единиц техники', 'От 30 пользователей', 'Индивидуальные лимиты', 'От 200 ГБ хранилища', 'API, отдельный контур и SLA', 'Выгрузка PDF-отчётов'],
     action: 'Обсудить условия',
-    href: 'mailto:info@auditavto.ru?subject=Обсудить тариф Enterprise AuditAvto',
+    pilotSource: 'tariff-enterprise',
+    planCode: 'enterprise',
   },
 ]
 
@@ -544,18 +547,15 @@ export default function LandingPage() {
                 ))}
               </ul>
               {tariff.pilotSource ? (
-                <PilotRequestButton source={tariff.pilotSource} className={styles.secondaryButton}>
-                  {tariff.action}
-                </PilotRequestButton>
-              ) : (
-                <a
-                  href={tariff.href}
+                <PilotRequestButton
+                  source={tariff.pilotSource}
+                  planCode={tariff.planCode}
                   className={tariff.recommended ? styles.primaryButton : styles.secondaryButton}
                 >
                   {tariff.action}
                   {tariff.recommended ? <ArrowRightIcon aria-hidden="true" /> : null}
-                </a>
-              )}
+                </PilotRequestButton>
+              ) : null}
             </article>
           ))}
         </div>
@@ -571,7 +571,7 @@ export default function LandingPage() {
         </div>
         <div className={styles.offerActions}>
           <PilotRequestButton source="pilot-offer" className={styles.primaryButton}>Запросить пилот <ArrowRightIcon aria-hidden="true" /></PilotRequestButton>
-          <a href="mailto:info@auditavto.ru?subject=Получить демонстрацию AuditAvto" className={styles.secondaryButton}>Получить демонстрацию</a>
+          <PilotRequestButton source="demo-request" className={styles.secondaryButton}>Получить демонстрацию</PilotRequestButton>
         </div>
       </section>
 

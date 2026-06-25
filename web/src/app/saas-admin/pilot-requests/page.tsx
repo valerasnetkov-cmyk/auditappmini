@@ -21,6 +21,12 @@ const STATUS_LABELS: Record<PilotRequestStatus, string> = {
   converted: 'Компания создана',
 }
 
+const PLAN_LABELS: Record<string, string> = {
+  pilot: 'Пилот',
+  standard: 'Стандарт',
+  enterprise: 'Enterprise',
+}
+
 const EMPTY_SUMMARY: PilotRequestSummary = {
   total: 0,
   new: 0,
@@ -245,6 +251,7 @@ export default function PilotRequestsPage() {
                   <th className="px-4 py-3">Дата</th>
                   <th className="px-4 py-3">Компания</th>
                   <th className="px-4 py-3">Контакт</th>
+                  <th className="px-4 py-3">Тариф</th>
                   <th className="px-4 py-3">Парк</th>
                   <th className="px-4 py-3">Регион</th>
                   <th className="px-4 py-3">Статус</th>
@@ -261,6 +268,7 @@ export default function PilotRequestsPage() {
                       <div>{request.contactName || 'Обезличено'}</div>
                       <div className="text-xs text-gray-500">{request.contactEmail || request.contactPhone || '—'}</div>
                     </td>
+                    <td className="px-4 py-3">{PLAN_LABELS[request.preferredPlanCode || 'pilot'] || request.preferredPlanCode || 'Пилот'}</td>
                     <td className="px-4 py-3">{request.vehicleCount}</td>
                     <td className="px-4 py-3">{request.region || '—'}</td>
                     <td className="px-4 py-3"><span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${statusClass(request.status)}`}>{STATUS_LABELS[request.status]}</span></td>
@@ -268,8 +276,8 @@ export default function PilotRequestsPage() {
                     <td className="px-4 py-3"><button type="button" className="font-medium text-blue-700" onClick={() => void openRequest(request.id)}>Открыть</button></td>
                   </tr>
                 ))}
-                {!loading && !requests.length ? <tr><td colSpan={8} className="px-4 py-10 text-center text-gray-500">Заявки не найдены</td></tr> : null}
-                {loading ? <tr><td colSpan={8} className="px-4 py-10 text-center text-gray-500">Загрузка заявок…</td></tr> : null}
+                {!loading && !requests.length ? <tr><td colSpan={9} className="px-4 py-10 text-center text-gray-500">Заявки не найдены</td></tr> : null}
+                {loading ? <tr><td colSpan={9} className="px-4 py-10 text-center text-gray-500">Загрузка заявок…</td></tr> : null}
               </tbody>
             </table>
           </div>
@@ -293,6 +301,7 @@ export default function PilotRequestsPage() {
               <label><span className="label">Email</span><input className="input" type="email" value={selected.contactEmail || ''} disabled={selected.status === 'converted' || Boolean(selected.anonymizedAt)} onChange={(event) => setSelected({ ...selected, contactEmail: event.target.value })} /></label>
               <label><span className="label">Телефон</span><input className="input" value={selected.contactPhone || ''} disabled={selected.status === 'converted' || Boolean(selected.anonymizedAt)} onChange={(event) => setSelected({ ...selected, contactPhone: event.target.value })} /></label>
               <label><span className="label">Регион</span><input className="input" value={selected.region || ''} disabled={selected.status === 'converted'} onChange={(event) => setSelected({ ...selected, region: event.target.value })} /></label>
+              <label><span className="label">Тариф</span><select className="select" value={selected.preferredPlanCode || 'pilot'} disabled={selected.status === 'converted'} onChange={(event) => setSelected({ ...selected, preferredPlanCode: event.target.value })}>{Object.entries(PLAN_LABELS).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
               <label><span className="label">Статус</span><select className="select" value={selected.status} disabled={selected.status === 'converted'} onChange={(event) => setSelected({ ...selected, status: event.target.value as PilotRequestStatus })}>{Object.entries(STATUS_LABELS).filter(([value]) => value !== 'converted' || selected.status === 'converted').map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
               <label><span className="label">Ответственный</span><select className="select" value={selected.assignedUserId || ''} disabled={selected.status === 'converted'} onChange={(event) => setSelected({ ...selected, assignedUserId: event.target.value || null })}><option value="">Не назначен</option>{assignees.map((user) => <option key={user.id} value={user.id}>{user.name}</option>)}</select></label>
               <label className="md:col-span-2"><span className="label">Комментарий клиента</span><textarea className="input min-h-20" value={selected.comment || ''} disabled={selected.status === 'converted' || Boolean(selected.anonymizedAt)} onChange={(event) => setSelected({ ...selected, comment: event.target.value })} /></label>
@@ -321,7 +330,7 @@ export default function PilotRequestsPage() {
       {conversion && selected ? (
         <div className="fixed inset-0 z-[60] flex items-start justify-center overflow-y-auto bg-black/70 p-4 sm:items-center">
           <form className="w-full max-w-4xl rounded-xl bg-white p-6 shadow-2xl" onSubmit={convert}>
-            <div className="flex items-start justify-between gap-4"><div><h2 className="text-xl font-semibold">Создание пилотной компании</h2><p className="mt-1 text-sm text-gray-500">Проверьте компанию, владельца и лимиты тарифа pilot.</p></div><button type="button" className="text-gray-500" onClick={() => setConversion(null)}>Закрыть</button></div>
+            <div className="flex items-start justify-between gap-4"><div><h2 className="text-xl font-semibold">Создание пилотной компании</h2><p className="mt-1 text-sm text-gray-500">Проверьте компанию, владельца и лимиты тарифа {PLAN_LABELS[conversion.planCode] || conversion.planCode}.</p></div><button type="button" className="text-gray-500" onClick={() => setConversion(null)}>Закрыть</button></div>
             <div className="mt-5 grid gap-4 md:grid-cols-2">
               <label><span className="label">Название компании</span><input className="input" required value={conversion.companyName} onChange={(event) => setConversion({ ...conversion, companyName: event.target.value })} /></label>
               <label><span className="label">Slug</span><input className="input" required value={conversion.slug} onChange={(event) => setConversion({ ...conversion, slug: event.target.value })} /></label>

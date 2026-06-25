@@ -48,6 +48,7 @@ function publicPayload(suffix, overrides = {}) {
     contactPhone: '+7 900 000-00-00',
     vehicleCount: 12,
     region: 'Сахалинская область',
+    preferredPlanCode: 'standard',
     comment: 'Нужен пилот',
     consentGiven: true,
     source: 'smoke',
@@ -114,6 +115,9 @@ async function run() {
       throw new Error(`Unexpected pilot registry: ${JSON.stringify(registry)}`)
     }
     const pilotRequest = registry.requests[0]
+    if (pilotRequest.preferredPlanCode !== 'standard') {
+      throw new Error(`Preferred plan was not saved: ${JSON.stringify(pilotRequest)}`)
+    }
 
     await request(`/api/admin/resource/pilot-requests/${pilotRequest.id}`, {
       method: 'PUT',
@@ -139,7 +143,7 @@ async function run() {
       `/api/admin/resource/pilot-requests/${pilotRequest.id}/conversion-preview`,
       { headers: adminHeaders },
     )
-    if (preview.planCode !== 'pilot' || !preview.slug || !preview.limits.maxVehicles) {
+    if (preview.planCode !== 'standard' || !preview.slug || !preview.limits.maxVehicles) {
       throw new Error(`Invalid conversion preview: ${JSON.stringify(preview)}`)
     }
     await request('/api/admin/resource/companies', {

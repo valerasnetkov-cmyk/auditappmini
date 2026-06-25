@@ -14,7 +14,7 @@ import { CheckCircleIcon, XMarkIcon } from '@heroicons/react/24/outline'
 import api from '@/lib/api/client'
 
 type PilotRequestContextValue = {
-  openPilotRequest: (source?: string) => void
+  openPilotRequest: (options?: { source?: string; planCode?: string }) => void
 }
 
 const PilotRequestContext = createContext<PilotRequestContextValue | null>(null)
@@ -25,11 +25,18 @@ const EMPTY_FORM = {
   contactEmail: '',
   contactPhone: '',
   vehicleCount: '',
+  preferredPlanCode: 'pilot',
   region: '',
   comment: '',
   website: '',
   consentGiven: false,
 }
+
+const PLAN_OPTIONS = [
+  { code: 'pilot', label: 'Пилот', hint: '5 000 ₽/мес, 30 дней бесплатно для новых компаний' },
+  { code: 'standard', label: 'Стандарт', hint: '15 000 ₽/мес для регулярного контроля автопарка' },
+  { code: 'enterprise', label: 'Enterprise', hint: '50 000 ₽/мес и индивидуальные условия' },
+]
 
 function readTrackingParams() {
   if (typeof window === 'undefined') return {}
@@ -51,8 +58,9 @@ export function PilotRequestProvider({ children }: { children: ReactNode }) {
   const [submitted, setSubmitted] = useState(false)
   const [submitting, setSubmitting] = useState(false)
 
-  const openPilotRequest = useCallback((nextSource = 'landing') => {
-    setSource(nextSource)
+  const openPilotRequest = useCallback((options: { source?: string; planCode?: string } = {}) => {
+    setSource(options.source || 'landing')
+    setForm((current) => ({ ...current, preferredPlanCode: options.planCode || 'pilot' }))
     setError('')
     setOpen(true)
   }, [])
@@ -67,7 +75,10 @@ export function PilotRequestProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     const params = new URLSearchParams(window.location.search)
     if (params.get('pilot') !== '1') return
-    const timer = window.setTimeout(() => openPilotRequest(params.get('source') || 'direct'), 0)
+    const timer = window.setTimeout(() => openPilotRequest({
+      source: params.get('source') || 'direct',
+      planCode: params.get('plan') || undefined,
+    }), 0)
     return () => window.clearTimeout(timer)
   }, [openPilotRequest])
 
@@ -92,6 +103,7 @@ export function PilotRequestProvider({ children }: { children: ReactNode }) {
     const result = await api.createPilotRequest({
       ...form,
       vehicleCount: Number(form.vehicleCount),
+      preferredPlanCode: form.preferredPlanCode,
       source,
       ...readTrackingParams(),
     })
@@ -211,6 +223,22 @@ export function PilotRequestProvider({ children }: { children: ReactNode }) {
                       required
                     />
                   </label>
+                  <label>
+                    <span className="label">Тариф *</span>
+                    <select
+                      className="input"
+                      value={form.preferredPlanCode}
+                      onChange={(event) => setForm((current) => ({ ...current, preferredPlanCode: event.target.value }))}
+                      required
+                    >
+                      {PLAN_OPTIONS.map((plan) => (
+                        <option key={plan.code} value={plan.code}>{plan.label}</option>
+                      ))}
+                    </select>
+                    <span className="mt-1 block text-xs text-foreground-muted">
+                      {PLAN_OPTIONS.find((plan) => plan.code === form.preferredPlanCode)?.hint}
+                    </span>
+                  </label>
                   <label className="sm:col-span-2">
                     <span className="label">Регион</span>
                     <input
@@ -287,16 +315,18 @@ export function PilotRequestProvider({ children }: { children: ReactNode }) {
 export function PilotRequestButton({
   children,
   className,
+  planCode,
   source,
 }: {
   children: ReactNode
   className?: string
+  planCode?: string
   source: string
 }) {
   const context = useContext(PilotRequestContext)
   if (!context) throw new Error('PilotRequestButton must be used inside PilotRequestProvider')
   return (
-    <button type="button" className={className} onClick={() => context.openPilotRequest(source)}>
+    <button type="button" className={className} onClick={() => context.openPilotRequest({ source, planCode })}>
       {children}
     </button>
   )

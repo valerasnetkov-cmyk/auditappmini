@@ -117,6 +117,7 @@ export type PilotRequestSubmission = {
   contactPhone: string
   vehicleCount: number
   region?: string
+  preferredPlanCode?: string
   comment?: string
   website?: string
   consentGiven: boolean
@@ -138,6 +139,7 @@ export type PilotRequest = {
   contactPhone: string | null
   vehicleCount: number
   region: string | null
+  preferredPlanCode?: string | null
   comment: string | null
   status: PilotRequestStatus
   assignedUserId: string | null

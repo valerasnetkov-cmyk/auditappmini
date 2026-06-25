@@ -908,7 +908,8 @@
   color: var(--color-brand-primary);
 }
 
-.tariffCard > a {
+.tariffCard > a,
+.tariffCard > button {
   width: 100%;
   margin-top: auto;
 }
