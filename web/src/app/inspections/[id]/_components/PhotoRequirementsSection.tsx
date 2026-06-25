@@ -1,10 +1,16 @@
 'use client'
 
 import Image from 'next/image'
+import { useState } from 'react'
 import { buildApiUrl } from '@/lib/api/client'
 import { getPhotoPreviewUrl, getPhotoThumbUrl } from '../_lib/checklist'
 import type { PhotoRecord, PhotoRequirementsResponse } from '@/lib/types'
 import { Badge, ProgressBar } from '@/components/ui'
+
+type SelectedPhoto = {
+  photo: PhotoRecord
+  label: string
+}
 
 export default function PhotoRequirementsSection({
   requirements,
@@ -13,6 +19,7 @@ export default function PhotoRequirementsSection({
   requirements: PhotoRequirementsResponse
   inspectionPhotos: Record<string, PhotoRecord[]>
 }) {
+  const [selectedPhoto, setSelectedPhoto] = useState<SelectedPhoto | null>(null)
   const required = requirements.requirements.required
   const completedCount = required.filter((photoType) => (inspectionPhotos[photoType] || []).length > 0).length
   const displayed = requirements.type === 'accident' && requirements.requirements.optional.includes('odometer')
@@ -52,7 +59,8 @@ export default function PhotoRequirementsSection({
                   <div key={`${photo.url}-${photoIndex}`} className="group relative">
                     <button
                       type="button"
-                      onClick={() => window.open(buildApiUrl(getPhotoPreviewUrl(photo)), '_blank')}
+                      onClick={() => setSelectedPhoto({ photo, label })}
+                      className="rounded focus:outline-none focus:ring-2 focus:ring-orange-500 focus:ring-offset-2"
                     >
                       <Image
                         src={buildApiUrl(getPhotoThumbUrl(photo))}
@@ -73,6 +81,43 @@ export default function PhotoRequirementsSection({
           )
         })}
       </div>
+      {selectedPhoto ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4" role="dialog" aria-modal="true">
+          <div className="max-h-[92vh] w-full max-w-5xl overflow-hidden rounded-xl bg-white shadow-2xl">
+            <div className="flex items-start justify-between gap-4 border-b border-slate-200 px-4 py-3">
+              <div>
+                <h3 className="text-base font-semibold text-slate-900">{selectedPhoto.label}</h3>
+                <p className="mt-1 text-xs text-slate-500">
+                  {selectedPhoto.photo.captured_at ? new Date(selectedPhoto.photo.captured_at).toLocaleString('ru-RU') : 'Дата съёмки не указана'}
+                </p>
+              </div>
+              <div className="flex flex-wrap justify-end gap-3">
+                <a
+                  href={buildApiUrl(selectedPhoto.photo.original_url || getPhotoPreviewUrl(selectedPhoto.photo))}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="text-sm font-semibold text-blue-700 hover:text-blue-900"
+                >
+                  Открыть полную версию
+                </a>
+                <button type="button" className="text-sm font-semibold text-slate-600 hover:text-slate-900" onClick={() => setSelectedPhoto(null)}>
+                  Закрыть
+                </button>
+              </div>
+            </div>
+            <div className="flex max-h-[calc(92vh-64px)] items-center justify-center bg-slate-950 p-3">
+              <Image
+                src={buildApiUrl(selectedPhoto.photo.webp_url || getPhotoPreviewUrl(selectedPhoto.photo))}
+                alt={selectedPhoto.label}
+                width={1280}
+                height={960}
+                unoptimized
+                className="max-h-[calc(92vh-88px)] w-auto max-w-full rounded object-contain"
+              />
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   )
 }

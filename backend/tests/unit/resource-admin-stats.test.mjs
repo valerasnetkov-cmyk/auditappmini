@@ -99,7 +99,6 @@ test('resource company details preserve company overview contract', () => {
   assert.equal(details.payments[0].id, 'payment-1')
   assert.equal(details.alerts.length, 0)
   assert.equal(details.auditLogs.length, 0)
-  assert.equal(details.recentPhotos[0].id, 'photo-1')
-  assert.equal(details.recentPhotos[0].captured_lat, 46.959)
+  assert.equal(Object.hasOwn(details, 'recentPhotos'), false)
   assert.equal(details.plans[0].code, 'pilot')
 })

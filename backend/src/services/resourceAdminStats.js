@@ -33,26 +33,6 @@ import {
   getSubscriptionAlertsSummary,
 } from './subscriptionAlerts.js'
 
-function getCompanyRecentPhotos(db, companyId, limit = 24) {
-  return db.prepare(`
-    SELECT p.id, p.inspection_id, p.defect_id, p.company_id, p.photo_type,
-           p.url, p.original_url, p.webp_url, p.thumb_url, p.original_mime, p.original_name,
-           p.width, p.height, p.size_original, p.size_webp, p.size_thumb, p.hash,
-           p.geo, p.is_required, p.client_photo_id, p.upload_status, p.captured_at,
-           p.captured_lat, p.captured_lng, p.watermark_url, p.watermark_generated_at, p.created_at,
-           i.type AS inspection_type, i.completed_at AS inspection_completed_at,
-           v.number AS vehicle_number, v.name AS vehicle_name,
-           d.title AS defect_title
-    FROM photos p
-    LEFT JOIN inspections i ON i.id = p.inspection_id AND i.company_id = p.company_id
-    LEFT JOIN vehicles v ON v.id = i.vehicle_id AND v.company_id = p.company_id
-    LEFT JOIN defects d ON d.id = p.defect_id AND d.company_id = p.company_id
-    WHERE p.company_id = ?
-    ORDER BY datetime(COALESCE(p.captured_at, p.created_at)) DESC, p.id DESC
-    LIMIT ?
-  `).all(companyId, limit)
-}
-
 export function buildResourceAdminStats(db) {
   const companies = getCompanies(db)
   const plans = getPlans(db)
@@ -104,7 +84,6 @@ export function buildResourceCompanyDetails(db, companyId) {
     payments: getPayments(db, { companyId: company.id, limit: 80 }),
     alerts: getCompanyAlerts(db, company.id, { limit: 80 }),
     auditLogs: getCompanyAuditLogs(db, company.id, { limit: 100 }),
-    recentPhotos: getCompanyRecentPhotos(db, company.id),
     plans: getPlans(db),
   }
 }

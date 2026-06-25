@@ -427,17 +427,6 @@ export type PhotoRecord = {
   created_at?: string | null
 }
 
-export type ResourceCompanyPhoto = PhotoRecord & {
-  company_id?: string | null
-  inspection_id?: string | null
-  defect_id?: string | null
-  inspection_type?: InspectionType | string | null
-  inspection_completed_at?: string | null
-  vehicle_number?: string | null
-  vehicle_name?: string | null
-  defect_title?: string | null
-}
-
 export type PhotoRequirementsResponse = {
   type: InspectionType
   requirements: {
@@ -1066,7 +1055,6 @@ export type SaasCompanyDetailsResponse = {
   payments: SaasPayment[]
   alerts: SaasAlert[]
   auditLogs: SaasAuditLog[]
-  recentPhotos?: ResourceCompanyPhoto[]
   plans: SaasPlan[]
 }
 

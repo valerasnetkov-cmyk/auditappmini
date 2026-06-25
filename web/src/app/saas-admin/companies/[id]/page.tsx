@@ -12,9 +12,7 @@ import LimitsForm from './_components/LimitsForm'
 import OwnersSection from './_components/OwnersSection'
 import PaymentsList from './_components/PaymentsList'
 import BillingDetailsForm from './_components/BillingDetailsForm'
-import CompanyPhotosPanel from './_components/CompanyPhotosPanel'
 import { useCompanyDetails } from './_hooks/useCompanyDetails'
-import type { ResourceCompanyPhoto } from '@/lib/types'
 
 export default function ResourceCompanyDetailsPage() {
   const params = useParams<{ id: string }>()
@@ -113,16 +111,6 @@ export default function ResourceCompanyDetailsPage() {
     }
   }
 
-  const handlePhotoUpdated = (photo: ResourceCompanyPhoto) => {
-    details.setData((current) => {
-      if (!current) return current
-      return {
-        ...current,
-        recentPhotos: (current.recentPhotos || []).map((item) => (item.id === photo.id ? { ...item, ...photo } : item)),
-      }
-    })
-  }
-
   const company = details.data?.company
   const subscriptionStatus = details.data?.subscription?.status || company?.status || 'active'
 
@@ -169,12 +157,6 @@ export default function ResourceCompanyDetailsPage() {
             />
 
             <BillingDetailsForm companyId={companyId} />
-
-            <CompanyPhotosPanel
-              companyId={companyId}
-              photos={details.data.recentPhotos || []}
-              onPhotoUpdated={handlePhotoUpdated}
-            />
 
             <div className="grid gap-4 xl:grid-cols-2">
               <PaymentsList payments={details.data.payments} />

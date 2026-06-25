@@ -34,7 +34,6 @@ import type {
   ResourceAccess,
   ResourceSessionCookies,
   ResourceServiceUser,
-  ResourceCompanyPhoto,
   CompanyBillingDetails,
   ServiceProfile,
   NotificationTemplate,
@@ -987,12 +986,6 @@ class ApiClient {
 
   async getResourceCompanyDetails(id: string) {
     return this.request<SaasCompanyDetailsResponse>(`/admin/resource/companies/${id}`)
-  }
-
-  async createResourceCompanyPhotoWatermark(companyId: string, photoId: string) {
-    return this.request<ResourceCompanyPhoto>(`/admin/resource/companies/${companyId}/photos/${photoId}/watermark`, {
-      method: 'POST',
-    })
   }
 
   async updateResourceCompany(id: string, data: UpdateCompanyPayload) {
