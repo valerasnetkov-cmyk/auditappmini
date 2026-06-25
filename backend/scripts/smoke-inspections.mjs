@@ -67,7 +67,7 @@ function uploadUrlToFilePath(url) {
 }
 
 async function assertPhotoFilesExist(photo, label) {
-  const urls = new Set([photo.url, photo.original_url, photo.webp_url, photo.thumb_url].filter(Boolean))
+  const urls = new Set([photo.url, photo.original_url, photo.webp_url, photo.thumb_url, photo.watermark_url].filter(Boolean))
   for (const url of urls) {
     const filePath = uploadUrlToFilePath(url)
     if (!filePath) continue
@@ -77,6 +77,29 @@ async function assertPhotoFilesExist(photo, label) {
       throw new Error(`${label} expected photo file to exist: ${filePath}`)
     }
   }
+}
+
+async function assertWatermarkGenerated(photo, headers, forbiddenHeaders) {
+  const watermarked = await request(`/api/photos/${photo.id}/watermark`, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify({}),
+  })
+  if (!watermarked.watermark_url?.endsWith('/watermark.webp') || !watermarked.watermark_generated_at) {
+    throw new Error(`Watermark metadata is incomplete: ${JSON.stringify(watermarked)}`)
+  }
+  await assertPhotoFilesExist(watermarked, 'watermarked inspection photo')
+
+  const forbidden = await fetch(`${BASE_URL}/api/photos/${photo.id}/watermark`, {
+    method: 'POST',
+    headers: forbiddenHeaders,
+  })
+  if (forbidden.status !== 404) {
+    const body = await forbidden.text()
+    throw new Error(`Cross-tenant watermark access expected 404 but got ${forbidden.status}: ${body}`)
+  }
+
+  return watermarked
 }
 
 async function assertPhotoFilesRemoved(photo, label) {
@@ -175,6 +198,15 @@ async function run() {
 
     const authHeaders = { Authorization: `Bearer ${login.token}` }
     const jsonHeaders = { ...authHeaders, 'Content-Type': 'application/json' }
+    const otherLogin = await request('/api/auth/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        email: otherOwner.email,
+        password: otherOwner.password,
+      }),
+    })
+    const otherAuthHeaders = { Authorization: `Bearer ${otherLogin.token}` }
     const suffix = Date.now()
     const inspectorEmail = `inspection-approver-${suffix}@example.com`
     await request('/api/users', {
@@ -365,7 +397,7 @@ async function run() {
       }),
     })
 
-    const uploadedInspectionPhoto = await uploadInspectionPhoto(
+    let uploadedInspectionPhoto = await uploadInspectionPhoto(
       quickInspection.id,
       'front',
       authHeaders,
@@ -375,6 +407,7 @@ async function run() {
       throw new Error(`Inspection photo WebP metadata is incomplete: ${JSON.stringify(uploadedInspectionPhoto)}`)
     }
     await assertPhotoFilesExist(uploadedInspectionPhoto, 'uploaded inspection photo')
+    uploadedInspectionPhoto = await assertWatermarkGenerated(uploadedInspectionPhoto, authHeaders, otherAuthHeaders)
     const repeatedInspectionPhoto = await uploadInspectionPhoto(
       quickInspection.id,
       'front',
@@ -591,22 +624,14 @@ async function run() {
     if (approvalDetails.status !== 'approved' || approvalDetails.history.length !== 4) {
       throw new Error(`Inspection approval history is incomplete: ${JSON.stringify(approvalDetails)}`)
     }
-    const otherLogin = await request('/api/auth/login', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        email: otherOwner.email,
-        password: otherOwner.password,
-      }),
-    })
     const crossTenantReport = await fetch(`${BASE_URL}/api/inspections/${quickInspection.id}/report.pdf`, {
-      headers: { Authorization: `Bearer ${otherLogin.token}` },
+      headers: otherAuthHeaders,
     })
     if (crossTenantReport.status !== 404) {
       throw new Error(`Cross-tenant report access expected 404, got ${crossTenantReport.status}`)
     }
     const crossTenantApproval = await fetch(`${BASE_URL}/api/inspections/${quickInspection.id}/approval`, {
-      headers: { Authorization: `Bearer ${otherLogin.token}` },
+      headers: otherAuthHeaders,
     })
     if (crossTenantApproval.status !== 404) {
       throw new Error(`Cross-tenant approval access expected 404, got ${crossTenantApproval.status}`)
@@ -726,6 +751,7 @@ async function run() {
           quickInspectionCompleted: Boolean(completedQuickInspection.completed),
           idempotentInspection: repeatedQuickInspection.id === quickInspection.id,
           idempotentPhoto: repeatedInspectionPhoto.id === uploadedInspectionPhoto.id,
+          watermarkedPhoto: Boolean(uploadedInspectionPhoto.watermark_url),
           completedMutationBlocked: completedMutation.status === 409,
           reportGenerated: report.status === 'ready',
           reportIntegrityVerified: regeneratedReport.integrity_status === 'valid',

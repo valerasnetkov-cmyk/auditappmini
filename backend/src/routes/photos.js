@@ -1,5 +1,8 @@
+import fs from 'fs'
 import { v4 as uuidv4 } from 'uuid'
 import { sendInspectionCompletedError } from '../services/inspectionReadiness.js'
+import { generateWatermarkedPhoto, resolveUploadPath } from '../services/photoUpload.js'
+import { buildPhotoWatermarkLines } from '../utils/photoWatermark.js'
 
 function getAllowedPhotoTypes(photoRequirements, inspectionType) {
   const requirements = photoRequirements[inspectionType]
@@ -215,6 +218,54 @@ export default function registerPhotoRoutes({
 
     const photo = db.prepare(`SELECT ${PHOTO_SELECT_COLUMNS} FROM photos WHERE id = ? AND company_id = ?`).get(id, companyId)
     res.status(201).json(photo)
+  })
+
+  app.post('/api/photos/:id/watermark', authenticate, async (req, res) => {
+    const companyId = req.user.company_id || 'default'
+    const photo = db.prepare(`
+      SELECT p.*, c.name AS company_name, i.type AS inspection_type,
+             v.number AS vehicle_number, v.name AS vehicle_name
+      FROM photos p
+      JOIN companies c ON c.id = p.company_id
+      LEFT JOIN inspections i ON i.id = p.inspection_id AND i.company_id = p.company_id
+      LEFT JOIN vehicles v ON v.id = i.vehicle_id AND v.company_id = p.company_id
+      WHERE p.id = ? AND p.company_id = ?
+    `).get(req.params.id, companyId)
+
+    if (!photo) return sendError(res, 404, 'Photo not found')
+
+    if (photo.watermark_url) {
+      const resolved = resolveUploadPath(photo.watermark_url.replace(/^\/uploads\//, ''))
+      if (resolved && fs.existsSync(resolved.filePath)) {
+        return res.json(db.prepare(`SELECT ${PHOTO_SELECT_COLUMNS} FROM photos WHERE id = ? AND company_id = ?`).get(photo.id, companyId))
+      }
+    }
+
+    try {
+      const watermarkUrl = await generateWatermarkedPhoto({
+        photo,
+        lines: buildPhotoWatermarkLines({
+          photo,
+          inspection: {
+            id: photo.inspection_id,
+            type: photo.inspection_type,
+            company_name: photo.company_name,
+            vehicle_number: photo.vehicle_number,
+          },
+        }),
+      })
+      const generatedAt = new Date().toISOString()
+      db.prepare(`
+        UPDATE photos
+        SET watermark_url = ?, watermark_generated_at = ?
+        WHERE id = ? AND company_id = ?
+      `).run(watermarkUrl, generatedAt, photo.id, companyId)
+
+      return res.json(db.prepare(`SELECT ${PHOTO_SELECT_COLUMNS} FROM photos WHERE id = ? AND company_id = ?`).get(photo.id, companyId))
+    } catch (err) {
+      console.warn('[uploads] Failed to watermark photo:', err.message)
+      return sendError(res, 500, 'Не удалось сформировать фото с водяным знаком')
+    }
   })
 
   app.delete('/api/photos/:id', authenticate, async (req, res) => {

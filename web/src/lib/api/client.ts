@@ -688,6 +688,12 @@ class ApiClient {
     })
   }
 
+  async createPhotoWatermark(id: string) {
+    return this.request<PhotoRecord>(`/photos/${id}/watermark`, {
+      method: 'POST',
+    })
+  }
+
   async completeInspection(id: string) {
     return this.request<InspectionDetail>(`/inspections/${id}/complete`, {
       method: 'POST',

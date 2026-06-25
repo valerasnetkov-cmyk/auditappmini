@@ -2,7 +2,7 @@
 
 import Image from 'next/image'
 import { useState } from 'react'
-import { buildApiUrl } from '@/lib/api/client'
+import api, { buildApiUrl } from '@/lib/api/client'
 import { getPhotoPreviewUrl, getPhotoThumbUrl } from '../_lib/checklist'
 import type { PhotoRecord, PhotoRequirementsResponse } from '@/lib/types'
 import { Badge, ProgressBar } from '@/components/ui'
@@ -10,6 +10,16 @@ import { Badge, ProgressBar } from '@/components/ui'
 type SelectedPhoto = {
   photo: PhotoRecord
   label: string
+  loading: boolean
+  error?: string
+}
+
+function photoKey(photo: PhotoRecord, fallback: string) {
+  return photo.id || photo.url || fallback
+}
+
+function getWatermarkUrl(photo: PhotoRecord) {
+  return photo.watermark_url || photo.webp_url || getPhotoPreviewUrl(photo)
 }
 
 export default function PhotoRequirementsSection({
@@ -20,11 +30,28 @@ export default function PhotoRequirementsSection({
   inspectionPhotos: Record<string, PhotoRecord[]>
 }) {
   const [selectedPhoto, setSelectedPhoto] = useState<SelectedPhoto | null>(null)
+  const [watermarkedPhotos, setWatermarkedPhotos] = useState<Record<string, PhotoRecord>>({})
   const required = requirements.requirements.required
   const completedCount = required.filter((photoType) => (inspectionPhotos[photoType] || []).length > 0).length
   const displayed = requirements.type === 'accident' && requirements.requirements.optional.includes('odometer')
     ? [...required, 'odometer']
     : required
+
+  const openPhoto = async (photo: PhotoRecord, label: string, fallbackKey: string) => {
+    const key = photoKey(photo, fallbackKey)
+    const cachedPhoto = watermarkedPhotos[key] || photo
+    setSelectedPhoto({ photo: cachedPhoto, label, loading: !cachedPhoto.watermark_url })
+    if (!cachedPhoto.id || cachedPhoto.watermark_url) return
+
+    const result = await api.createPhotoWatermark(cachedPhoto.id)
+    if (result.data) {
+      const watermarkedPhoto = result.data
+      setWatermarkedPhotos((current) => ({ ...current, [key]: watermarkedPhoto }))
+      setSelectedPhoto({ photo: watermarkedPhoto, label, loading: false })
+      return
+    }
+    setSelectedPhoto({ photo: cachedPhoto, label, loading: false, error: result.error || 'Не удалось сформировать водяной знак' })
+  }
 
   return (
     <div className="mb-6 rounded-xl border border-slate-200 bg-slate-50 p-4">
@@ -59,7 +86,7 @@ export default function PhotoRequirementsSection({
                   <div key={`${photo.url}-${photoIndex}`} className="group relative">
                     <button
                       type="button"
-                      onClick={() => setSelectedPhoto({ photo, label })}
+                      onClick={() => void openPhoto(photo, label, `${photoType}-${photoIndex}`)}
                       className="rounded focus:outline-none focus:ring-2 focus:ring-orange-500 focus:ring-offset-2"
                     >
                       <Image
@@ -90,10 +117,11 @@ export default function PhotoRequirementsSection({
                 <p className="mt-1 text-xs text-slate-500">
                   {selectedPhoto.photo.captured_at ? new Date(selectedPhoto.photo.captured_at).toLocaleString('ru-RU') : 'Дата съёмки не указана'}
                 </p>
+                {selectedPhoto.error ? <p className="mt-1 text-xs font-medium text-red-600">{selectedPhoto.error}</p> : null}
               </div>
               <div className="flex flex-wrap justify-end gap-3">
                 <a
-                  href={buildApiUrl(selectedPhoto.photo.original_url || getPhotoPreviewUrl(selectedPhoto.photo))}
+                  href={buildApiUrl(getWatermarkUrl(selectedPhoto.photo))}
                   target="_blank"
                   rel="noreferrer"
                   className="text-sm font-semibold text-blue-700 hover:text-blue-900"
@@ -106,14 +134,18 @@ export default function PhotoRequirementsSection({
               </div>
             </div>
             <div className="flex max-h-[calc(92vh-64px)] items-center justify-center bg-slate-950 p-3">
-              <Image
-                src={buildApiUrl(selectedPhoto.photo.webp_url || getPhotoPreviewUrl(selectedPhoto.photo))}
-                alt={selectedPhoto.label}
-                width={1280}
-                height={960}
-                unoptimized
-                className="max-h-[calc(92vh-88px)] w-auto max-w-full rounded object-contain"
-              />
+              {selectedPhoto.loading ? (
+                <div className="rounded-lg bg-white/10 px-4 py-3 text-sm text-white">Формируем фото с водяным знаком...</div>
+              ) : (
+                <Image
+                  src={buildApiUrl(getWatermarkUrl(selectedPhoto.photo))}
+                  alt={selectedPhoto.label}
+                  width={1280}
+                  height={960}
+                  unoptimized
+                  className="max-h-[calc(92vh-88px)] w-auto max-w-full rounded object-contain"
+                />
+              )}
             </div>
           </div>
         </div>
