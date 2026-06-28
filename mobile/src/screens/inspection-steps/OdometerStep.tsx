@@ -7,6 +7,7 @@ export function OdometerStep({
   allowUnavailable = false,
   onChange,
   onChangeUnavailableReason,
+  onOpenOcr,
   onContinue,
 }: {
   odometer: string
@@ -15,6 +16,7 @@ export function OdometerStep({
   allowUnavailable?: boolean
   onChange: (value: string) => void
   onChangeUnavailableReason?: (value: string) => void
+  onOpenOcr?: () => void
   onContinue: () => void
 }) {
   return (
@@ -22,6 +24,13 @@ export function OdometerStep({
       <Label>Одометр</Label>
       <Subtitle>Введите пробег в {distanceUnit}</Subtitle>
       <FormField placeholder="0" value={odometer} onChangeText={onChange} keyboardType="numeric" />
+      {onOpenOcr ? (
+        <Button
+          title="Распознать по фото"
+          variant="secondary"
+          onPress={onOpenOcr}
+        />
+      ) : null}
       {allowUnavailable ? (
         <>
           <Subtitle>Если одометр недоступен, укажите причину</Subtitle>

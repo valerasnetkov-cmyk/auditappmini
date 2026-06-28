@@ -1,6 +1,7 @@
 import fs from 'node:fs/promises'
 import { normalizeVehicleNumberToCyrillic } from '../utils/transliteration.js'
 import { sendInspectionCompletedError } from '../services/inspectionReadiness.js'
+import { recognizeVehicleNumberPhoto } from '../services/vehicleNumberOcr.js'
 import {
   OcrFailedError,
   OcrProviderUnavailableError,
@@ -176,7 +177,7 @@ export function registerOdometerRoutes({
 }
 
 // Vehicle number recognition routes.
-// MVP returns manual-confirmation placeholders until a real ANPR provider is wired.
+// OCR suggestions are assistive only; inspector confirmation remains required.
 export function registerVehicleNumberRecognitionRoutes({
   app,
   db,
@@ -193,21 +194,30 @@ export function registerVehicleNumberRecognitionRoutes({
     subscriptionGate(ensureOperationalWriteAllowed, 'create'),
     ocrGate(ensureOcrAvailable),
     upload.single('photo'),
-    (req, res) => {
+    async (req, res) => {
       if (!req.file) {
         return res.status(400).json({ error: API_MESSAGES?.vehicleNumberPhotoRequired || 'Фото номера обязательно' })
       }
-      recordOcrUsage?.(req.user.company_id || 'default', 'vehicle_number')
 
-      res.json({
-        raw_value: null,
-        normalized_value: null,
-        confidence: 0,
-        requires_confirmation: true,
-        message: API_MESSAGES?.vehicleNumberRequiresConfirmation || 'Требуется подтверждение номера инспектором',
-        photo_url: `/uploads/${req.file.filename}`,
-        recognized_at: new Date().toISOString(),
-      })
+      try {
+        const recognition = await recognizeVehicleNumberPhoto({ filePath: req.file.path })
+        recordOcrUsage?.(req.user.company_id || 'default', 'vehicle_number')
+
+        return res.json({
+          raw_value: recognition.rawText || null,
+          normalized_value: recognition.normalizedValue,
+          confidence: recognition.confidence,
+          candidates: recognition.candidates,
+          provider: recognition.provider,
+          requires_confirmation: true,
+          message: API_MESSAGES?.vehicleNumberRequiresConfirmation || 'Требуется подтверждение номера инспектором',
+          photo_url: `/uploads/${req.file.filename}`,
+          recognized_at: new Date().toISOString(),
+        })
+      } catch (err) {
+        await removeUploadedRecognitionFile(req.file)
+        return sendOcrError(res, err)
+      }
     },
   )
 

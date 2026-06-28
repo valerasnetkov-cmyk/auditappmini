@@ -225,12 +225,14 @@ export const api = {
     const formData = new FormData()
     appendPhoto(formData, 'photo', imageUri, 'plate')
 
-    const result = await request<Omit<VehicleNumberRecognitionResponse, 'candidates'>>('/vehicle-number/recognize', {
+    const result = await request<VehicleNumberRecognitionResponse>('/vehicle-number/recognize', {
       method: 'POST',
       body: formData as any,
     })
 
-    const candidates = [result.normalized_value, result.raw_value].filter((value): value is string => Boolean(value))
+    const candidates = Array.isArray(result.candidates) && result.candidates.length
+      ? result.candidates
+      : [result.normalized_value, result.raw_value].filter((value): value is string => Boolean(value))
     return { ...result, candidates }
   },
 

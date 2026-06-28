@@ -78,6 +78,24 @@ export function InspectionFlowScreen({ company }: { company: Company }) {
       return
     }
 
+    if (target === 'odometer_ocr') {
+      try {
+        const result = await api.recognizeOdometer(photo.uri)
+        if (result.value !== null) {
+          actions.setOdometer(String(result.value))
+          if (result.requires_manual_confirmation) {
+            Alert.alert('Пробег распознан', 'Проверьте значение и подтвердите вручную.')
+          }
+        } else {
+          Alert.alert('Пробег не распознан', result.message || 'Введите показание одометра вручную')
+        }
+      } catch (error: unknown) {
+        const err = error as { message?: string }
+        Alert.alert('Ошибка', err.message || 'Не удалось распознать пробег')
+      }
+      return
+    }
+
     if (target.kind === 'inspection') {
       if (!inspectionId) return
       try {
@@ -100,6 +118,7 @@ export function InspectionFlowScreen({ company }: { company: Company }) {
     const target = camera.cameraTarget
     if (!target) return undefined
     if (target === 'plate_ocr') return 'Распознавание номера'
+    if (target === 'odometer_ocr') return 'Распознавание одометра'
     if (target.kind === 'inspection') return photoRequirements?.labels[target.photoType]
     return target.title
   })()
@@ -195,6 +214,7 @@ export function InspectionFlowScreen({ company }: { company: Company }) {
           allowUnavailable={inspectionType === 'accident'}
           onChange={actions.setOdometer}
           onChangeUnavailableReason={actions.setOdometerUnavailableReason}
+          onOpenOcr={() => camera.openCamera('odometer_ocr')}
           onContinue={() => actions.setStep('checklist')}
         />
       )}
