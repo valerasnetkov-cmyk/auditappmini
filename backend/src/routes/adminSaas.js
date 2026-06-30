@@ -361,9 +361,20 @@ export default function registerSaasAdminRoutes({ app, db, authenticate, ensureA
       return sendError(res, 409, 'Company slug already exists')
     }
 
+    const supportNotes = req.body?.support_notes === undefined
+      ? existing.support_notes
+      : (normalizeText(req.body.support_notes) || null)
+    const supportNextStep = req.body?.support_next_step === undefined
+      ? existing.support_next_step
+      : (normalizeText(req.body.support_next_step) || null)
+    const supportLastContactAt = req.body?.support_last_contact_at === undefined
+      ? existing.support_last_contact_at
+      : (normalizeText(req.body.support_last_contact_at) || null)
+
     db.prepare(`
       UPDATE companies
-      SET slug = ?, name = ?, region_code = ?, data_residency = ?, status = ?
+      SET slug = ?, name = ?, region_code = ?, data_residency = ?, status = ?,
+        support_notes = ?, support_next_step = ?, support_last_contact_at = ?
       WHERE id = ?
     `).run(
       slug,
@@ -371,6 +382,9 @@ export default function registerSaasAdminRoutes({ app, db, authenticate, ensureA
       req.body?.region_code === undefined ? existing.region_code : (normalizeText(req.body.region_code) || null),
       req.body?.data_residency === undefined ? existing.data_residency : (normalizeText(req.body.data_residency) || null),
       req.body?.status === undefined ? existing.status : normalizeStatus(req.body.status),
+      supportNotes,
+      supportNextStep,
+      supportLastContactAt,
       existing.id,
     )
 
@@ -383,6 +397,9 @@ export default function registerSaasAdminRoutes({ app, db, authenticate, ensureA
         slug,
         name,
         status: req.body?.status === undefined ? existing.status : normalizeStatus(req.body.status),
+        supportNotesUpdated: req.body?.support_notes !== undefined,
+        supportNextStepUpdated: req.body?.support_next_step !== undefined,
+        supportLastContactUpdated: req.body?.support_last_contact_at !== undefined,
       },
     })
 

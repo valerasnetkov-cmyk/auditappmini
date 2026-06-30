@@ -369,17 +369,17 @@ VIN
 Рекомендуемая структура в storage:
 
 ```txt
-/inspections/{inspectionId}/photos/{photoId}/original.{ext}
-/inspections/{inspectionId}/photos/{photoId}/main.webp
-/inspections/{inspectionId}/photos/{photoId}/thumb.webp
+/companies/{companyId}/inspections/{inspectionId}/photos/{photoId}/original.{ext}
+/companies/{companyId}/inspections/{inspectionId}/photos/{photoId}/main.webp
+/companies/{companyId}/inspections/{inspectionId}/photos/{photoId}/thumb.webp
 ```
 
 Пример:
 
 ```txt
-/inspections/insp_123/photos/photo_456/original.jpg
-/inspections/insp_123/photos/photo_456/main.webp
-/inspections/insp_123/photos/photo_456/thumb.webp
+/companies/company_abc/inspections/insp_123/photos/photo_456/original.jpg
+/companies/company_abc/inspections/insp_123/photos/photo_456/main.webp
+/companies/company_abc/inspections/insp_123/photos/photo_456/thumb.webp
 ```
 
 ---

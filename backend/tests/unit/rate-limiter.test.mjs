@@ -1,4 +1,4 @@
-// Tests for the in-memory rate limiter (default path when REDIS_URL is unset).
+// Tests for the in-memory rate limiter and Redis-unavailable fallback.
 //
 // Redis-path tests would require a live Redis; this file focuses on the
 // regression coverage for the local in-memory path (identical semantics
@@ -13,6 +13,7 @@ delete process.env.REDIS_URL
 const { createRateLimiter, __resetRateLimiterForTests } = await import(
   '../../src/services/rateLimiter.js'
 )
+const { resetRedisForTests } = await import('../../src/services/redisClient.js')
 
 function makeReq({ ip = '1.2.3.4', method = 'POST', path = '/api/auth/login' } = {}) {
   return { ip, method, path, body: {} }
@@ -216,5 +217,38 @@ describe('createRateLimiter (in-memory)', () => {
     })
     assert.equal(aNext, 1)
     assert.equal(bNext, 1)
+  })
+})
+
+describe('createRateLimiter (Redis unavailable fallback)', () => {
+  beforeEach(() => {
+    process.env.REDIS_URL = 'redis://127.0.0.1:1'
+    resetRedisForTests()
+    __resetRateLimiterForTests()
+  })
+
+  test('fallback limiter keeps counts across requests', () => {
+    const limiter = createRateLimiter({
+      name: 'test-redis-fallback',
+      windowMs: 1000,
+      max: 1,
+      keyGenerator: (req) => req.ip,
+    })
+
+    let firstNext = 0
+    limiter(makeReq(), makeRes(), () => {
+      firstNext += 1
+    })
+
+    const blocked = makeRes()
+    let secondNext = 0
+    limiter(makeReq(), blocked, () => {
+      secondNext += 1
+    })
+
+    assert.equal(firstNext, 1)
+    assert.equal(secondNext, 0)
+    assert.equal(blocked._state.status, 429)
+    assert.equal(blocked.getHeader('Retry-After'), '1')
   })
 })

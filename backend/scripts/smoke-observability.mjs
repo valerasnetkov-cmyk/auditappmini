@@ -3,6 +3,7 @@ import fs from 'node:fs/promises'
 import http from 'node:http'
 import crypto from 'node:crypto'
 import process from 'node:process'
+import { sendAlert } from '../src/services/alertService.js'
 
 const HOST = '127.0.0.1'
 let PORT = Number(process.env.PORT || 0)
@@ -70,6 +71,30 @@ function parseAccessLogs(stdout) {
 }
 
 async function run() {
+  const alertDryRun = await sendAlert({
+    severity: 'medium',
+    source: 'smoke-observability',
+    message: 'Observability dry-run alert',
+    context: {
+      requestId: LOGGED_REQUEST_ID,
+      password: 'must-not-leak',
+    },
+  }, {
+    env: {
+      ...process.env,
+      TELEGRAM_ALERTS_DRY_RUN: 'true',
+      TELEGRAM_ALERTS_ENABLED: 'false',
+    },
+  })
+
+  if (!alertDryRun.ok || !alertDryRun.dryRun || alertDryRun.delivered) {
+    throw new Error(`Alert dry-run failed: ${JSON.stringify(alertDryRun)}`)
+  }
+
+  if (JSON.stringify(alertDryRun).includes('must-not-leak')) {
+    throw new Error('Alert dry-run leaked sensitive context')
+  }
+
   if (!PORT) {
     PORT = await getFreePort()
   }
@@ -122,6 +147,22 @@ async function run() {
       throw new Error('Response did not echo x-request-id')
     }
 
+    const readinessResponse = await fetch(`${BASE_URL}/api/health/ready`, {
+      headers: {
+        'x-request-id': `smoke-observability-ready-${process.pid}`,
+        'user-agent': 'auditmini-smoke-observability',
+      },
+    })
+    const readiness = await readinessResponse.json()
+
+    if (!readinessResponse.ok || readiness.status !== 'ok' || readiness.ready !== true) {
+      throw new Error(`/api/health/ready has unexpected shape: ${JSON.stringify(readiness)}`)
+    }
+
+    if (!readiness.checks || readiness.checks.database !== true || readiness.checks.uploads !== true) {
+      throw new Error(`/api/health/ready checks are incomplete: ${JSON.stringify(readiness)}`)
+    }
+
     const loggedResponse = await fetch(`${BASE_URL}/api/auth/me`, {
       headers: {
         'x-request-id': LOGGED_REQUEST_ID,
@@ -165,8 +206,10 @@ async function run() {
         {
           ok: true,
           requestIdEchoed: true,
+          readinessShape: true,
           structuredAccessLog: true,
           skipPathsRespected: true,
+          alertDryRun: true,
           requestId: targetLog.requestId,
           path: targetLog.path,
           statusCode: targetLog.statusCode,

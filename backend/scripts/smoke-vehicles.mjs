@@ -2,6 +2,7 @@ import { spawn } from 'node:child_process'
 import fs from 'node:fs/promises'
 import crypto from 'node:crypto'
 import process from 'node:process'
+import Database from 'better-sqlite3'
 import { seedSmokeTenantOwner } from './smoke-helpers.mjs'
 
 const HOST = '127.0.0.1'
@@ -286,6 +287,73 @@ async function run() {
       }),
     })
 
+    const overallPhotoId = `overall-photo-${suffix}`
+    const odometerPhotoId = `odometer-photo-${suffix}`
+    const capturedAt = new Date().toISOString()
+    const smokeDb = new Database(DATABASE_PATH)
+    try {
+      const insertPhoto = smokeDb.prepare(`
+        INSERT INTO photos (
+          id, inspection_id, defect_id, company_id, photo_type, url,
+          original_url, webp_url, thumb_url, original_mime, original_name,
+          width, height, size_original, size_webp, size_thumb, hash,
+          geo, is_required, client_photo_id, upload_status, captured_at,
+          captured_lat, captured_lng
+        )
+        VALUES (?, ?, NULL, ?, ?, ?, ?, ?, ?, 'image/jpeg', ?, 100, 80, 10, 8, 4, ?, NULL, 1, NULL, 'uploaded', ?, NULL, NULL)
+      `)
+      insertPhoto.run(
+        overallPhotoId,
+        inspection.id,
+        owner.companyId,
+        'overall',
+        `/uploads/smoke/${overallPhotoId}.webp`,
+        `/uploads/smoke/${overallPhotoId}.jpg`,
+        `/uploads/smoke/${overallPhotoId}.webp`,
+        `/uploads/smoke/${overallPhotoId}-thumb.webp`,
+        'overall.jpg',
+        `hash-${overallPhotoId}`,
+        capturedAt,
+      )
+      insertPhoto.run(
+        odometerPhotoId,
+        inspection.id,
+        owner.companyId,
+        'odometer',
+        `/uploads/smoke/${odometerPhotoId}.webp`,
+        `/uploads/smoke/${odometerPhotoId}.jpg`,
+        `/uploads/smoke/${odometerPhotoId}.webp`,
+        `/uploads/smoke/${odometerPhotoId}-thumb.webp`,
+        'odometer.jpg',
+        `hash-${odometerPhotoId}`,
+        capturedAt,
+      )
+    } finally {
+      smokeDb.close()
+    }
+
+    const photoOptions = await request(`/api/vehicles/${created.id}/photo-options`, {
+      headers: { Authorization: `Bearer ${login.token}` },
+    })
+    if (!Array.isArray(photoOptions) || photoOptions.length !== 1 || photoOptions[0].id !== overallPhotoId) {
+      throw new Error(`Vehicle photo-options should include only overall photos: ${JSON.stringify(photoOptions)}`)
+    }
+
+    await expectStatus(`/api/vehicles/${created.id}/primary-photo/from-photo`, 404, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ photo_id: odometerPhotoId }),
+    })
+
+    const updatedPrimaryPhoto = await request(`/api/vehicles/${created.id}/primary-photo/from-photo`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ photo_id: overallPhotoId }),
+    })
+    if (updatedPrimaryPhoto.primary_photo_source !== 'inspection' || updatedPrimaryPhoto.primary_photo_thumb_url !== `/uploads/smoke/${overallPhotoId}-thumb.webp`) {
+      throw new Error(`Overall photo was not accepted as vehicle primary photo: ${JSON.stringify(updatedPrimaryPhoto)}`)
+    }
+
     const vehicleInspections = await request(`/api/vehicles/${created.id}/inspections?limit=10`, {
       headers: { Authorization: `Bearer ${login.token}` },
     })
@@ -402,6 +470,8 @@ async function run() {
           staleRegionIdOldNameRemoved: !regionsAfterFallbackUpdate.some((region) => region.name === fallbackRegionName),
           inspectionId: inspection.id,
           defectId: defect.id,
+          photoOptionsOnlyOverall: photoOptions.length === 1 && photoOptions[0].photo_type === 'overall',
+          primaryPhotoSource: updatedPrimaryPhoto.primary_photo_source,
           listedInspections: Array.isArray(vehicleInspections?.data) ? vehicleInspections.data.length : 0,
           listedDefects: vehicleInspections?.data?.[0]?.defects_count ?? null,
           historyEntries: Array.isArray(history) ? history.length : 0,

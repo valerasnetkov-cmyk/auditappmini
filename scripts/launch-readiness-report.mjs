@@ -79,6 +79,27 @@ function addMissingFileBlockers(blockers, files) {
   }
 }
 
+function collectObservabilityReadiness(env = process.env) {
+  const telegramEnabled = String(env.TELEGRAM_ALERTS_ENABLED || '').toLowerCase() === 'true'
+
+  return {
+    alertDryRunCommand: 'npm --prefix backend run alerts:dry-run',
+    sentry: {
+      backendDsnPresent: Boolean(env.SENTRY_DSN || env.BACKEND_SENTRY_DSN),
+      webDsnPresent: Boolean(env.NEXT_PUBLIC_SENTRY_DSN),
+    },
+    telegram: {
+      enabled: telegramEnabled,
+      configured: Boolean(env.TELEGRAM_BOT_TOKEN && env.TELEGRAM_ALERT_CHAT_ID),
+    },
+    workers: {
+      status: 'foundation_available',
+      runOnceCommand: 'npm --prefix backend run worker:run-once',
+      smokeCommand: 'npm --prefix backend run smoke:workers',
+    },
+  }
+}
+
 async function collectReadiness() {
   const rootPackage = await readJson(path.join(repoRoot, 'package.json'))
   const backendPackage = await readJson(path.join(repoRoot, 'backend', 'package.json'))
@@ -133,6 +154,10 @@ async function collectReadiness() {
     'smoke:observability',
     'smoke:shutdown',
     'doctor:production',
+    'alerts:dry-run',
+    'worker:run-once',
+    'smoke:workers',
+    'smoke:storage',
     'pm2:start',
     'pm2:logrotate:install',
     'pm2:logrotate:configure',
@@ -141,6 +166,7 @@ async function collectReadiness() {
   addMissingScriptBlockers(blockers, 'mobile', mobilePackage, ['verify', 'doctor:production', 'eas:readiness'])
 
   const releaseActions = []
+  const observability = collectObservabilityReadiness()
   if (statusShort) {
     releaseActions.push({
       id: 'commit-working-tree',
@@ -175,7 +201,34 @@ async function collectReadiness() {
       title: 'Mobile EAS build must be created from the active mobile contour',
       action: 'Configure EAS secrets, run npm run mobile:eas:readiness, then build the preview or production artifact from mobile/.',
     },
+    {
+      id: 'alert-dry-run',
+      severity: 'release-action',
+      title: 'Alert dry-run evidence should be attached',
+      action: 'Run npm --prefix backend run alerts:dry-run and attach the JSON output before pilot deployment.',
+    },
+    {
+      id: 'worker-smoke',
+      severity: 'release-action',
+      title: 'Worker foundation smoke should be attached',
+      action: 'Run npm --prefix backend run smoke:workers and attach the job/heartbeat output before enabling scheduled workers.',
+    },
+    {
+      id: 'storage-smoke',
+      severity: 'release-action',
+      title: 'Storage abstraction smoke should be attached',
+      action: 'Run npm --prefix backend run smoke:storage and attach the local driver verification output before deployment.',
+    },
   )
+
+  if (observability.telegram.enabled && !observability.telegram.configured) {
+    releaseActions.push({
+      id: 'telegram-alerts-config',
+      severity: 'release-action',
+      title: 'Telegram alerts are enabled but not fully configured',
+      action: 'Set TELEGRAM_BOT_TOKEN and TELEGRAM_ALERT_CHAT_ID or disable TELEGRAM_ALERTS_ENABLED before production.',
+    })
+  }
 
   const acceptedPilotRisks = [
     {
@@ -251,6 +304,7 @@ async function collectReadiness() {
     blockers,
     releaseActions,
     acceptedPilotRisks,
+    observability,
     auditCommands,
     finalGateCommands: [
       'npm run mobile:status',
@@ -259,6 +313,9 @@ async function collectReadiness() {
       'npm run doctor:production',
       'npm run backup:local',
       'npm run backup:verify',
+      'npm --prefix backend run alerts:dry-run',
+      'npm --prefix backend run smoke:workers',
+      'npm --prefix backend run smoke:storage',
       'npm run release:first-start',
       'npm run release:evidence',
     ],
@@ -313,6 +370,15 @@ function renderMarkdown(report) {
   for (const item of report.releaseActions) {
     lines.push(`- **${item.title}** - ${item.action}`)
   }
+
+  lines.push('', '## Observability readiness', '')
+  lines.push(`- Alert dry-run: \`${report.observability.alertDryRunCommand}\`.`)
+  lines.push(`- Backend Sentry DSN present: ${report.observability.sentry.backendDsnPresent ? 'yes' : 'no'}.`)
+  lines.push(`- Web Sentry DSN present: ${report.observability.sentry.webDsnPresent ? 'yes' : 'no'}.`)
+  lines.push(`- Telegram alerts: ${report.observability.telegram.enabled ? 'enabled' : 'disabled'}, configured: ${report.observability.telegram.configured ? 'yes' : 'no'}.`)
+  lines.push(`- Workers: ${report.observability.workers.status}.`)
+  lines.push(`- Worker run-once: \`${report.observability.workers.runOnceCommand}\`.`)
+  lines.push(`- Worker smoke: \`${report.observability.workers.smokeCommand}\`.`)
 
   lines.push('', '## Accepted pilot risks', '')
   for (const item of report.acceptedPilotRisks) {

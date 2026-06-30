@@ -71,7 +71,7 @@ export default function VehiclePrimaryPhotoCard({
         </div>
 
         <div>
-          <div className="mb-3 text-sm font-medium text-foreground">Фото из осмотров</div>
+          <div className="mb-3 text-sm font-medium text-foreground">Фото общего плана</div>
           {loading ? (
             <div className="text-sm text-foreground-muted">Загрузка фото...</div>
           ) : photos.length ? (
@@ -96,7 +96,7 @@ export default function VehiclePrimaryPhotoCard({
             </div>
           ) : (
             <div className="rounded-card bg-muted-surface p-4 text-sm text-foreground-muted">
-              В осмотрах этой техники пока нет фото для выбора.
+              Фото общего плана пока нет.
             </div>
           )}
         </div>

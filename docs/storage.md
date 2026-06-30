@@ -119,6 +119,11 @@ photo dumps
 storage keys
 signed URLs
 production buckets
+SQLite database
+backups
+release evidence
+worker queue state
+runtime logs
 ```
 
 ---
@@ -129,6 +134,7 @@ production buckets
 - Не делать общий публичный bucket без проверки доступа.
 - Не смешивать фото разных компаний в одном пути без `company_id`.
 - Не удалять оригинал фото после OCR.
+- Не хранить runtime data внутри Git-tracked release directory.
 
 ## Технические фото планового осмотра
 
@@ -209,3 +215,26 @@ photos/{region_code}/{company_id}/{vehicle_id}/{inspection_id}/number_plate/{pho
 ```
 
 Если фото используется только для временного OCR и не нужно как доказательство, оно должно быть удалено после обработки. Решение о хранении зависит от политики компании и региона.
+
+## Storage abstraction target
+
+Текущий pilot driver — `STORAGE_DRIVER=local` поверх local filesystem. Целевой интерфейс для будущего S3/MinIO
+слоя:
+
+```txt
+storage.save(buffer, metadata)
+storage.read(key)
+storage.exists(key)
+storage.delete(key)
+storage.getSignedUrl(key, ttl)
+storage.verify(key, expectedHash, expectedSize)
+```
+
+Первый этап внедрения abstraction не должен менять URL-контракты, response
+shape, tenant checks или PDF/photo integrity поведение.
+
+Локальная проверка:
+
+```powershell
+npm --prefix backend run smoke:storage
+```

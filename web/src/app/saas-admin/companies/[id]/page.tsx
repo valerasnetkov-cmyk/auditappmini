@@ -12,6 +12,7 @@ import LimitsForm from './_components/LimitsForm'
 import OwnersSection from './_components/OwnersSection'
 import PaymentsList from './_components/PaymentsList'
 import BillingDetailsForm from './_components/BillingDetailsForm'
+import SupportNotesPanel from './_components/SupportNotesPanel'
 import { useCompanyDetails } from './_hooks/useCompanyDetails'
 
 export default function ResourceCompanyDetailsPage() {
@@ -153,6 +154,13 @@ export default function ResourceCompanyDetailsPage() {
               setForm={details.setLimitForm}
               plans={details.data.plans}
               onSubmit={handleLimitsSave}
+              saving={details.saving}
+            />
+
+            <SupportNotesPanel
+              form={details.companyForm}
+              setForm={details.setCompanyForm}
+              onSubmit={handleCompanySave}
               saving={details.saving}
             />
 

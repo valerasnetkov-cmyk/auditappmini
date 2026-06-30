@@ -238,7 +238,12 @@ export type CreateCompanyPayload = {
   trialDays?: number
 }
 
-export type UpdateCompanyPayload = Partial<CreateCompanyPayload> & { status?: 'active' | 'inactive' }
+export type UpdateCompanyPayload = Partial<CreateCompanyPayload> & {
+  status?: 'active' | 'inactive'
+  support_notes?: string | null
+  support_next_step?: string | null
+  support_last_contact_at?: string | null
+}
 
 export type UserRecord = {
   id: string
@@ -844,6 +849,48 @@ export type SaasServiceHealth = {
     users: number
   }
   items?: SaasHealthItem[]
+  operationalStatus?: {
+    readiness?: {
+      endpoint: string
+      checks: string[]
+    }
+    redis?: {
+      configured: boolean
+      status: Record<string, unknown>
+    }
+    uploads?: {
+      configured: boolean
+      path: string
+      exists: boolean
+    }
+    backup?: {
+      root: string
+      rootExists: boolean
+      latestManifest?: {
+        path: string
+        relativePath: string
+        createdAt: string
+        databaseCopied: boolean
+        uploadsCopied: boolean
+        uploadsFileCount?: number | null
+      } | null
+    }
+    billing?: {
+      scannerCommand: string
+      lastScan?: string | null
+      status: string
+    }
+    workers?: {
+      status: string
+      heartbeat?: string | null
+      queues: unknown[]
+    }
+    alerts?: {
+      telegramEnabled: boolean
+      telegramConfigured: boolean
+      sentryBackendConfigured: boolean
+    }
+  }
   companiesWithoutOwnerList?: SaasHealthCompany[]
   companiesWithoutLimitsList?: SaasHealthCompany[]
 }
@@ -929,6 +976,11 @@ export type SaasCompanyStats = {
     planName?: string | null
     monthlyPriceRub: number
     monthlyRevenueRub: number
+  }
+  support?: {
+    notes?: string | null
+    nextStep?: string | null
+    lastContactAt?: string | null
   }
   subscription?: SaasSubscription | null
   ownerUsers?: SaasOwner[]

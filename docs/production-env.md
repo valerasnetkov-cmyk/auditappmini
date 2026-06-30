@@ -60,6 +60,7 @@ EXPO_PUBLIC_API_URL=https://api.<project-domain>/api
 | `PUBLIC_REGISTRATION_ENABLED=false` | Запрещает публичную саморегистрацию; пользователей компании создаёт владелец компании. |
 | `CORS_ORIGINS` | Реальный origin web-приложения, без `*`. |
 | `DATABASE_PATH` | Постоянный путь к SQLite базе для пилота. |
+| `STORAGE_DRIVER=local` | Текущий storage driver для пилота. S3-compatible drivers добавляются позже без смены URL/tenant contracts. |
 | `UPLOAD_DIR` | Постоянный каталог фото, не внутри временной release-папки. |
 | `MAX_IMAGE_PIXELS` | Максимальное число пикселей в исходном фото; защищает обработку изображений от слишком больших файлов. |
 | `BACKUP_DIR` | Постоянный каталог локальных backup-снимков. |
@@ -78,6 +79,8 @@ EXPO_PUBLIC_API_URL=https://api.<project-domain>/api
 | `PUBLIC_DEMO_ENABLED` / `PUBLIC_DEMO_PASSWORD` | Публичный read-only demo contour для `/demo`. Для `auditavto.ru` должен быть включён: `PUBLIC_DEMO_ENABLED=true`, пароль не короче 12 символов. Backend при старте provision-ит тестовую компанию `demo`. |
 | `WEB_APP_URL` | Публичный HTTPS URL web-приложения для owner setup ссылок и QR-проверки PDF-отчётов. В production не должен быть localhost/LAN/dev-host. |
 | `PUBLIC_REPORT_TOKEN_TTL_DAYS` | Срок жизни публичной ссылки проверки отчёта в днях; по умолчанию `30`, значение `0` делает ссылку бессрочной. Полный PDF публично не отдаётся без явного opt-in. |
+| `SENTRY_DSN` / `SENTRY_ENVIRONMENT` | Optional backend Sentry-ready placeholders. Пустые значения допустимы; runtime и smoke не должны падать без Sentry. |
+| `TELEGRAM_ALERTS_ENABLED` / `TELEGRAM_ALERTS_DRY_RUN` / `TELEGRAM_BOT_TOKEN` / `TELEGRAM_ALERT_CHAT_ID` | Optional Telegram alerts. Перед включением live-отправки выполните `npm --prefix backend run alerts:dry-run`; секреты не фиксируются в release evidence. |
 
 Сгенерировать `JWT_SECRET` можно так:
 
@@ -210,6 +213,12 @@ npm run doctor:production
 ```
 
 `verify:launch` проверяет backend smoke, web build, mobile verify, изолированный Chromium E2E, launch doctor для backend/web/mobile и audit-проверки. `doctor:production` отдельно валидирует реальные production-секреты, persistent paths и публичные API URL.
+
+Перед пилотным deploy также проверьте observability dry-run:
+
+```powershell
+npm --prefix backend run alerts:dry-run
+```
 
 ## 11. Backup gate
 

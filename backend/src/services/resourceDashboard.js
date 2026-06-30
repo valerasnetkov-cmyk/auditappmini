@@ -1,4 +1,5 @@
 import { isOlderThan } from './resourceCompanies.js'
+import { collectOperationalStatus } from './operationalStatus.js'
 
 const number = (value) => Number(value || 0)
 
@@ -37,6 +38,46 @@ function rowsToDateMap(rows, field = 'count') {
   }, {})
 }
 
+function getWorkerHealthItem(workers) {
+  const status = workers?.status || 'not_configured'
+  const failed24h = number(workers?.summary?.failed24h)
+  const waiting = number(workers?.summary?.waiting)
+  const active = number(workers?.summary?.active)
+  const heartbeat = workers?.heartbeat || null
+
+  if (status === 'degraded') {
+    return {
+      severity: 'high',
+      description: failed24h
+        ? `Worker queue degraded: ${failed24h} failed jobs за 24 часа.`
+        : 'Worker queue degraded; проверьте heartbeat и last_error.',
+      count: failed24h || 1,
+    }
+  }
+
+  if (status === 'not_configured') {
+    return {
+      severity: 'medium',
+      description: 'Worker heartbeat ещё не настроен; текущий этап фиксирует контракт для следующей реализации.',
+      count: 1,
+    }
+  }
+
+  if (status === 'running') {
+    return {
+      severity: 'ok',
+      description: `Worker heartbeat активен${heartbeat ? `: ${heartbeat}` : ''}; waiting ${waiting}, active ${active}.`,
+      count: 0,
+    }
+  }
+
+  return {
+    severity: 'ok',
+    description: 'Worker queue foundation доступен; активных job evidence пока нет.',
+    count: 0,
+  }
+}
+
 export function getServiceHealth(db) {
   const companiesWithoutOwnerList = listHealthCompanies(db, `
     SELECT c.id, c.slug, c.name, COALESCE(c.status, 'active') as status
@@ -65,6 +106,11 @@ export function getServiceHealth(db) {
 
 export function buildHealthItems({
   serviceHealth,
+  operationalStatus = {
+    backup: { latestManifest: null },
+    workers: { status: 'not_configured' },
+    alerts: { telegramEnabled: false, telegramConfigured: false },
+  },
   inactiveCompanies14d,
   unfinishedInspectionsOlderThan24h,
   defectsWithoutPhotos,
@@ -73,6 +119,7 @@ export function buildHealthItems({
   const dataQualityCount = unfinishedInspectionsOlderThan24h
     + defectsWithoutPhotos
     + accidentInspectionsWithoutRequiredData
+  const workerHealth = getWorkerHealthItem(operationalStatus.workers)
 
   return [
     {
@@ -111,11 +158,43 @@ export function buildHealthItems({
       actionLabel: 'Смотреть агрегаты',
       actionHref: '/saas-admin/dashboard',
     },
+    {
+      key: 'backup_status',
+      severity: operationalStatus.backup.latestManifest ? 'ok' : 'medium',
+      title: 'Backup evidence',
+      description: operationalStatus.backup.latestManifest
+        ? `Последний manifest: ${operationalStatus.backup.latestManifest.createdAt}`
+        : 'Последний backup manifest не найден в service-level хранилище.',
+      count: operationalStatus.backup.latestManifest ? 0 : 1,
+      actionLabel: 'Проверить backup',
+      actionHref: '/saas-admin/dashboard',
+    },
+    {
+      key: 'worker_status',
+      severity: workerHealth.severity,
+      title: 'Workers',
+      description: workerHealth.description,
+      count: workerHealth.count,
+      actionLabel: 'Открыть регламент',
+      actionHref: '/saas-admin/dashboard',
+    },
+    {
+      key: 'alerts_status',
+      severity: operationalStatus.alerts.telegramConfigured || !operationalStatus.alerts.telegramEnabled ? 'ok' : 'medium',
+      title: 'Alerts',
+      description: operationalStatus.alerts.telegramEnabled
+        ? 'Telegram alerts включены; проверьте наличие bot token и chat id.'
+        : 'Telegram alerts выключены; dry-run smoke доступен без отправки сообщений.',
+      count: operationalStatus.alerts.telegramEnabled && !operationalStatus.alerts.telegramConfigured ? 1 : 0,
+      actionLabel: 'Проверить dry-run',
+      actionHref: '/saas-admin/dashboard',
+    },
   ]
 }
 
 export function buildHealthCenter(db, companies) {
   const serviceHealth = getServiceHealth(db)
+  const operationalStatus = collectOperationalStatus({ db })
   const inactiveCompanies14d = companies.filter(
     (company) => company.status !== 'inactive' && isOlderThan(company.lastActivityAt, 14),
   ).length
@@ -153,8 +232,10 @@ export function buildHealthCenter(db, companies) {
     unfinishedInspectionsOlderThan24h,
     defectsWithoutPhotos,
     accidentInspectionsWithoutRequiredData,
+    operationalStatus,
     items: buildHealthItems({
       serviceHealth,
+      operationalStatus,
       inactiveCompanies14d,
       unfinishedInspectionsOlderThan24h,
       defectsWithoutPhotos,

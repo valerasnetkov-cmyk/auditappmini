@@ -40,7 +40,12 @@ async function loginAs(email, password) {
   return data?.token || data?.sessionToken || null
 }
 
-test('resolve-number: requires authentication', { skip: !serverAvailable }, async () => {
+test('resolve-number: requires authentication', { skip: !serverAvailable }, async (t) => {
+  if (!serverAvailable) {
+    t.skip('backend unavailable')
+    return
+  }
+
   const res = await fetch(`${BASE_URL}/api/vehicles/resolve-number`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -50,7 +55,12 @@ test('resolve-number: requires authentication', { skip: !serverAvailable }, asyn
   assert.ok(res.status === 401 || res.status === 403, `expected 401/403, got ${res.status}`)
 })
 
-test('resolve-number: authenticated owner can resolve', { skip: !serverAvailable }, async () => {
+test('resolve-number: authenticated owner can resolve', { skip: !serverAvailable }, async (t) => {
+  if (!serverAvailable) {
+    t.skip('backend unavailable')
+    return
+  }
+
   const token = await loginAs('owner@example.com', 'owner123')
   if (!token) {
     console.warn('[integration] no owner credentials; skipping')
@@ -69,9 +79,15 @@ test('resolve-number: authenticated owner can resolve', { skip: !serverAvailable
   assert.equal(typeof body, 'object')
 })
 
-test('health/ready: returns 200 when backend is healthy', { skip: !serverAvailable }, async () => {
+test('health/ready: returns 200 when backend is healthy', { skip: !serverAvailable }, async (t) => {
+  if (!serverAvailable) {
+    t.skip('backend unavailable')
+    return
+  }
+
   const res = await fetch(`${BASE_URL}/api/health/ready`)
   assert.equal(res.status, 200)
   const body = await res.json()
-  assert.equal(body.status, 'ready')
+  assert.equal(body.status, 'ok')
+  assert.equal(body.ready, true)
 })

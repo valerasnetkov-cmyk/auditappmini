@@ -3,15 +3,35 @@ import path from 'node:path'
 import process from 'node:process'
 import { spawn } from 'node:child_process'
 import crypto from 'node:crypto'
+import http from 'node:http'
 
 const HOST = '127.0.0.1'
-const PORT = Number(process.env.PORT || 5317 + (process.pid % 500))
+let PORT = Number(process.env.SMOKE_HEALTH_PORT || 0)
 const DATABASE_PATH = `./.tmp-smoke/smoke-health-${process.pid}.sqlite`
 const UPLOAD_DIR = `./.tmp-smoke/uploads-health-${process.pid}`
-const BASE_URL = `http://${HOST}:${PORT}`
+let BASE_URL = ''
 
 function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms))
+}
+
+function getFreePort() {
+  return new Promise((resolve, reject) => {
+    const server = http.createServer()
+    server.once('error', reject)
+    server.listen(0, HOST, () => {
+      const address = server.address()
+      const port = typeof address === 'object' && address ? address.port : null
+      server.close(() => {
+        if (!port) {
+          reject(new Error('Could not allocate a free port'))
+          return
+        }
+
+        resolve(port)
+      })
+    })
+  })
 }
 
 async function waitForServer() {
@@ -44,6 +64,12 @@ async function requestJson(pathname, expectedStatus = 200) {
 
   return body
 }
+
+if (!PORT) {
+  PORT = await getFreePort()
+}
+
+BASE_URL = `http://${HOST}:${PORT}`
 
 const server = spawn(process.execPath, ['src/server.js'], {
   cwd: process.cwd(),

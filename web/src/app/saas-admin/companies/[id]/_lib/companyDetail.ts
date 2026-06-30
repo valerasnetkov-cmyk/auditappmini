@@ -6,6 +6,9 @@ export type CompanyEditForm = {
   region_code: string
   data_residency: string
   status: 'active' | 'inactive'
+  support_notes: string
+  support_next_step: string
+  support_last_contact_at: string
 }
 
 export type OwnerForm = {
@@ -106,5 +109,8 @@ export function companyFormFromData(data: SaasCompanyDetailsResponse): CompanyEd
     region_code: data.company.region_code || '',
     data_residency: data.company.data_residency || '',
     status: data.company.status === 'inactive' ? 'inactive' : 'active',
+    support_notes: data.company.support?.notes || '',
+    support_next_step: data.company.support?.nextStep || '',
+    support_last_contact_at: data.company.support?.lastContactAt || '',
   }
 }

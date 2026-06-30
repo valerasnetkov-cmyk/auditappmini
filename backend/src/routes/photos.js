@@ -84,6 +84,7 @@ export default function registerPhotoRoutes({
         tempPath: req.file.path,
         originalName: req.file.originalname,
         mimetype: req.file.mimetype,
+        companyId,
         inspectionId,
         photoId: id,
       })
@@ -174,6 +175,7 @@ export default function registerPhotoRoutes({
         tempPath: req.file.path,
         originalName: req.file.originalname,
         mimetype: req.file.mimetype,
+        companyId,
         inspectionId: defect.inspection_id,
         photoId: id,
       })

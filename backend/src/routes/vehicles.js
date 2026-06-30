@@ -489,7 +489,7 @@ export default function registerVehicleRoutes({
              i.created_at AS inspection_created_at
       FROM photos p
       JOIN inspections i ON i.id = p.inspection_id AND i.company_id = p.company_id
-      WHERE i.vehicle_id = ? AND p.company_id = ?
+      WHERE i.vehicle_id = ? AND p.company_id = ? AND p.photo_type = 'overall'
       ORDER BY COALESCE(p.captured_at, p.created_at) DESC, p.id DESC
       LIMIT 120
     `).all(req.params.id, companyId)
@@ -515,6 +515,7 @@ export default function registerVehicleRoutes({
         tempPath: req.file.path,
         originalName: req.file.originalname,
         mimetype: req.file.mimetype,
+        companyId,
         inspectionId: `vehicle-${req.params.id}`,
         photoId: uuidv4(),
       })
@@ -547,7 +548,7 @@ export default function registerVehicleRoutes({
       SELECT ${QUALIFIED_PHOTO_SELECT_COLUMNS}
       FROM photos p
       JOIN inspections i ON i.id = p.inspection_id AND i.company_id = p.company_id
-      WHERE p.id = ? AND p.company_id = ? AND i.vehicle_id = ?
+      WHERE p.id = ? AND p.company_id = ? AND i.vehicle_id = ? AND p.photo_type = 'overall'
     `).get(photoId, companyId, req.params.id)
     if (!photo) {
       return sendError(res, 404, 'Photo not found')

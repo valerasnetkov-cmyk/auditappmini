@@ -108,7 +108,7 @@ function escapeSvgText(value) {
 }
 
 async function ensureDemoImage({ inspectionId, photoId, title, accent }) {
-  const relativeDir = `inspections/${inspectionId}/photos/${photoId}`
+  const relativeDir = `companies/${PUBLIC_DEMO_COMPANY_ID}/inspections/${inspectionId}/photos/${photoId}`
   const targetDir = path.join(uploadsDir, relativeDir)
   const mainPath = path.join(targetDir, 'main.webp')
   const thumbPath = path.join(targetDir, 'thumb.webp')

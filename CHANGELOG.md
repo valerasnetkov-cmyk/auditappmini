@@ -3,6 +3,36 @@
 ## Unreleased
 
 ### Changed
+- **Operational pilot controls**: integrated the external operations pack into
+  project docs, added Telegram alert dry-run and Sentry-ready env placeholders,
+  and extended release/resource-admin evidence with backup, alerts and worker
+  `not_configured` status without moving photo/PDF processing to workers yet.
+- **Worker foundation**: added a SQLite-backed job service, `worker:run-once`
+  processing for `billing.scan`, worker heartbeat evidence and
+  `smoke:workers`; resource-admin worker health now reflects idle/running/
+  degraded heartbeat evidence instead of a static placeholder. Photo/PDF
+  processing remains synchronous until dedicated queue smoke and production
+  heartbeat are ready.
+- **Local storage abstraction**: added `STORAGE_DRIVER=local` abstraction for
+  upload storage, wired readiness/upload path resolution through it, and added
+  `smoke:storage` for save/read/verify/delete and traversal rejection checks.
+- **Resource-admin support notes**: company cards now include internal support
+  notes, next step and last-contact fields in the existing resource-admin
+  update/details flow, with smoke coverage and without reading tenant endpoints.
+- **Audit hardening fixes**: Redis-unavailable rate limiting now keeps fallback
+  counters across requests, integration tests tolerate an intentionally stopped
+  backend while matching the current `/api/health/ready` contract, mobile audit
+  pins patched `undici`, and new photo uploads are stored under tenant-scoped
+  `companies/{companyId}/inspections/{inspectionId}/photos/{photoId}` paths.
+- **Launch audit evidence refresh**: local `verify:launch` now passes end to
+  end after the audit fixes, including backend lint/unit/full smoke, web lint
+  and production build, mobile verify, isolated Chromium E2E, launch doctors and
+  dependency audits. The historical `/api/vehicles` N+1 audit item was
+  re-checked and is covered by the current CTE-based vehicle list query.
+- **Vehicle overview photo selection**: web vehicle cards now list only
+  `photo_type = overall` inspection photos as selectable primary-photo options;
+  odometer, accident, defect and other inspection evidence photos can no longer
+  be selected as a vehicle card cover through the photo-options flow.
 - **Mobile OCR recognition flow**: в мобильном осмотре на шаге одометра
   добавлена кнопка “Распознать по фото”, которая открывает камеру, вызывает
   `/api/odometer/recognize` и подставляет найденное значение для ручного
@@ -530,11 +560,19 @@
 #### Аутентификация, MFA и сессии
 - **JWT-секрет с дефолтом**: `backend/src/server.js` использует `DEFAULT_JWT_SECRET = 'audit-secret-key-2024'` при отсутствии `JWT_SECRET`. В dev-режиме это удобно, но любая случайная сборка без `.env` поднимется с предсказуемым секретом.
 - **MFA login flow был неполным**: исходный аудит выявил, что при `mfa_enabled=1` пользователь не мог завершить вход без уже выданного JWT. В текущей реализации добавлен отдельный login challenge через `/api/auth/mfa/verify` и web-форма ввода TOTP.
-- **MFA активируется по первому совпадению TOTP**: `mfa/verify` одновременно подтверждает токен и выставляет `mfa_enabled = 1`. Нет отдельных эндпоинтов `enable` и `challenge`, нет backup-кодов, нет ограничения по времени между `setup` и `verify`, нет окна допустимого дрейфа (`window`).
+- **MFA активируется по первому совпадению TOTP — частично закрыто**:
+  добавлен явный `POST /api/users/:id/mfa/enable`, старый
+  `POST /api/users/:id/mfa/verify` оставлен как compatibility alias, login
+  challenge завершается отдельным `POST /api/auth/mfa/verify`, а отключение MFA
+  требует пароль текущего пользователя и валидный TOTP target user. Оставшийся
+  backlog: backup-коды и отдельная политика повторного setup/TTL.
 - **JWT хранится в `localStorage` web-клиента — закрыто в Unreleased**: web-клиент переведен на httpOnly `audit_session` cookie, а legacy token удаляется из `localStorage` при первом чтении; `Authorization: Bearer` оставлен для mobile/smoke/API-совместимости.
 - **Срок жизни токена 7 дней без refresh/rotation**: `jwt.sign(... { expiresIn: '7d' })` без revocation list и refresh-токенов. Отзыв скомпрометированного токена возможен только через смену `JWT_SECRET` для всех пользователей.
 - **Информативные ошибки логина — закрыто в Unreleased**: `/api/auth/login` больше не различает несуществующий email и неверный пароль.
-- **Owner setup-токен повторно используем**: `/api/auth/owner-setup` валидирует `setup_fingerprint` от текущего `user.password`, но не сохраняет одноразовый признак использования — пока пароль не сменён повторно, та же setup-ссылка остаётся валидной.
+- **Owner setup-токен повторно используем — закрыто**: `/api/auth/owner-setup`
+  валидирует `setup_fingerprint` и `owner_setup_nonce`, после успешной установки
+  пароля очищает nonce и пишет `owner_setup_accepted_at`; повторный POST с тем
+  же token покрыт `smoke:owner-setup` и возвращает 401.
 
 #### Безопасность приложения
 - **CORS по умолчанию открыт на множество dev-портов**: список `http://localhost:3000,3002,8083,8081,8082` зашит как fallback. В non-production средах с публичным URL это легко проглядеть. Стоит требовать явный `CORS_ORIGINS` даже в dev.
@@ -894,7 +932,7 @@ Read-only обследование ресурса. Полный отчёт — `
 
 ### Added
 - **Inspection/defect photo WebP pipeline**: backend now accepts only JPG/JPEG, PNG and WebP up to 15 MB, preserves the original evidence file in `original_url`, generates `main.webp` up to 2048px and `thumb.webp` up to 480px with `sharp`, and stores dimensions, MIME, original filename, file sizes and SHA-256 hash.
-- **Protected nested photo storage**: new uploads are stored under `/uploads/inspections/{inspectionId}/photos/{photoId}/original.{ext|main.webp|thumb.webp}`; protected uploads check tenant ownership against `url/original_url/webp_url/thumb_url` and support nested paths.
+- **Protected nested photo storage**: new uploads are stored under `/uploads/companies/{companyId}/inspections/{inspectionId}/photos/{photoId}/original.{ext|main.webp|thumb.webp}`; protected uploads check tenant ownership against `url/original_url/webp_url/thumb_url` and support nested paths.
 
 ### Changed
 - **Web photo rendering**: cards and galleries use `thumb_url` for thumbnails and `webp_url` for preview, with fallback to legacy `url` so existing rows continue to work.

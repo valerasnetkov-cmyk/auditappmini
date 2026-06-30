@@ -76,6 +76,7 @@ function getCompanyHealthStatus(row) {
 export function getCompanies(db) {
   const rows = db.prepare(`
     SELECT c.id, c.slug, c.name, c.region_code, c.data_residency,
+      c.support_notes, c.support_next_step, c.support_last_contact_at,
       COALESCE(c.status, 'active') status, c.created_at,
       COALESCE(users.users, 0) users, COALESCE(owners.owners, 0) owners,
       COALESCE(usage.vehicles, 0) vehicles, COALESCE(usage.inspections, 0) inspections,
@@ -144,6 +145,11 @@ export function getCompanies(db) {
         planName: row.plan_name || null, monthlyPriceRub: number(row.monthly_price_rub),
         monthlyRevenueRub: row.status === 'inactive' ? 0 : (number(row.mrr_rub) || number(row.monthly_price_rub)),
       },
+      support: {
+        notes: row.support_notes || null,
+        nextStep: row.support_next_step || null,
+        lastContactAt: row.support_last_contact_at || null,
+      },
       ownerUsers: ownersByCompany[row.id] || [],
       limits: mapLimit(row),
       subscription: mapSubscription(row),
@@ -154,6 +160,7 @@ export function getCompanies(db) {
 export function getCompany(db, id) {
   return db.prepare(`
     SELECT id, slug, name, region_code, data_residency,
+      support_notes, support_next_step, support_last_contact_at,
       COALESCE(access_mode, 'standard') access_mode,
       COALESCE(status, 'active') status, created_at
     FROM companies WHERE id = ?

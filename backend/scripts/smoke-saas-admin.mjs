@@ -155,10 +155,19 @@ async function run() {
       body: JSON.stringify({
         name: `Resource Admin Smoke Updated ${suffix}`,
         status: 'inactive',
+        support_notes: 'Pilot check-in completed',
+        support_next_step: 'Schedule owner onboarding review',
+        support_last_contact_at: '2026-06-30T10:00',
       }),
     })
 
-    if (updatedCompany.status !== 'inactive' || !updatedCompany.name.includes('Updated')) {
+    if (
+      updatedCompany.status !== 'inactive' ||
+      !updatedCompany.name.includes('Updated') ||
+      updatedCompany.support_notes !== 'Pilot check-in completed' ||
+      updatedCompany.support_next_step !== 'Schedule owner onboarding review' ||
+      updatedCompany.support_last_contact_at !== '2026-06-30T10:00'
+    ) {
       throw new Error(`Resource admin company update failed: ${JSON.stringify(updatedCompany)}`)
     }
 
@@ -390,7 +399,10 @@ async function run() {
       !Array.isArray(companyDetails.payments) ||
       !companyDetails.payments.some((item) => item.id === payment.payment.id) ||
       !Array.isArray(companyDetails.alerts) ||
-      !Array.isArray(companyDetails.auditLogs)
+      !Array.isArray(companyDetails.auditLogs) ||
+      companyDetails.company?.support?.notes !== 'Pilot check-in completed' ||
+      companyDetails.company?.support?.nextStep !== 'Schedule owner onboarding review' ||
+      companyDetails.company?.support?.lastContactAt !== '2026-06-30T10:00'
     ) {
       throw new Error(`Resource admin company details are missing expected service data: ${JSON.stringify(companyDetails)}`)
     }

@@ -504,6 +504,9 @@ function seedDefaultPlans() {
 
 function applySchemaMigrations() {
   ensureColumn('companies', 'access_mode', "TEXT NOT NULL DEFAULT 'standard'")
+  ensureColumn('companies', 'support_notes', 'TEXT')
+  ensureColumn('companies', 'support_next_step', 'TEXT')
+  ensureColumn('companies', 'support_last_contact_at', 'TEXT')
   ensureColumn('companies', 'default_quick_inspection_interval_days', 'INTEGER NOT NULL DEFAULT 7')
   ensureColumn('companies', 'default_planned_inspection_interval_days', 'INTEGER NOT NULL DEFAULT 30')
   ensureColumn('users', 'company_id', "TEXT DEFAULT 'default'")
@@ -1030,6 +1033,68 @@ function applySchemaMigrations() {
   ensureColumn('audit_logs', 'created_at', 'TEXT')
 
   db.run(`
+    CREATE TABLE IF NOT EXISTS worker_jobs (
+      id TEXT PRIMARY KEY,
+      job_type TEXT NOT NULL,
+      tenant_id TEXT,
+      entity_id TEXT,
+      payload_json TEXT,
+      status TEXT NOT NULL DEFAULT 'queued',
+      attempts INTEGER NOT NULL DEFAULT 0,
+      max_attempts INTEGER NOT NULL DEFAULT 3,
+      idempotency_key TEXT,
+      last_error TEXT,
+      created_at TEXT DEFAULT (datetime('now')),
+      available_at TEXT DEFAULT (datetime('now')),
+      started_at TEXT,
+      finished_at TEXT,
+      failed_at TEXT,
+      worker_name TEXT
+    )
+  `)
+  ensureColumn('worker_jobs', 'job_type', 'TEXT')
+  ensureColumn('worker_jobs', 'tenant_id', 'TEXT')
+  ensureColumn('worker_jobs', 'entity_id', 'TEXT')
+  ensureColumn('worker_jobs', 'payload_json', 'TEXT')
+  ensureColumn('worker_jobs', 'status', "TEXT NOT NULL DEFAULT 'queued'")
+  ensureColumn('worker_jobs', 'attempts', 'INTEGER NOT NULL DEFAULT 0')
+  ensureColumn('worker_jobs', 'max_attempts', 'INTEGER NOT NULL DEFAULT 3')
+  ensureColumn('worker_jobs', 'idempotency_key', 'TEXT')
+  ensureColumn('worker_jobs', 'last_error', 'TEXT')
+  ensureColumn('worker_jobs', 'created_at', 'TEXT')
+  ensureColumn('worker_jobs', 'available_at', 'TEXT')
+  ensureColumn('worker_jobs', 'started_at', 'TEXT')
+  ensureColumn('worker_jobs', 'finished_at', 'TEXT')
+  ensureColumn('worker_jobs', 'failed_at', 'TEXT')
+  ensureColumn('worker_jobs', 'worker_name', 'TEXT')
+  db.run('CREATE UNIQUE INDEX IF NOT EXISTS idx_worker_jobs_idempotency ON worker_jobs(idempotency_key) WHERE idempotency_key IS NOT NULL')
+  db.run('CREATE INDEX IF NOT EXISTS idx_worker_jobs_status_available ON worker_jobs(status, available_at, created_at)')
+  db.run('CREATE INDEX IF NOT EXISTS idx_worker_jobs_type_status ON worker_jobs(job_type, status)')
+
+  db.run(`
+    CREATE TABLE IF NOT EXISTS worker_heartbeats (
+      worker_name TEXT PRIMARY KEY,
+      status TEXT NOT NULL DEFAULT 'running',
+      last_heartbeat_at TEXT NOT NULL DEFAULT (datetime('now')),
+      jobs_waiting INTEGER NOT NULL DEFAULT 0,
+      jobs_active INTEGER NOT NULL DEFAULT 0,
+      jobs_failed_24h INTEGER NOT NULL DEFAULT 0,
+      avg_duration_ms INTEGER,
+      last_error TEXT,
+      updated_at TEXT DEFAULT (datetime('now'))
+    )
+  `)
+  ensureColumn('worker_heartbeats', 'worker_name', 'TEXT')
+  ensureColumn('worker_heartbeats', 'status', "TEXT NOT NULL DEFAULT 'running'")
+  ensureColumn('worker_heartbeats', 'last_heartbeat_at', 'TEXT')
+  ensureColumn('worker_heartbeats', 'jobs_waiting', 'INTEGER NOT NULL DEFAULT 0')
+  ensureColumn('worker_heartbeats', 'jobs_active', 'INTEGER NOT NULL DEFAULT 0')
+  ensureColumn('worker_heartbeats', 'jobs_failed_24h', 'INTEGER NOT NULL DEFAULT 0')
+  ensureColumn('worker_heartbeats', 'avg_duration_ms', 'INTEGER')
+  ensureColumn('worker_heartbeats', 'last_error', 'TEXT')
+  ensureColumn('worker_heartbeats', 'updated_at', 'TEXT')
+
+  db.run(`
     UPDATE defects
     SET checklist_item_id = (
       SELECT ci.id
@@ -1166,6 +1231,9 @@ export async function initDatabase() {
   ensureColumn('companies', 'billing_contact_name', 'TEXT')
   ensureColumn('companies', 'billing_contact_phone', 'TEXT')
   ensureColumn('companies', 'accounting_comment', 'TEXT')
+  ensureColumn('companies', 'support_notes', 'TEXT')
+  ensureColumn('companies', 'support_next_step', 'TEXT')
+  ensureColumn('companies', 'support_last_contact_at', 'TEXT')
   ensureColumn('companies', 'default_quick_inspection_interval_days', 'INTEGER NOT NULL DEFAULT 7')
   ensureColumn('companies', 'default_planned_inspection_interval_days', 'INTEGER NOT NULL DEFAULT 30')
 

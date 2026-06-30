@@ -1,7 +1,5 @@
-import path from 'path'
-import fs from 'fs'
 import { isRedisConfigured, getRedisStatus, pingRedis } from '../services/redisClient.js'
-import { uploadsDir } from '../services/photoUpload.js'
+import { uploadStorage } from '../services/photoUpload.js'
 
 function buildLivenessPayload() {
   return {
@@ -14,10 +12,9 @@ function buildLivenessPayload() {
 }
 
 async function checkUploadsWritable() {
-  const probePath = path.join(uploadsDir, `.healthcheck-${process.pid}-${Date.now()}.tmp`)
-  await fs.promises.mkdir(uploadsDir, { recursive: true })
-  await fs.promises.writeFile(probePath, 'ok')
-  await fs.promises.unlink(probePath)
+  const probeKey = `.healthcheck-${process.pid}-${Date.now()}.tmp`
+  await uploadStorage.save(probeKey, Buffer.from('ok'))
+  await uploadStorage.delete(probeKey)
   return true
 }
 

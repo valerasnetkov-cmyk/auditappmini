@@ -80,6 +80,7 @@ function createInMemoryLimiter({ windowMs, max, keyGenerator }) {
 
 function createRedisLimiter({ name, windowMs, max, keyGenerator, onRedisUnavailable }) {
   let warnedThisProcess = false
+  const fallbackLimiter = createInMemoryLimiter({ windowMs, max, keyGenerator })
 
   return function redisRateLimit(req, res, next) {
     if (!Number.isInteger(windowMs) || windowMs <= 0 || !Number.isInteger(max) || max <= 0) {
@@ -98,7 +99,7 @@ function createRedisLimiter({ name, windowMs, max, keyGenerator, onRedisUnavaila
       if (typeof onRedisUnavailable === 'function') {
         onRedisUnavailable()
       }
-      return createInMemoryLimiter({ name, windowMs, max, keyGenerator })(req, res, next)
+      return fallbackLimiter(req, res, next)
     }
 
     const key = `rl:${name}:${keyGenerator(req)}`
@@ -123,7 +124,7 @@ function createRedisLimiter({ name, windowMs, max, keyGenerator, onRedisUnavaila
       })
       .catch((err) => {
         logWarn(`[rate-limit:${name}] Redis eval failed (${err.message}); falling back`)
-        return createInMemoryLimiter({ name, windowMs, max, keyGenerator })(req, res, next)
+        return fallbackLimiter(req, res, next)
       })
   }
 }

@@ -259,4 +259,22 @@ npm run release:readiness
 - JSON-вывод `npm run backup:local`;
 - JSON-вывод `npm run backup:verify`;
 - результат `npm run verify:launch`;
+- JSON-вывод `npm --prefix backend run alerts:dry-run`;
+- JSON-вывод `npm --prefix backend run smoke:workers`;
+- JSON-вывод `npm --prefix backend run smoke:storage`;
+- Sentry/Telegram env presence без вывода секретов;
+- worker status и heartbeat evidence;
 - список ручных UAT-проверок и найденные замечания.
+
+## 9. Worker and alert gate
+
+На текущем этапе photo/PDF pipeline остаётся синхронным. Перед переносом
+тяжёлых операций в workers должны быть готовы:
+
+- alert dry-run evidence;
+- resource-admin health center с worker status;
+- release evidence, фиксирующий worker heartbeat;
+- отдельный smoke для job queue.
+
+Целевая worker-архитектура описана в `docs/operations-workers.md`, а
+observability/incident workflow — в `docs/observability-alerts.md`.

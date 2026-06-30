@@ -97,6 +97,32 @@ async function findLatestBackupManifest() {
   return manifests[0] || null
 }
 
+function collectObservabilityEvidence(env = process.env) {
+  return {
+    alertDryRun: {
+      command: 'npm --prefix backend run alerts:dry-run',
+      expected: 'ok=true, dryRun=true, delivered=false unless operator explicitly enables live Telegram alerts',
+    },
+    sentry: {
+      backendDsnPresent: Boolean(env.SENTRY_DSN || env.BACKEND_SENTRY_DSN),
+      webDsnPresent: Boolean(env.NEXT_PUBLIC_SENTRY_DSN),
+      environment: env.SENTRY_ENVIRONMENT || env.NODE_ENV || null,
+    },
+    telegram: {
+      enabled: String(env.TELEGRAM_ALERTS_ENABLED || '').toLowerCase() === 'true',
+      botTokenPresent: Boolean(env.TELEGRAM_BOT_TOKEN),
+      alertChatIdPresent: Boolean(env.TELEGRAM_ALERT_CHAT_ID),
+      dryRun: String(env.TELEGRAM_ALERTS_DRY_RUN || '').toLowerCase() === 'true',
+    },
+    workers: {
+      status: 'foundation_available',
+      runOnceCommand: 'npm --prefix backend run worker:run-once',
+      smokeCommand: 'npm --prefix backend run smoke:workers',
+      expectedNextStep: 'run workers under PM2/systemd and attach heartbeat evidence on the production host',
+    },
+  }
+}
+
 async function collectEvidence() {
   const createdAt = new Date().toISOString()
   const packageJson = await readJsonIfExists(path.join(repoRoot, 'package.json'))
@@ -122,6 +148,12 @@ async function collectEvidence() {
     },
     mobileContour: await collectMobileContour(),
     latestBackupManifest: await findLatestBackupManifest(),
+    observability: collectObservabilityEvidence(),
+    storage: {
+      driver: process.env.STORAGE_DRIVER || 'local',
+      smokeCommand: 'npm --prefix backend run smoke:storage',
+      expected: 'local driver preserves upload URL shape and rejects traversal keys',
+    },
     requiredCommands: [
       {
         id: 'mobile-status',
@@ -147,6 +179,21 @@ async function collectEvidence() {
         id: 'backup-verify',
         command: 'npm run backup:verify',
         expected: 'verifies the latest backup integrity',
+      },
+      {
+        id: 'alert-dry-run',
+        command: 'npm --prefix backend run alerts:dry-run',
+        expected: 'verifies alert event shape and secret redaction without sending Telegram messages',
+      },
+      {
+        id: 'worker-smoke',
+        command: 'npm --prefix backend run smoke:workers',
+        expected: 'verifies SQLite-backed job idempotency, billing.scan run-once worker and heartbeat status',
+      },
+      {
+        id: 'storage-smoke',
+        command: 'npm --prefix backend run smoke:storage',
+        expected: 'verifies local storage save/read/verify/delete and traversal rejection',
       },
     ],
     operationalEvidenceChecklist: [

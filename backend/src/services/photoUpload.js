@@ -6,12 +6,15 @@ import sharp from 'sharp'
 import { fileURLToPath } from 'url'
 import { v4 as uuidv4 } from 'uuid'
 import { MAX_FILE_SIZE, MAX_IMAGE_PIXELS } from '../config.js'
+import { createLocalStorage, STORAGE_DRIVER } from './storage.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
 export const uploadsDir = process.env.UPLOAD_DIR
   ? path.resolve(process.cwd(), process.env.UPLOAD_DIR)
   : path.join(__dirname, '../../uploads')
+export const uploadStorage = createLocalStorage({ rootDir: uploadsDir })
+export { STORAGE_DRIVER }
 
 if (!fs.existsSync(uploadsDir)) {
   fs.mkdirSync(uploadsDir, { recursive: true })
@@ -102,17 +105,9 @@ export function buildUploadUrl(relativePath) {
 }
 
 export function resolveUploadPath(relativePath) {
-  const input = String(relativePath || '').replace(/\\/g, '/')
-  if (!input || input.includes('\0')) return null
-
-  const normalized = path.normalize(input).replace(/\\/g, '/')
-  if (!normalized || normalized === '.' || normalized.startsWith('..') || path.isAbsolute(normalized)) return null
-
-  const uploadsRoot = path.resolve(uploadsDir)
-  const filePath = path.resolve(uploadsRoot, normalized)
-  if (filePath !== uploadsRoot && !filePath.startsWith(`${uploadsRoot}${path.sep}`)) return null
-
-  return { relativePath: normalized, filePath }
+  const resolved = uploadStorage.resolveKey(relativePath)
+  if (!resolved) return null
+  return { relativePath: resolved.key, filePath: resolved.filePath }
 }
 
 export async function removeFileIfExists(filePath) {
@@ -193,15 +188,16 @@ export async function removePhotoFilesForRows(photos) {
   await Promise.all((photos || []).map((photo) => removePhotoFiles(photo)))
 }
 
-export async function processUploadedPhoto({ tempPath, originalName, mimetype, inspectionId, photoId }) {
+export async function processUploadedPhoto({ tempPath, originalName, mimetype, companyId, inspectionId, photoId }) {
   const extension = mimeToExtension(mimetype)
   if (!extension) {
     throw new Error('Unsupported photo format')
   }
 
+  const companySegment = normalizeStorageSegment(companyId)
   const inspectionSegment = normalizeStorageSegment(inspectionId)
   const photoSegment = normalizeStorageSegment(photoId)
-  const relativeDir = `inspections/${inspectionSegment}/photos/${photoSegment}`
+  const relativeDir = `companies/${companySegment}/inspections/${inspectionSegment}/photos/${photoSegment}`
   const targetDir = path.join(uploadsDir, relativeDir)
   const originalPath = path.join(targetDir, `original.${extension}`)
   const mainPath = path.join(targetDir, 'main.webp')
