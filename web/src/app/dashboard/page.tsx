@@ -196,16 +196,12 @@ export default function DashboardPage() {
                       <RegionBarChart items={dashboard.analytics.defectsByRegion} tone="danger" ariaLabel="График дефектов по регионам" />
                     </ChartCard>
                   ) : null}
-                </section>
-
-                {dashboard.analytics?.dailyInspections?.length ? (
-                  <section className="mb-6">
-                    <article className="card p-6">
-                      <h2 className="mb-4 text-lg font-bold text-status-info">Динамика осмотров</h2>
+                  {dashboard.analytics?.dailyInspections?.length ? (
+                    <ChartCard title="Динамика осмотров" tone="info">
                       <DailyInspectionsChart items={dashboard.analytics.dailyInspections} />
-                    </article>
-                  </section>
-                ) : null}
+                    </ChartCard>
+                  ) : null}
+                </section>
 
                 <section className="mb-6 grid grid-cols-1 gap-6 xl:grid-cols-2">
                   <ChartCard title="Техника по статусу" tone="info">
