@@ -1,4 +1,5 @@
 import { v4 as uuidv4 } from 'uuid'
+import { resolveTrialUntil } from '../services/trialPeriod.js'
 
 function buildCompanyResourceUsage({
   getCompanyLimits,
@@ -292,7 +293,7 @@ export default function registerCompanyUsageRoutes({
   app.get('/api/company/usage', authenticate, (req, res) => {
     const companyId = req.user.company_id || 'default'
     const company = db.prepare(`
-      SELECT id, slug, name, status, COALESCE(access_mode, 'standard') AS access_mode
+      SELECT id, slug, name, status, created_at, COALESCE(access_mode, 'standard') AS access_mode
       FROM companies
       WHERE id = ?
     `).get(companyId) || {
@@ -300,6 +301,7 @@ export default function registerCompanyUsageRoutes({
       slug: companyId,
       name: 'Компания',
       status: 'active',
+      created_at: null,
       access_mode: 'standard',
     }
     const limits = getCompanyLimits(companyId)
@@ -307,13 +309,14 @@ export default function registerCompanyUsageRoutes({
     const policy = planLimits.getResolvedPolicy(companyId)
     const plan = policy.plan
     const billingRow = policy.billing
+    const trialUntil = resolveTrialUntil(company, billingRow)
     const billingDate = billingRow?.billing_status === 'trial'
-      ? billingRow?.trial_until
+      ? trialUntil
       : billingRow?.paid_until
     const billing = billingRow ? {
       status: billingRow.billing_status || 'trial',
       paidUntil: billingRow.paid_until || null,
-      trialUntil: billingRow.trial_until || null,
+      trialUntil,
       daysLeft: getDaysUntilDate(billingDate),
       lastPaymentDate: billingRow.last_payment_date || null,
       lastPaymentAmountRub: billingRow.last_payment_amount_rub === null

@@ -500,6 +500,27 @@ function seedDefaultPlans() {
     LEFT JOIN company_limits l ON l.company_id = c.id
     LEFT JOIN company_subscriptions s ON s.company_id = c.id
   `)
+  db.run(`
+    UPDATE company_billing
+    SET trial_until = (
+      SELECT date(COALESCE(companies.created_at, company_billing.created_at, 'now'), '+30 days')
+      FROM companies
+      WHERE companies.id = company_billing.company_id
+    ),
+    updated_at = datetime('now')
+    WHERE billing_status = 'trial'
+      AND trial_until IS NOT NULL
+      AND (
+        SELECT date(COALESCE(companies.created_at, company_billing.created_at, 'now'), '+30 days')
+        FROM companies
+        WHERE companies.id = company_billing.company_id
+      ) IS NOT NULL
+      AND date(trial_until) > (
+        SELECT date(COALESCE(companies.created_at, company_billing.created_at, 'now'), '+30 days')
+        FROM companies
+        WHERE companies.id = company_billing.company_id
+      )
+  `)
 }
 
 function applySchemaMigrations() {

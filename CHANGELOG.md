@@ -19,6 +19,10 @@
 - **Resource-admin support notes**: company cards now include internal support
   notes, next step and last-contact fields in the existing resource-admin
   update/details flow, with smoke coverage and without reading tenant endpoints.
+- **Pilot trial countdown**: tenant tariff banners and billing guards now cap
+  legacy trial fallback dates to `company.created_at + 30 days`, repair stored
+  overlong trial dates on startup, and refresh usage counters while the web app
+  stays open.
 - **Audit hardening fixes**: Redis-unavailable rate limiting now keeps fallback
   counters across requests, integration tests tolerate an intentionally stopped
   backend while matching the current `/api/health/ready` contract, mobile audit

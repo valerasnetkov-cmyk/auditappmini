@@ -51,5 +51,28 @@ export function useCompanyUsage(enabled = true): CompanyUsageState {
     void refresh()
   }, [enabled, refresh])
 
+  useEffect(() => {
+    if (!enabled) return undefined
+
+    const refreshWhenVisible = () => {
+      if (document.visibilityState === 'visible') void refresh()
+    }
+    const refreshOnFocus = () => {
+      void refresh()
+    }
+    const intervalId = window.setInterval(() => {
+      void refresh()
+    }, 60 * 60 * 1000)
+
+    document.addEventListener('visibilitychange', refreshWhenVisible)
+    window.addEventListener('focus', refreshOnFocus)
+
+    return () => {
+      window.clearInterval(intervalId)
+      document.removeEventListener('visibilitychange', refreshWhenVisible)
+      window.removeEventListener('focus', refreshOnFocus)
+    }
+  }, [enabled, refresh])
+
   return { usage, loading, error, refresh }
 }

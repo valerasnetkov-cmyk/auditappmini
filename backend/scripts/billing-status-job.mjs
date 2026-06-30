@@ -1,6 +1,7 @@
 import process from 'node:process'
 import { v4 as uuidv4 } from 'uuid'
 import { initDatabase, getDb, closeDatabase } from '../src/db.js'
+import { resolveTrialUntil } from '../src/services/trialPeriod.js'
 
 const GRACE_DAYS = Number(process.env.BILLING_GRACE_DAYS || 7)
 const SUSPEND_AFTER_DAYS = Number(process.env.BILLING_SUSPEND_AFTER_DAYS || 14)
@@ -51,13 +52,19 @@ function notify(db, companyId, type, title, message) {
 
 await initDatabase()
 const db = getDb()
-const rows = db.prepare('SELECT * FROM company_billing').all()
+const rows = db.prepare(`
+  SELECT b.*, c.created_at company_created_at
+  FROM company_billing b
+  LEFT JOIN companies c ON c.id = b.company_id
+`).all()
 let updated = 0
 let notifications = 0
 let events = 0
 
 for (const billing of rows) {
-  const effectiveUntil = billing.billing_status === 'trial' ? billing.trial_until : billing.paid_until
+  const effectiveUntil = billing.billing_status === 'trial'
+    ? resolveTrialUntil({ created_at: billing.company_created_at }, billing)
+    : billing.paid_until
   const days = daysUntil(effectiveUntil)
   if (days === null || billing.billing_status === 'archived') continue
 

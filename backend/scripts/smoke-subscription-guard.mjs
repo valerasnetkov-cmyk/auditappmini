@@ -64,6 +64,11 @@ async function seedSubscriptionState() {
     password: 'suspendedOwner123',
     vehicleId: `suspended-vehicle-${suffix}`,
   }
+  const legacyTrial = {
+    companyId: `legacy-trial-company-${suffix}`,
+    email: `legacy-trial-owner-${suffix}@example.com`,
+    password: 'legacyTrial123',
+  }
 
   await seedSmokeTenantOwner({
     databasePath: DATABASE_PATH,
@@ -79,6 +84,14 @@ async function seedSubscriptionState() {
     password: suspended.password,
     companyId: suspended.companyId,
     name: 'Suspended Owner',
+    keepOpen: true,
+  })
+  await seedSmokeTenantOwner({
+    databasePath: DATABASE_PATH,
+    email: legacyTrial.email,
+    password: legacyTrial.password,
+    companyId: legacyTrial.companyId,
+    name: 'Legacy Trial Owner',
     keepOpen: true,
   })
 
@@ -114,11 +127,21 @@ async function seedSubscriptionState() {
       )
       VALUES (?, ?, 'pilot', 'suspended', ?, ?, ?, NULL, 10000, 1, datetime('now'), datetime('now'))
     `).run(`subscription-${suspended.companyId}`, suspended.companyId, addDaysIso(-60), addDaysIso(-20), addDaysIso(-13))
+    db.prepare('DELETE FROM company_subscriptions WHERE company_id = ?').run(legacyTrial.companyId)
+    db.prepare(`
+      INSERT INTO company_billing (
+        id, company_id, plan_code, billing_status, trial_until, created_at, updated_at
+      ) VALUES (?, ?, 'pilot', 'trial', ?, datetime('now'), datetime('now'))
+      ON CONFLICT(company_id) DO UPDATE SET
+        billing_status = 'trial',
+        trial_until = excluded.trial_until,
+        updated_at = datetime('now')
+    `).run(`billing-${legacyTrial.companyId}`, legacyTrial.companyId, addDaysIso(90))
   } finally {
     closeDatabase()
   }
 
-  return { expired, suspended }
+  return { expired, suspended, legacyTrial }
 }
 
 async function run() {
@@ -152,6 +175,11 @@ async function run() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ email: seeded.suspended.email, password: seeded.suspended.password }),
     })
+    const legacyTrialLogin = await request('/api/auth/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email: seeded.legacyTrial.email, password: seeded.legacyTrial.password }),
+    })
     const adminLogin = await request('/api/auth/login', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -164,6 +192,7 @@ async function run() {
     const adminJsonHeaders = { Authorization: `Bearer ${adminLogin.token}`, 'Content-Type': 'application/json' }
     const suspendedHeaders = { Authorization: `Bearer ${suspendedLogin.token}` }
     const suspendedJsonHeaders = { ...suspendedHeaders, 'Content-Type': 'application/json' }
+    const legacyTrialHeaders = { Authorization: `Bearer ${legacyTrialLogin.token}` }
 
     const recipients = await request('/api/company/service-notification-recipients', { headers: expiredHeaders })
     const managerRecipient = recipients.recipients?.find((item) => item.email === seeded.expired.managerEmail)
@@ -241,6 +270,18 @@ async function run() {
       throw new Error(`Suspended subscription should keep history readable: ${JSON.stringify(suspendedVehicles)}`)
     }
 
+    const legacyTrialUsage = await request('/api/company/usage', { headers: legacyTrialHeaders })
+    if (
+      legacyTrialUsage.subscription !== null ||
+      legacyTrialUsage.billing?.status !== 'trial' ||
+      legacyTrialUsage.billing?.daysLeft === null ||
+      legacyTrialUsage.billing?.daysLeft === undefined ||
+      legacyTrialUsage.billing.daysLeft < 29 ||
+      legacyTrialUsage.billing.daysLeft > 30
+    ) {
+      throw new Error(`Legacy trial billing fallback should be capped to 30 days: ${JSON.stringify(legacyTrialUsage.billing)}`)
+    }
+
     const suspendedUpdate = await request(`/api/vehicles/${seeded.suspended.vehicleId}`, {
       method: 'PUT',
       headers: suspendedJsonHeaders,
@@ -278,6 +319,7 @@ async function run() {
       suspendedCompanyId: seeded.suspended.companyId,
       expiredSubscriptionStatus: expiredUsage.subscription.status,
       suspendedSubscriptionStatus: suspendedUsage.subscription.status,
+      legacyTrialDaysLeft: legacyTrialUsage.billing.daysLeft,
       tenantAlertNotificationsCreated: alertScan.result.createdNotifications,
       serviceNotificationRecipients: updatedRecipients.recipients.length,
       expiredHistoryReadable: expiredVehicles.data.length,

@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import api from '@/lib/api/client'
 import type { AnalyticsOverview, CompanyUsageResponse, AuthUser, DashboardStats, ExportType, NotificationItem } from '@/lib/types'
 import { buildExcelExportFilename, getAnalyticsParams, type DateRange } from '../_lib/dashboard'
@@ -33,6 +33,11 @@ export function useDashboard() {
   const [user, setUser] = useState<AuthUser | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
+
+  const refreshUsage = useCallback(async () => {
+    const result = await api.getCompanyUsage()
+    if (!result.error) setUsage(result.data || null)
+  }, [])
 
   const load = useCallback(async ({ router, showToast, dateRange, customFrom, customTo }: LoadDashboardDeps) => {
     try {
@@ -102,6 +107,27 @@ export function useDashboard() {
       setLoading(false)
     }
   }, [])
+
+  useEffect(() => {
+    const refreshWhenVisible = () => {
+      if (document.visibilityState === 'visible') void refreshUsage()
+    }
+    const refreshOnFocus = () => {
+      void refreshUsage()
+    }
+    const intervalId = window.setInterval(() => {
+      void refreshUsage()
+    }, 60 * 60 * 1000)
+
+    document.addEventListener('visibilitychange', refreshWhenVisible)
+    window.addEventListener('focus', refreshOnFocus)
+
+    return () => {
+      window.clearInterval(intervalId)
+      document.removeEventListener('visibilitychange', refreshWhenVisible)
+      window.removeEventListener('focus', refreshOnFocus)
+    }
+  }, [refreshUsage])
 
   return { stats, notifications, accidentStats, analytics, usage, user, loading, error, load }
 }

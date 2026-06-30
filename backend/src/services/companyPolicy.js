@@ -1,4 +1,5 @@
 import { createPlanLimitsService } from './planLimits.js'
+import { resolveTrialUntil } from './trialPeriod.js'
 
 export function createCompanyPolicy({ db, sendError, API_MESSAGES }) {
   const planLimits = createPlanLimitsService({ db })
@@ -138,7 +139,7 @@ export function createCompanyPolicy({ db, sendError, API_MESSAGES }) {
 
   function getCompanyOperationalRestriction(companyId, mode = 'write') {
     const company = db.prepare(`
-      SELECT id, COALESCE(status, 'active') as status
+      SELECT id, created_at, COALESCE(status, 'active') as status
       FROM companies
       WHERE id = ?
     `).get(companyId)
@@ -152,9 +153,10 @@ export function createCompanyPolicy({ db, sendError, API_MESSAGES }) {
 
     const policy = planLimits.getResolvedPolicy(companyId)
     const billingStatus = policy.billing?.billing_status
+    const trialUntil = resolveTrialUntil(company, policy.billing)
     const trialExpired = billingStatus === 'trial'
-      && policy.billing?.trial_until
-      && String(policy.billing.trial_until).slice(0, 10) < new Date().toISOString().slice(0, 10)
+      && trialUntil
+      && String(trialUntil).slice(0, 10) < new Date().toISOString().slice(0, 10)
     const legacyStatus = policy.subscription?.status
     const status = legacyStatus === 'suspended' || legacyStatus === 'expired'
       ? legacyStatus
