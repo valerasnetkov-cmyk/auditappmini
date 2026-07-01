@@ -200,6 +200,7 @@ auditappmini/
 - [`plan.md`](./plan.md) — рабочий roadmap;
 - [`docs/launch-checklist.md`](./docs/launch-checklist.md) — pilot launch checklist;
 - [`docs/production-env.md`](./docs/production-env.md) — production env;
+- [`docs/deploy-vps.md`](./docs/deploy-vps.md) — VPS deploy runbook and 502 diagnostics;
 - [`docs/backup-restore.md`](./docs/backup-restore.md) — backup/restore runbook;
 - [`docs/reliable-evidence-inspection.md`](./docs/reliable-evidence-inspection.md) — P0 доказательный осмотр, readiness и PDF;
 - [`docs/billing-and-tariffs.md`](./docs/billing-and-tariffs.md) — тарифы,

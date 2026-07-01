@@ -64,6 +64,7 @@
 
 - [`launch-checklist.md`](./launch-checklist.md) — чеклист пилотного запуска.
 - [`production-env.md`](./production-env.md) — production env (backend / web / mobile).
+- [`deploy-vps.md`](./deploy-vps.md) — стабильный деплой на VPS `/opt/auditappmini`, PM2/502 диагностика.
 - [`production-server-commands.md`](./production-server-commands.md) — шпаргалка оператора.
 - [`deployment.md`](./deployment.md) — порядок выкладки.
 - [`backup-restore.md`](./backup-restore.md) — backup / restore / verify.

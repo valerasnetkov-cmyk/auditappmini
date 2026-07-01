@@ -32,6 +32,9 @@
   support) for inspection-sourced primary thumbnails, falling back away from
   stale rear/odometer/defect covers while preserving manually uploaded primary
   photos.
+- **VPS deployment runbook**: documented the stable `/opt/auditappmini`
+  deploy path, PM2 shape for `audit-web`, `502 Bad Gateway` diagnostics and
+  the required stable `NEXT_SERVER_ACTIONS_ENCRYPTION_KEY`.
 - **Audit hardening fixes**: Redis-unavailable rate limiting now keeps fallback
   counters across requests, integration tests tolerate an intentionally stopped
   backend while matching the current `/api/health/ready` contract, mobile audit
