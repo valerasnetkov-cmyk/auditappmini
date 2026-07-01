@@ -4,7 +4,6 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import type { FormEvent } from 'react'
 import { useRouter } from 'next/navigation'
 import Layout from '@/components/Layout'
-import LocaleSwitcher from '@/components/LocaleSwitcher'
 import ThemeSwitcher from '@/components/ThemeSwitcher'
 import api from '@/lib/api/client'
 import { hasAuthSession, isManagerRole } from '@/lib/auth'
@@ -122,7 +121,7 @@ export default function SettingsPage() {
       <div className="max-w-4xl p-6">
         <div className="mb-6">
           <h1 className="page-title text-2xl">Настройки</h1>
-          <p className="mt-1 text-sm text-foreground-muted">Импорт техники, справочник регионов и базовые параметры интерфейса.</p>
+          <p className="mt-1 text-sm text-foreground-muted">Импорт техники, справочник регионов и параметры оформления.</p>
         </div>
 
         {status ? (
@@ -132,11 +131,6 @@ export default function SettingsPage() {
         <div className="card mb-4 p-4">
           <h2 className="mb-4 text-lg font-semibold text-foreground">Внешний вид</h2>
           <ThemeSwitcher />
-        </div>
-
-        <div className="card mb-4 p-4">
-          <h2 className="mb-4 text-lg font-semibold text-foreground">Язык интерфейса</h2>
-          <LocaleSwitcher />
         </div>
 
         {isManager ? (

@@ -129,6 +129,33 @@ export type PilotRequestSubmission = {
   utmTerm?: string
 }
 
+export type PublicPlan = {
+  code: string
+  name: string
+  description?: string | null
+  recommended?: boolean | null
+  monthlyPriceRub?: number | null
+  yearlyPriceRub?: number | null
+  trialMonths?: number | null
+  limits?: {
+    maxVehicles?: number | null
+    maxUsers?: number | null
+    maxInspectionsPerMonth?: number | null
+    maxStorageMb?: number | null
+    storageLimitGb?: number | null
+    ocrMonthlyLimit?: number | null
+  }
+  features?: {
+    ocrEnabled?: boolean | null
+    accidentModuleEnabled?: boolean | null
+    analyticsEnabled?: boolean | null
+    pdfReportEnabled?: boolean | null
+    exportEnabled?: boolean | null
+    apiAccessEnabled?: boolean | null
+    supportLevel?: string | null
+  }
+}
+
 export type PilotRequestStatus = 'new' | 'in_progress' | 'approved' | 'rejected' | 'converted'
 
 export type PilotRequest = {

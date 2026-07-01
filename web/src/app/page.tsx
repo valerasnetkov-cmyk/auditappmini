@@ -23,6 +23,7 @@ import {
 import LoginForm from './login/LoginForm'
 import { Accordion } from '@/components/ui'
 import { CookieConsentBanner } from './_components/CookieConsentBanner'
+import { LandingLightTheme } from './_components/LandingLightTheme'
 import { PilotRequestButton, PilotRequestProvider } from './_components/PilotRequestModal'
 import styles from './landing.module.css'
 
@@ -358,7 +359,8 @@ export default async function LandingPage() {
 
   return (
     <PilotRequestProvider>
-    <main className={styles.page}>
+      <LandingLightTheme />
+      <main className={styles.page}>
       <section className={styles.shell}>
         <div className={styles.panel}>
           <header className={styles.topbar}>

@@ -43,6 +43,7 @@ import type {
   PilotRequestAssignee,
   PilotRequestSummary,
   PilotConversionPayload,
+  PublicPlan,
   PublicInspectionReport,
   SaasAlertsResponse,
   SaasAdminStats,
@@ -347,6 +348,10 @@ class ApiClient {
       method: 'POST',
       body: JSON.stringify(data),
     })
+  }
+
+  async getPublicPlans() {
+    return this.request<{ plans: PublicPlan[] }>('/public/plans')
   }
 
   async getPilotRequests(query = '') {

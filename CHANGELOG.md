@@ -3,6 +3,13 @@
 ## Unreleased
 
 ### Changed
+- **Russian-only settings UI**: hidden the language selector from company
+  settings for the Russian product version and tightened tariff module cards so
+  long module names/status badges wrap cleanly without breaking the grid.
+- **Pilot request tariff context**: the pilot request modal now shows a
+  dynamic limits card for the selected tariff using public plan data from
+  resource-admin `plans`; the public landing is forced to the light theme while
+  company dashboards keep their theme selector.
 - **Tariff limits sync**: pilot tariff limits are now synchronized across
   landing copy, backend plans, resource-admin tariff forms and company-limit
   forms as 25 vehicles, 10 users and 100 inspections/OCR per month; standard

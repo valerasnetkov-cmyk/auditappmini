@@ -12,6 +12,7 @@ import {
 } from 'react'
 import { CheckCircleIcon, XMarkIcon } from '@heroicons/react/24/outline'
 import api from '@/lib/api/client'
+import type { PublicPlan } from '@/lib/types'
 
 type PilotRequestContextValue = {
   openPilotRequest: (options?: { source?: string; planCode?: string }) => void
@@ -38,6 +39,78 @@ const PLAN_OPTIONS = [
   { code: 'enterprise', label: 'Enterprise', hint: '50 000 ₽/мес и индивидуальные условия' },
 ]
 
+function formatMoney(value?: number | null) {
+  return value ? `${value.toLocaleString('ru-RU')} ₽/мес` : 'Стоимость по запросу'
+}
+
+function formatLimit(value?: number | null, unit = '') {
+  if (value === null || value === undefined) return 'Индивидуально'
+  return `${value.toLocaleString('ru-RU')}${unit ? ` ${unit}` : ''}`
+}
+
+function formatStorage(plan?: PublicPlan | null) {
+  const direct = plan?.limits?.storageLimitGb
+  if (direct !== null && direct !== undefined) return `${direct.toLocaleString('ru-RU')} ГБ`
+  const mb = plan?.limits?.maxStorageMb
+  if (mb === null || mb === undefined) return 'Индивидуально'
+  return `${Math.round((mb / 1024) * 10) / 10} ГБ`
+}
+
+function fallbackPlan(code: string): PublicPlan {
+  const option = PLAN_OPTIONS.find((item) => item.code === code) || PLAN_OPTIONS[0]
+  return {
+    code: option.code,
+    name: option.label,
+    monthlyPriceRub: null,
+    trialMonths: option.code === 'pilot' ? 1 : 0,
+    limits: {},
+    features: {},
+  }
+}
+
+function PlanLimitsCard({ plan }: { plan: PublicPlan }) {
+  const modules = [
+    plan.features?.ocrEnabled ? 'OCR' : null,
+    plan.features?.accidentModuleEnabled ? 'ДТП' : null,
+    plan.features?.analyticsEnabled ? 'Аналитика' : null,
+    plan.features?.pdfReportEnabled || plan.features?.exportEnabled ? 'PDF' : null,
+    plan.features?.apiAccessEnabled ? 'API' : null,
+  ].filter(Boolean)
+
+  return (
+    <aside className="rounded-xl border border-line bg-muted-surface p-4 text-sm text-foreground-secondary">
+      <p className="text-xs font-semibold uppercase tracking-[0.14em] text-primary">Доступные лимиты</p>
+      <h3 className="mt-2 text-base font-semibold text-foreground">{plan.name}</h3>
+      <p className="mt-1 text-xs text-foreground-muted">{formatMoney(plan.monthlyPriceRub)}</p>
+      <dl className="mt-4 grid gap-2">
+        <div className="flex items-center justify-between gap-3">
+          <dt>Техника</dt>
+          <dd className="font-semibold text-foreground">{formatLimit(plan.limits?.maxVehicles, 'ед.')}</dd>
+        </div>
+        <div className="flex items-center justify-between gap-3">
+          <dt>Пользователи</dt>
+          <dd className="font-semibold text-foreground">{formatLimit(plan.limits?.maxUsers, 'чел.')}</dd>
+        </div>
+        <div className="flex items-center justify-between gap-3">
+          <dt>Осмотры/мес.</dt>
+          <dd className="font-semibold text-foreground">{formatLimit(plan.limits?.maxInspectionsPerMonth)}</dd>
+        </div>
+        <div className="flex items-center justify-between gap-3">
+          <dt>Хранилище</dt>
+          <dd className="font-semibold text-foreground">{formatStorage(plan)}</dd>
+        </div>
+        <div className="flex items-center justify-between gap-3">
+          <dt>OCR/мес.</dt>
+          <dd className="font-semibold text-foreground">{formatLimit(plan.limits?.ocrMonthlyLimit)}</dd>
+        </div>
+      </dl>
+      <p className="mt-3 text-xs text-foreground-muted">
+        Модули: {modules.length ? modules.join(', ') : 'уточняются'}
+      </p>
+    </aside>
+  )
+}
+
 function readTrackingParams() {
   if (typeof window === 'undefined') return {}
   const params = new URLSearchParams(window.location.search)
@@ -57,6 +130,7 @@ export function PilotRequestProvider({ children }: { children: ReactNode }) {
   const [error, setError] = useState('')
   const [submitted, setSubmitted] = useState(false)
   const [submitting, setSubmitting] = useState(false)
+  const [plans, setPlans] = useState<PublicPlan[]>([])
 
   const openPilotRequest = useCallback((options: { source?: string; planCode?: string } = {}) => {
     setSource(options.source || 'landing')
@@ -96,6 +170,17 @@ export function PilotRequestProvider({ children }: { children: ReactNode }) {
     }
   }, [close, open])
 
+  useEffect(() => {
+    if (!open || plans.length) return
+    let cancelled = false
+    api.getPublicPlans().then((result) => {
+      if (!cancelled && result.data?.plans?.length) setPlans(result.data.plans)
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [open, plans.length])
+
   const submit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
     setError('')
@@ -116,6 +201,11 @@ export function PilotRequestProvider({ children }: { children: ReactNode }) {
     setForm(EMPTY_FORM)
   }
 
+  const currentPlan = plans.find((plan) => plan.code === form.preferredPlanCode) || fallbackPlan(form.preferredPlanCode)
+  const planOptions = plans.length
+    ? plans.map((plan) => ({ code: plan.code, label: plan.name || plan.code }))
+    : PLAN_OPTIONS
+
   return (
     <PilotRequestContext.Provider value={{ openPilotRequest }}>
       {children}
@@ -131,7 +221,7 @@ export function PilotRequestProvider({ children }: { children: ReactNode }) {
             role="dialog"
             aria-modal="true"
             aria-labelledby="pilot-request-title"
-            className="relative w-full max-w-3xl rounded-2xl border border-line bg-surface p-5 shadow-2xl sm:p-7"
+            className="relative w-full max-w-4xl rounded-2xl border border-line bg-surface p-5 shadow-2xl sm:p-7"
           >
             <button
               type="button"
@@ -231,14 +321,19 @@ export function PilotRequestProvider({ children }: { children: ReactNode }) {
                       onChange={(event) => setForm((current) => ({ ...current, preferredPlanCode: event.target.value }))}
                       required
                     >
-                      {PLAN_OPTIONS.map((plan) => (
+                      {planOptions.map((plan) => (
                         <option key={plan.code} value={plan.code}>{plan.label}</option>
                       ))}
                     </select>
                     <span className="mt-1 block text-xs text-foreground-muted">
-                      {PLAN_OPTIONS.find((plan) => plan.code === form.preferredPlanCode)?.hint}
+                      {plans.length
+                        ? formatMoney(currentPlan.monthlyPriceRub)
+                        : PLAN_OPTIONS.find((plan) => plan.code === form.preferredPlanCode)?.hint}
                     </span>
                   </label>
+                  <div className="sm:row-span-2">
+                    <PlanLimitsCard plan={currentPlan} />
+                  </div>
                   <label className="sm:col-span-2">
                     <span className="label">Регион</span>
                     <input

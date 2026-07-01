@@ -43,10 +43,12 @@ function ResourceUsageCard({ title, usage, unit }: { title: string; usage: Compa
 
 function FeatureStatusCard({ title, feature }: { title: ReactNode; feature: CompanyFeatureAccess }) {
   return (
-    <div className={`rounded-card border px-3 py-2 text-sm font-semibold ${getFeatureClassName(feature)}`}>
-      <div className="flex items-center justify-between gap-2">
-        <span>{title}</span>
-        <Badge tone={feature.enabled ? 'success' : 'danger'}>{getFeatureLabel(feature)}</Badge>
+    <div className={`min-w-0 rounded-card border px-3 py-2 text-sm font-semibold ${getFeatureClassName(feature)}`}>
+      <div className="flex min-w-0 flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+        <span className="min-w-0 whitespace-normal break-words leading-5">{title}</span>
+        <span className="shrink-0 whitespace-normal">
+          <Badge tone={feature.enabled ? 'success' : 'danger'}>{getFeatureLabel(feature)}</Badge>
+        </span>
       </div>
     </div>
   )
@@ -110,7 +112,7 @@ export function CompanyUsagePanel({
         {usage.usage.ocrMonth ? <ResourceUsageCard title="OCR за месяц" usage={usage.usage.ocrMonth} unit="запр." /> : null}
       </div>
 
-      <div className="mt-4 grid gap-2 lg:grid-cols-3">
+      <div className="mt-4 grid min-w-0 gap-2 sm:grid-cols-2 xl:grid-cols-3">
         <FeatureStatusCard
           title={<Tooltip content="Распознавание государственного номера и показаний одометра по фотографии">OCR номера и одометра</Tooltip>}
           feature={usage.features.ocr}
