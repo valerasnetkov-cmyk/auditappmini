@@ -80,7 +80,8 @@ EXPO_PUBLIC_API_URL=https://api.<project-domain>/api
 | `WEB_APP_URL` | Публичный HTTPS URL web-приложения для owner setup ссылок и QR-проверки PDF-отчётов. В production не должен быть localhost/LAN/dev-host. |
 | `PUBLIC_REPORT_TOKEN_TTL_DAYS` | Срок жизни публичной ссылки проверки отчёта в днях; по умолчанию `30`, значение `0` делает ссылку бессрочной. Полный PDF публично не отдаётся без явного opt-in. |
 | `SENTRY_DSN` / `SENTRY_ENVIRONMENT` | Optional backend Sentry-ready placeholders. Пустые значения допустимы; runtime и smoke не должны падать без Sentry. |
-| `TELEGRAM_ALERTS_ENABLED` / `TELEGRAM_ALERTS_DRY_RUN` / `TELEGRAM_BOT_TOKEN` / `TELEGRAM_ALERT_CHAT_ID` | Optional Telegram alerts. Перед включением live-отправки выполните `npm --prefix backend run alerts:dry-run`; секреты не фиксируются в release evidence. |
+| `TELEGRAM_ALERTS_ENABLED` / `TELEGRAM_ALERTS_DRY_RUN` / `TELEGRAM_BOT_TOKEN` / `TELEGRAM_ALERT_CHAT_ID` | Optional observability Telegram dry-run alerts. Перед включением live-отправки выполните `npm --prefix backend run alerts:dry-run`; секреты не фиксируются в release evidence. |
+| `TELEGRAM_BOT_ENABLED` / `TELEGRAM_ADMIN_CHAT_ID` / `TELEGRAM_RESOURCE_ALERTS_CHAT_ID` / `TELEGRAM_BOT_DEDUPE_WINDOW_MS` | Optional Telegram-бот только для service-admin событий. По умолчанию выключен; при включении production doctor требует `TELEGRAM_BOT_TOKEN` и хотя бы один admin/resource chat id. Tenant-роли, фото, PDF, setup-ссылки и secrets в Telegram не отправляются. |
 
 Сгенерировать `JWT_SECRET` можно так:
 

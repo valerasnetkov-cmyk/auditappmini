@@ -4,6 +4,7 @@ import { PILOT_REQUEST_RATE_LIMIT_MAX, PILOT_REQUEST_RATE_LIMIT_WINDOW_MS } from
 import { createRateLimiter } from '../services/rateLimiter.js'
 import { hasResourcePermission } from '../services/resourcePermissions.js'
 import { anonymizeExpiredPilotRequests, PILOT_REQUEST_STATUSES } from '../services/pilotRequests.js'
+import { sendTelegramAdminAlert } from '../services/telegramBot.js'
 import { slugifyCompanyName, uniqueCompanySlug } from './adminOperations.js'
 
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
@@ -221,6 +222,14 @@ export default function registerPilotRequestRoutes({
       source: normalizeSource(req.body?.source),
       preferredPlanCode: normalizePreferredPlanCode(req.body?.preferredPlanCode || req.body?.planCode),
     })
+    void sendTelegramAdminAlert({
+      type: 'pilot_request_created',
+      title: 'Новая заявка на пилот',
+      message: `Компания: ${companyName}. Статус: новая заявка.`,
+      url: '/saas-admin/pilot-requests',
+      severity: 'info',
+      entityKey: id,
+    }).catch((error) => console.warn('[telegram] pilot request alert skipped:', error.message))
     return res.status(201).json({ accepted: true })
   })
 
@@ -533,6 +542,15 @@ export default function registerPilotRequestRoutes({
         db.exec('ROLLBACK')
         throw error
       }
+
+      void sendTelegramAdminAlert({
+        type: 'company_created',
+        title: 'Компания создана',
+        message: companyName,
+        url: `/saas-admin/companies/${encodeURIComponent(companyId)}`,
+        severity: 'info',
+        entityKey: companyId,
+      }).catch((error) => console.warn('[telegram] company conversion alert skipped:', error.message))
 
       res.status(201).json({
         request: getRequest(db, existing.id),

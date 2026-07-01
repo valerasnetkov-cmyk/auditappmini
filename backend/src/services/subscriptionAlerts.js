@@ -1,4 +1,5 @@
 import { v4 as uuidv4 } from 'uuid'
+import { sendTelegramAdminAlert } from './telegramBot.js'
 
 const DAY_MS = 24 * 60 * 60 * 1000
 const EXPIRATION_THRESHOLDS = [14, 7, 3, 1]
@@ -163,6 +164,14 @@ export function scanSubscriptionAlerts(
         title: `Тариф заканчивается через ${daysUntilEnd} дн.`,
         message: `Тариф компании "${subscription.company_name}" заканчивается ${subscription.current_period_end}.`,
       })
+      void sendTelegramAdminAlert({
+        type: `subscription_expiring_${daysUntilEnd}d`,
+        title: `Подписка скоро заканчивается`,
+        message: `${subscription.company_name}: осталось ${daysUntilEnd} дн., дата ${subscription.current_period_end}.`,
+        url: '/saas-admin/alerts',
+        severity: daysUntilEnd <= 3 ? 'high' : 'medium',
+        entityKey: `${subscription.company_id}:${daysUntilEnd}`,
+      }).catch((error) => console.warn('[telegram] subscription alert skipped:', error.message))
     }
 
     if (nextStatus === 'grace') {
@@ -181,6 +190,14 @@ export function scanSubscriptionAlerts(
         title: nextStatus === 'suspended' ? 'Компания приостановлена' : 'Подписка просрочена',
         message: `Тариф компании "${subscription.company_name}" имеет статус ${nextStatus}.`,
       })
+      void sendTelegramAdminAlert({
+        type: nextStatus === 'suspended' ? 'subscription_suspended' : 'subscription_expired',
+        title: nextStatus === 'suspended' ? 'Компания приостановлена' : 'Подписка просрочена',
+        message: `${subscription.company_name}: статус ${nextStatus}.`,
+        url: '/saas-admin/alerts',
+        severity: 'critical',
+        entityKey: `${subscription.company_id}:${nextStatus}`,
+      }).catch((error) => console.warn('[telegram] subscription status alert skipped:', error.message))
     }
   })
 

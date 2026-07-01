@@ -98,6 +98,12 @@ async function findLatestBackupManifest() {
 }
 
 function collectObservabilityEvidence(env = process.env) {
+  const telegramBotEnabled = env.TELEGRAM_BOT_ENABLED === undefined || env.TELEGRAM_BOT_ENABLED === ''
+    ? String(env.TELEGRAM_ALERTS_ENABLED || '').toLowerCase() === 'true'
+    : String(env.TELEGRAM_BOT_ENABLED || '').toLowerCase() === 'true'
+  const telegramAdminChatConfigured = Boolean(env.TELEGRAM_ADMIN_CHAT_ID || env.TELEGRAM_ALERT_CHAT_ID)
+  const telegramResourceAlertsChatConfigured = Boolean(env.TELEGRAM_RESOURCE_ALERTS_CHAT_ID || env.TELEGRAM_ADMIN_CHAT_ID || env.TELEGRAM_ALERT_CHAT_ID)
+
   return {
     alertDryRun: {
       command: 'npm --prefix backend run alerts:dry-run',
@@ -113,6 +119,14 @@ function collectObservabilityEvidence(env = process.env) {
       botTokenPresent: Boolean(env.TELEGRAM_BOT_TOKEN),
       alertChatIdPresent: Boolean(env.TELEGRAM_ALERT_CHAT_ID),
       dryRun: String(env.TELEGRAM_ALERTS_DRY_RUN || '').toLowerCase() === 'true',
+    },
+    telegramBot: {
+      enabled: telegramBotEnabled,
+      botTokenPresent: Boolean(env.TELEGRAM_BOT_TOKEN),
+      adminChatConfigured: telegramAdminChatConfigured,
+      resourceAlertsChatConfigured: telegramResourceAlertsChatConfigured,
+      statusCommand: 'GET /api/admin/resource/telegram/status',
+      testCommand: 'POST /api/admin/resource/telegram/send-test',
     },
     workers: {
       status: 'foundation_available',
@@ -180,13 +194,18 @@ async function collectEvidence() {
         command: 'npm run backup:verify',
         expected: 'verifies the latest backup integrity',
       },
-      {
-        id: 'alert-dry-run',
-        command: 'npm --prefix backend run alerts:dry-run',
-        expected: 'verifies alert event shape and secret redaction without sending Telegram messages',
-      },
-      {
-        id: 'worker-smoke',
+    {
+      id: 'alert-dry-run',
+      command: 'npm --prefix backend run alerts:dry-run',
+      expected: 'verifies alert event shape and secret redaction without sending Telegram messages',
+    },
+    {
+      id: 'telegram-smoke',
+      command: 'npm --prefix backend run smoke:telegram',
+      expected: 'verifies service-admin Telegram status/test endpoints, secret-safe payloads and admin-only access',
+    },
+    {
+      id: 'worker-smoke',
         command: 'npm --prefix backend run smoke:workers',
         expected: 'verifies SQLite-backed job idempotency, billing.scan run-once worker and heartbeat status',
       },

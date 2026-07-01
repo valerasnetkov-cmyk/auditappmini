@@ -23,6 +23,10 @@
   legacy trial fallback dates to `company.created_at + 30 days`, repair stored
   overlong trial dates on startup, and refresh usage counters while the web app
   stays open.
+- **Service-admin Telegram bot**: added optional Telegram service signals for
+  pilot requests, company/payment events, subscription alerts, report failures
+  and critical defects, with admin-only status/test endpoints and smoke
+  coverage; tenant users, photos, PDF files and secrets are not sent.
 - **Audit hardening fixes**: Redis-unavailable rate limiting now keeps fallback
   counters across requests, integration tests tolerate an intentionally stopped
   backend while matching the current `/api/health/ready` contract, mobile audit

@@ -81,6 +81,11 @@ function addMissingFileBlockers(blockers, files) {
 
 function collectObservabilityReadiness(env = process.env) {
   const telegramEnabled = String(env.TELEGRAM_ALERTS_ENABLED || '').toLowerCase() === 'true'
+  const telegramBotEnabled = env.TELEGRAM_BOT_ENABLED === undefined || env.TELEGRAM_BOT_ENABLED === ''
+    ? telegramEnabled
+    : String(env.TELEGRAM_BOT_ENABLED || '').toLowerCase() === 'true'
+  const telegramAdminChatConfigured = Boolean(env.TELEGRAM_ADMIN_CHAT_ID || env.TELEGRAM_ALERT_CHAT_ID)
+  const telegramResourceAlertsChatConfigured = Boolean(env.TELEGRAM_RESOURCE_ALERTS_CHAT_ID || env.TELEGRAM_ADMIN_CHAT_ID || env.TELEGRAM_ALERT_CHAT_ID)
 
   return {
     alertDryRunCommand: 'npm --prefix backend run alerts:dry-run',
@@ -91,6 +96,12 @@ function collectObservabilityReadiness(env = process.env) {
     telegram: {
       enabled: telegramEnabled,
       configured: Boolean(env.TELEGRAM_BOT_TOKEN && env.TELEGRAM_ALERT_CHAT_ID),
+    },
+    telegramBot: {
+      enabled: telegramBotEnabled,
+      configured: Boolean(env.TELEGRAM_BOT_TOKEN && (telegramAdminChatConfigured || telegramResourceAlertsChatConfigured)),
+      adminChatConfigured: telegramAdminChatConfigured,
+      resourceAlertsChatConfigured: telegramResourceAlertsChatConfigured,
     },
     workers: {
       status: 'foundation_available',
@@ -155,6 +166,7 @@ async function collectReadiness() {
     'smoke:shutdown',
     'doctor:production',
     'alerts:dry-run',
+    'smoke:telegram',
     'worker:run-once',
     'smoke:workers',
     'smoke:storage',
@@ -208,6 +220,12 @@ async function collectReadiness() {
       action: 'Run npm --prefix backend run alerts:dry-run and attach the JSON output before pilot deployment.',
     },
     {
+      id: 'telegram-smoke',
+      severity: 'release-action',
+      title: 'Telegram admin bot smoke should be attached',
+      action: 'Run npm --prefix backend run smoke:telegram and attach the status/test output before enabling service-admin Telegram.',
+    },
+    {
       id: 'worker-smoke',
       severity: 'release-action',
       title: 'Worker foundation smoke should be attached',
@@ -227,6 +245,15 @@ async function collectReadiness() {
       severity: 'release-action',
       title: 'Telegram alerts are enabled but not fully configured',
       action: 'Set TELEGRAM_BOT_TOKEN and TELEGRAM_ALERT_CHAT_ID or disable TELEGRAM_ALERTS_ENABLED before production.',
+    })
+  }
+
+  if (observability.telegramBot.enabled && !observability.telegramBot.configured) {
+    releaseActions.push({
+      id: 'telegram-bot-config',
+      severity: 'release-action',
+      title: 'Telegram admin bot is enabled but not fully configured',
+      action: 'Set TELEGRAM_BOT_TOKEN and TELEGRAM_ADMIN_CHAT_ID or TELEGRAM_RESOURCE_ALERTS_CHAT_ID, or disable TELEGRAM_BOT_ENABLED before production.',
     })
   }
 
@@ -314,6 +341,7 @@ async function collectReadiness() {
       'npm run backup:local',
       'npm run backup:verify',
       'npm --prefix backend run alerts:dry-run',
+      'npm --prefix backend run smoke:telegram',
       'npm --prefix backend run smoke:workers',
       'npm --prefix backend run smoke:storage',
       'npm run release:first-start',
@@ -376,6 +404,7 @@ function renderMarkdown(report) {
   lines.push(`- Backend Sentry DSN present: ${report.observability.sentry.backendDsnPresent ? 'yes' : 'no'}.`)
   lines.push(`- Web Sentry DSN present: ${report.observability.sentry.webDsnPresent ? 'yes' : 'no'}.`)
   lines.push(`- Telegram alerts: ${report.observability.telegram.enabled ? 'enabled' : 'disabled'}, configured: ${report.observability.telegram.configured ? 'yes' : 'no'}.`)
+  lines.push(`- Telegram admin bot: ${report.observability.telegramBot.enabled ? 'enabled' : 'disabled'}, configured: ${report.observability.telegramBot.configured ? 'yes' : 'no'}.`)
   lines.push(`- Workers: ${report.observability.workers.status}.`)
   lines.push(`- Worker run-once: \`${report.observability.workers.runOnceCommand}\`.`)
   lines.push(`- Worker smoke: \`${report.observability.workers.smokeCommand}\`.`)

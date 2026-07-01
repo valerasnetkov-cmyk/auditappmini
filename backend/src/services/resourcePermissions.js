@@ -18,6 +18,7 @@ export const RESOURCE_PERMISSIONS = [
   'service_users.manage',
   'service_profile.view',
   'service_profile.manage',
+  'telegram.manage',
 ]
 
 export const RESOURCE_PERMISSION_PRESETS = {

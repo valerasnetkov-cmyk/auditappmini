@@ -1,5 +1,6 @@
 import fs from 'node:fs'
 import { createInspectionReportService } from '../services/inspectionReports.js'
+import { sendTelegramAdminAlert } from '../services/telegramBot.js'
 
 export default function registerInspectionReportRoutes({
   app,
@@ -46,6 +47,17 @@ export default function registerInspectionReportRoutes({
     return { inspection, companyId }
   }
 
+  function sendReportFailureAlert(kind, inspectionId, companyId) {
+    void sendTelegramAdminAlert({
+      type: `report_${kind}_failed`,
+      title: 'Ошибка PDF-отчёта',
+      message: `Компания ${companyId}: ошибка ${kind} для осмотра ${inspectionId}.`,
+      url: '/saas-admin/alerts',
+      severity: 'high',
+      entityKey: `${companyId}:${inspectionId}:${kind}`,
+    }).catch((error) => console.warn('[telegram] report alert skipped:', error.message))
+  }
+
   app.post('/api/inspections/:id/report', authenticate, async (req, res) => {
     if (!ensureCompanyFeatureEnabled(req, res, 'pdf_report_enabled', 'PDF-отчёты недоступны на текущем тарифе.')) return
     const context = getCompletedInspection(req, res)
@@ -56,6 +68,7 @@ export default function registerInspectionReportRoutes({
     } catch (error) {
       reports.markFailed(req.params.id, context.companyId)
       console.error('[reports] generation failed:', error)
+      sendReportFailureAlert('generation', req.params.id, context.companyId)
       res.status(500).json({ error: 'REPORT_GENERATION_FAILED', message: 'Не удалось сформировать PDF-отчёт' })
     }
   })
@@ -70,6 +83,7 @@ export default function registerInspectionReportRoutes({
       res.json(report)
     } catch (error) {
       console.error('[reports] integrity verification failed:', error)
+      sendReportFailureAlert('verification', req.params.id, context.companyId)
       res.status(500).json({ error: 'REPORT_VERIFICATION_FAILED', message: 'Не удалось проверить PDF-отчёт' })
     }
   })
@@ -96,6 +110,7 @@ export default function registerInspectionReportRoutes({
       res.sendFile(reportPath)
     } catch (error) {
       console.error('[reports] download verification failed:', error)
+      sendReportFailureAlert('download', req.params.id, context.companyId)
       res.status(500).json({ error: 'REPORT_VERIFICATION_FAILED', message: 'Не удалось проверить PDF-отчёт' })
     }
   })

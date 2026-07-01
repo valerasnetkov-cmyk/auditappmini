@@ -4,6 +4,7 @@ import {
   DEFECT_SEVERITIES,
   validateDefectTransition,
 } from '../services/defectLifecycle.js'
+import { sendTelegramAdminAlert } from '../services/telegramBot.js'
 
 function rejectCompletedInspection(db, res, inspectionId, companyId) {
   const inspection = db.prepare(`
@@ -98,6 +99,14 @@ export default function registerDefectRoutes({
           req.user.id,
         )
       }
+      void sendTelegramAdminAlert({
+        type: 'critical_defect_created',
+        title: 'Критический дефект',
+        message: `${vehicleLabel}: требуется внимание сервиса.`,
+        url: '/saas-admin/alerts',
+        severity: 'high',
+        entityKey: `${companyId}:${defectId}`,
+      }).catch((error) => console.warn('[telegram] critical defect alert skipped:', error.message))
     }
 
     const defect = db.prepare('SELECT * FROM defects WHERE id = ?').get(defectId)

@@ -257,6 +257,12 @@ const ocrOdometerProvider = process.env.OCR_ODOMETER_PROVIDER || 'mock'
 const tesseractCmd = process.env.TESSERACT_CMD || 'tesseract'
 const tesseractTimeoutMs = readPositiveIntegerEnv('TESSERACT_TIMEOUT_MS', 10000)
 const publicReportTokenTtlDays = readNonNegativeIntegerEnv('PUBLIC_REPORT_TOKEN_TTL_DAYS', 30)
+const telegramBotEnabled = hasEnvValue('TELEGRAM_BOT_ENABLED')
+  ? readBooleanEnv('TELEGRAM_BOT_ENABLED', false)
+  : readBooleanEnv('TELEGRAM_ALERTS_ENABLED', false)
+const telegramBotTokenPresent = hasEnvValue('TELEGRAM_BOT_TOKEN')
+const telegramAdminChatConfigured = hasEnvValue('TELEGRAM_ADMIN_CHAT_ID') || hasEnvValue('TELEGRAM_ALERT_CHAT_ID')
+const telegramResourceAlertsChatConfigured = hasEnvValue('TELEGRAM_RESOURCE_ALERTS_CHAT_ID') || telegramAdminChatConfigured
 
 requireProduction(Number.isInteger(securityHstsMaxAge), 'SECURITY_HSTS_MAX_AGE must be a positive integer')
 requireProduction(Boolean(securityCsp.trim()), 'SECURITY_CSP must not be empty')
@@ -282,6 +288,13 @@ requireProduction(accessLogSkipPaths.every(isValidAccessLogSkipPath), 'ACCESS_LO
 requireProduction(['mock', 'tesseract-cli'].includes(ocrOdometerProvider), 'OCR_ODOMETER_PROVIDER must be mock or tesseract-cli')
 requireProduction(Number.isInteger(tesseractTimeoutMs), 'TESSERACT_TIMEOUT_MS must be a positive integer')
 requireProduction(Number.isInteger(publicReportTokenTtlDays), 'PUBLIC_REPORT_TOKEN_TTL_DAYS must be a non-negative integer')
+if (telegramBotEnabled) {
+  requireProduction(telegramBotTokenPresent, 'TELEGRAM_BOT_TOKEN is required when TELEGRAM_BOT_ENABLED=true')
+  requireProduction(
+    telegramAdminChatConfigured || telegramResourceAlertsChatConfigured,
+    'At least one Telegram admin/resource chat id is required when TELEGRAM_BOT_ENABLED=true',
+  )
+}
 
 if (ocrOdometerProvider === 'tesseract-cli') {
   requireProduction(Boolean(tesseractCmd.trim()), 'TESSERACT_CMD must not be empty when OCR_ODOMETER_PROVIDER=tesseract-cli')
@@ -331,6 +344,12 @@ const result = {
     publicRegistrationEnabled,
     publicWebAppUrl: publicWebAppUrl || null,
     publicReportTokenTtlDays,
+    telegramBot: {
+      enabled: telegramBotEnabled,
+      tokenPresent: telegramBotTokenPresent,
+      adminChatConfigured: telegramAdminChatConfigured,
+      resourceAlertsChatConfigured: telegramResourceAlertsChatConfigured,
+    },
     trustProxy: process.env.TRUST_PROXY || null,
     securityHstsEnabled,
     securityHstsMaxAge,

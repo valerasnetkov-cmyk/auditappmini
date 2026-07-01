@@ -72,6 +72,7 @@
 - [`operations-process-map.md`](./operations-process-map.md) — карта service-level процессов пилота.
 - [`operations-workers.md`](./operations-workers.md) — целевая worker/queue архитектура и heartbeat-ready contract.
 - [`observability-alerts.md`](./observability-alerts.md) — request id, structured logs, Sentry-ready env, Telegram alert dry-run и incident workflow.
+- [`telegram_admin.md`](./telegram_admin.md) — Telegram-бот для service-admin сигналов без подключения tenant-пользователей.
 - [`resource-admin-processes.md`](./resource-admin-processes.md) — resource-admin как service operations center без доступа к tenant endpoints.
 - [`client-success-support.md`](./client-success-support.md) — support/customer-success сценарии пилота.
 - [`sql-outline.md`](./sql-outline.md) — SQL-схема основных таблиц.

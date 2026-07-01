@@ -43,6 +43,10 @@ import {
   buildResourceAdminStats,
   buildResourceCompanyDetails,
 } from '../services/resourceAdminStats.js'
+import {
+  getTelegramBotStatus,
+  sendTelegramAdminAlert,
+} from '../services/telegramBot.js'
 import { uniqueCompanySlug } from './adminOperations.js'
 
 export { buildResourceAdminStats, buildSaasAdminStats } from '../services/resourceAdminStats.js'
@@ -187,6 +191,31 @@ export default function registerSaasAdminRoutes({ app, db, authenticate, ensureA
     res.json(markNotificationRead(db, alert.id))
   })
 
+  app.get('/api/admin/resource/telegram/status', authenticate, (req, res) => {
+    if (req.user?.role !== 'admin') return ensureAdmin(req, res)
+    res.json(getTelegramBotStatus())
+  })
+
+  app.post('/api/admin/resource/telegram/send-test', authenticate, async (req, res) => {
+    if (req.user?.role !== 'admin') return ensureAdmin(req, res)
+
+    const result = await sendTelegramAdminAlert({
+      type: 'telegram_test',
+      title: 'Тест Telegram',
+      message: 'Тестовое уведомление AuditAvto: Telegram-бот администратора сервиса подключён.',
+      url: '/saas-admin/dashboard',
+      severity: 'info',
+      entityKey: `test:${req.user?.id || 'admin'}`,
+    })
+    res.json({
+      ok: result.ok,
+      delivered: result.delivered,
+      skipped: Boolean(result.skipped),
+      reason: result.reason || null,
+      status: result.status || getTelegramBotStatus(),
+    })
+  })
+
   app.get(['/api/admin/resource/payments', '/api/admin/saas/payments'], authenticate, (req, res) => {
     if (!requireAdmin(req, res)) return
     res.json({
@@ -239,6 +268,14 @@ export default function registerSaasAdminRoutes({ app, db, authenticate, ensureA
     )
 
     const subscription = recalculateCompanySubscription(db, payload.companyId)
+    void sendTelegramAdminAlert({
+      type: 'offline_payment_created',
+      title: 'Добавлен offline-платёж',
+      message: `${company.name}: ${payload.amount} ${payload.currency || 'RUB'}.`,
+      url: '/saas-admin/payments',
+      severity: 'info',
+      entityKey: id,
+    }).catch((error) => console.warn('[telegram] payment alert skipped:', error.message))
     writeAuditLog(db, req, {
       companyId: payload.companyId,
       action: 'payment_added',
@@ -326,6 +363,14 @@ export default function registerSaasAdminRoutes({ app, db, authenticate, ensureA
       entityId: id,
       payload: { slug, name, trialDays: 30, trialUntil: trialPeriodEnd },
     })
+    void sendTelegramAdminAlert({
+      type: 'company_created',
+      title: 'Компания создана',
+      message: name,
+      url: `/saas-admin/companies/${encodeURIComponent(id)}`,
+      severity: 'info',
+      entityKey: id,
+    }).catch((error) => console.warn('[telegram] company alert skipped:', error.message))
 
     res.status(201).json(getCompany(db, id))
   })

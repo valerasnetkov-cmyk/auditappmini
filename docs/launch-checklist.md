@@ -37,6 +37,7 @@ Legacy mobile-app removal record: `docs/mobile-app-retirement.md`.
 - Run `npm --prefix backend run backup:local` before and after pilot data migration.
 - Run `npm --prefix backend run backup:verify` after every pilot backup; see `docs/backup-restore.md`.
 - Run `npm run release:evidence` after release checks and store the generated JSON outside Git.
+- If service-admin Telegram is enabled, set `TELEGRAM_BOT_TOKEN` and `TELEGRAM_ADMIN_CHAT_ID` or `TELEGRAM_RESOURCE_ALERTS_CHAT_ID`, run `npm --prefix backend run smoke:telegram`, and verify `/api/admin/resource/telegram/status` without exposing secrets.
 - Confirm that `backend/backups`, `backend/data`, uploads, `.env`, and logs are not committed.
 
 ## Recommended Infrastructure

@@ -60,6 +60,16 @@ keeps the existing `getDb()` facade (`run`, `get`, `all`) for route and service
 code, while the underlying SQLite file is updated directly by the native driver.
 `saveDatabase()` is retained only as a compatibility no-op.
 
+## Service-admin Telegram
+
+`backend/src/services/telegramBot.js` отправляет optional Telegram-сигналы
+только внутренней service-admin команде. Канал выключен по умолчанию и
+использует `TELEGRAM_BOT_ENABLED`, `TELEGRAM_BOT_TOKEN`,
+`TELEGRAM_ADMIN_CHAT_ID` и `TELEGRAM_RESOURCE_ALERTS_CHAT_ID`; legacy
+`TELEGRAM_ALERT_CHAT_ID` остаётся fallback для совместимости. Tenant-роли,
+фото, PDF, setup-ссылки, JWT/cookie/secrets и raw payload в Telegram не
+отправляются. Проверка: `npm --prefix backend run smoke:telegram`.
+
 ---
 
 ## Tenant middleware

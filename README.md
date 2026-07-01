@@ -71,6 +71,7 @@ Backend:
 ```powershell
 npm --prefix backend run test:unit
 npm --prefix backend run smoke
+npm --prefix backend run smoke:telegram
 npm --prefix backend run doctor:launch
 ```
 
