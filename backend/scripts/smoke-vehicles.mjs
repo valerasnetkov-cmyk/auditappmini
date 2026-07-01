@@ -287,7 +287,9 @@ async function run() {
       }),
     })
 
+    const overviewPhotoId = `overview-photo-${suffix}`
     const overallPhotoId = `overall-photo-${suffix}`
+    const accidentOverviewPhotoId = `accident-overview-photo-${suffix}`
     const odometerPhotoId = `odometer-photo-${suffix}`
     const capturedAt = new Date().toISOString()
     const smokeDb = new Database(DATABASE_PATH)
@@ -303,6 +305,19 @@ async function run() {
         VALUES (?, ?, NULL, ?, ?, ?, ?, ?, ?, 'image/jpeg', ?, 100, 80, 10, 8, 4, ?, NULL, 1, NULL, 'uploaded', ?, NULL, NULL)
       `)
       insertPhoto.run(
+        overviewPhotoId,
+        inspection.id,
+        owner.companyId,
+        'overview',
+        `/uploads/smoke/${overviewPhotoId}.webp`,
+        `/uploads/smoke/${overviewPhotoId}.jpg`,
+        `/uploads/smoke/${overviewPhotoId}.webp`,
+        `/uploads/smoke/${overviewPhotoId}-thumb.webp`,
+        'overview.jpg',
+        `hash-${overviewPhotoId}`,
+        capturedAt,
+      )
+      insertPhoto.run(
         overallPhotoId,
         inspection.id,
         owner.companyId,
@@ -313,6 +328,19 @@ async function run() {
         `/uploads/smoke/${overallPhotoId}-thumb.webp`,
         'overall.jpg',
         `hash-${overallPhotoId}`,
+        capturedAt,
+      )
+      insertPhoto.run(
+        accidentOverviewPhotoId,
+        inspection.id,
+        owner.companyId,
+        'accident_overview_1',
+        `/uploads/smoke/${accidentOverviewPhotoId}.webp`,
+        `/uploads/smoke/${accidentOverviewPhotoId}.jpg`,
+        `/uploads/smoke/${accidentOverviewPhotoId}.webp`,
+        `/uploads/smoke/${accidentOverviewPhotoId}-thumb.webp`,
+        'accident-overview.jpg',
+        `hash-${accidentOverviewPhotoId}`,
         capturedAt,
       )
       insertPhoto.run(
@@ -351,7 +379,7 @@ async function run() {
     const normalizedPrimaryPhoto = await request(`/api/vehicles/${created.id}`, {
       headers: { Authorization: `Bearer ${login.token}` },
     })
-    if (normalizedPrimaryPhoto.primary_photo_thumb_url !== `/uploads/smoke/${overallPhotoId}-thumb.webp`) {
+    if (normalizedPrimaryPhoto.primary_photo_thumb_url !== `/uploads/smoke/${overviewPhotoId}-thumb.webp`) {
       throw new Error(`Vehicle detail should normalize stale inspection primary photo to overall: ${JSON.stringify(normalizedPrimaryPhoto)}`)
     }
 
@@ -359,15 +387,23 @@ async function run() {
       headers: { Authorization: `Bearer ${login.token}` },
     })
     const listedWithPhoto = listWithPrimaryPhoto.data.find((vehicle) => vehicle.id === created.id)
-    if (!listedWithPhoto || listedWithPhoto.primary_photo_thumb_url !== `/uploads/smoke/${overallPhotoId}-thumb.webp`) {
+    if (!listedWithPhoto || listedWithPhoto.primary_photo_thumb_url !== `/uploads/smoke/${overviewPhotoId}-thumb.webp`) {
       throw new Error(`Vehicle list should expose overall thumbnail: ${JSON.stringify(listedWithPhoto)}`)
     }
 
     const photoOptions = await request(`/api/vehicles/${created.id}/photo-options`, {
       headers: { Authorization: `Bearer ${login.token}` },
     })
-    if (!Array.isArray(photoOptions) || photoOptions.length !== 1 || photoOptions[0].id !== overallPhotoId) {
-      throw new Error(`Vehicle photo-options should include only overall photos: ${JSON.stringify(photoOptions)}`)
+    const optionIds = new Set((Array.isArray(photoOptions) ? photoOptions : []).map((photo) => photo.id))
+    if (
+      !Array.isArray(photoOptions)
+      || photoOptions.length !== 2
+      || !optionIds.has(overviewPhotoId)
+      || !optionIds.has(overallPhotoId)
+      || optionIds.has(accidentOverviewPhotoId)
+      || optionIds.has(odometerPhotoId)
+    ) {
+      throw new Error(`Vehicle photo-options should include only overview/legacy overall photos: ${JSON.stringify(photoOptions)}`)
     }
 
     await expectStatus(`/api/vehicles/${created.id}/primary-photo/from-photo`, 404, {
@@ -376,13 +412,19 @@ async function run() {
       body: JSON.stringify({ photo_id: odometerPhotoId }),
     })
 
+    await expectStatus(`/api/vehicles/${created.id}/primary-photo/from-photo`, 404, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ photo_id: accidentOverviewPhotoId }),
+    })
+
     const updatedPrimaryPhoto = await request(`/api/vehicles/${created.id}/primary-photo/from-photo`, {
       method: 'POST',
       headers,
-      body: JSON.stringify({ photo_id: overallPhotoId }),
+      body: JSON.stringify({ photo_id: overviewPhotoId }),
     })
-    if (updatedPrimaryPhoto.primary_photo_source !== 'inspection' || updatedPrimaryPhoto.primary_photo_thumb_url !== `/uploads/smoke/${overallPhotoId}-thumb.webp`) {
-      throw new Error(`Overall photo was not accepted as vehicle primary photo: ${JSON.stringify(updatedPrimaryPhoto)}`)
+    if (updatedPrimaryPhoto.primary_photo_source !== 'inspection' || updatedPrimaryPhoto.primary_photo_thumb_url !== `/uploads/smoke/${overviewPhotoId}-thumb.webp`) {
+      throw new Error(`Overview photo was not accepted as vehicle primary photo: ${JSON.stringify(updatedPrimaryPhoto)}`)
     }
 
     const vehicleInspections = await request(`/api/vehicles/${created.id}/inspections?limit=10`, {
@@ -501,7 +543,7 @@ async function run() {
           staleRegionIdOldNameRemoved: !regionsAfterFallbackUpdate.some((region) => region.name === fallbackRegionName),
           inspectionId: inspection.id,
           defectId: defect.id,
-          photoOptionsOnlyOverall: photoOptions.length === 1 && photoOptions[0].photo_type === 'overall',
+          photoOptionsOnlyOverview: photoOptions.length === 2 && [...optionIds].every((id) => [overviewPhotoId, overallPhotoId].includes(id)),
           primaryPhotoSource: updatedPrimaryPhoto.primary_photo_source,
           listedInspections: Array.isArray(vehicleInspections?.data) ? vehicleInspections.data.length : 0,
           listedDefects: vehicleInspections?.data?.[0]?.defects_count ?? null,

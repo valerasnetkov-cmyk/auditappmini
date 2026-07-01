@@ -16,6 +16,9 @@ const INSPECTION_SCHEDULE_STATUSES = new Set([
   'inspection_overdue',
   'never_inspected',
 ])
+function vehiclePrimaryPhotoTypeSql(alias = 'p') {
+  return `${alias}.photo_type IN ('overview', 'overall')`
+}
 
 function normalizeOptionalInterval(value) {
   if (value === undefined || value === null || value === '') return { value: null }
@@ -254,7 +257,7 @@ function getLatestOverallVehiclePhoto(db, vehicleId, companyId) {
     SELECT ${QUALIFIED_PHOTO_SELECT_COLUMNS}
     FROM photos p
     JOIN inspections i ON i.id = p.inspection_id AND i.company_id = p.company_id
-    WHERE i.vehicle_id = ? AND p.company_id = ? AND p.photo_type = 'overall'
+    WHERE i.vehicle_id = ? AND p.company_id = ? AND ${vehiclePrimaryPhotoTypeSql('p')}
     ORDER BY COALESCE(p.captured_at, p.created_at) DESC, p.id DESC
     LIMIT 1
   `).get(vehicleId, companyId)
@@ -412,7 +415,7 @@ export default function registerVehicleRoutes({
         SELECT p.id
         FROM photos p
         JOIN inspections oi ON oi.id = p.inspection_id AND oi.company_id = p.company_id
-        WHERE oi.vehicle_id = v.id AND p.company_id = v.company_id AND p.photo_type = 'overall'
+        WHERE oi.vehicle_id = v.id AND p.company_id = v.company_id AND ${vehiclePrimaryPhotoTypeSql('p')}
         ORDER BY COALESCE(p.captured_at, p.created_at) DESC, p.id DESC
         LIMIT 1
       )
@@ -550,7 +553,7 @@ export default function registerVehicleRoutes({
              i.created_at AS inspection_created_at
       FROM photos p
       JOIN inspections i ON i.id = p.inspection_id AND i.company_id = p.company_id
-      WHERE i.vehicle_id = ? AND p.company_id = ? AND p.photo_type = 'overall'
+      WHERE i.vehicle_id = ? AND p.company_id = ? AND ${vehiclePrimaryPhotoTypeSql('p')}
       ORDER BY COALESCE(p.captured_at, p.created_at) DESC, p.id DESC
       LIMIT 120
     `).all(req.params.id, companyId)
@@ -609,7 +612,7 @@ export default function registerVehicleRoutes({
       SELECT ${QUALIFIED_PHOTO_SELECT_COLUMNS}
       FROM photos p
       JOIN inspections i ON i.id = p.inspection_id AND i.company_id = p.company_id
-      WHERE p.id = ? AND p.company_id = ? AND i.vehicle_id = ? AND p.photo_type = 'overall'
+      WHERE p.id = ? AND p.company_id = ? AND i.vehicle_id = ? AND ${vehiclePrimaryPhotoTypeSql('p')}
     `).get(photoId, companyId, req.params.id)
     if (!photo) {
       return sendError(res, 404, 'Photo not found')
