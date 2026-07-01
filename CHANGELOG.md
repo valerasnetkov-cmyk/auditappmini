@@ -27,6 +27,10 @@
   pilot requests, company/payment events, subscription alerts, report failures
   and critical defects, with admin-only status/test endpoints and smoke
   coverage; tenant users, photos, PDF files and secrets are not sent.
+- **Vehicle overview thumbnails**: vehicle cards and the vehicle list now use
+  only `overall` inspection photos for inspection-sourced primary thumbnails,
+  falling back away from stale rear/odometer/defect covers while preserving
+  manually uploaded primary photos.
 - **Audit hardening fixes**: Redis-unavailable rate limiting now keeps fallback
   counters across requests, integration tests tolerate an intentionally stopped
   backend while matching the current `/api/health/ready` contract, mobile audit

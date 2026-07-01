@@ -1,6 +1,9 @@
 'use client'
 
+/* eslint-disable @next/next/no-img-element */
+
 import Link from 'next/link'
+import { buildApiUrl } from '@/lib/api/client'
 import type { VehicleRecord } from '@/lib/types'
 import { getStatusBadgeClass, getStatusLabel } from '../_lib/vehicles'
 
@@ -36,6 +39,7 @@ export function VehicleRow({
   onToggleSelected: (id: string) => void
 }) {
   const isArchived = vehicle.status === 'archived'
+  const primaryPhotoUrl = vehicle.primary_photo_thumb_url || vehicle.primary_photo_webp_url || vehicle.primary_photo_url
 
   return (
     <tr className="hover:bg-surface-hover">
@@ -48,6 +52,24 @@ export function VehicleRow({
           aria-label={`Выбрать технику ${vehicle.number}`}
           className="h-4 w-4 rounded border-line disabled:opacity-40"
         />
+      </td>
+      <td className="px-4 py-3">
+        <Link
+          href={`/vehicles/${vehicle.id}`}
+          className="flex h-[42px] w-14 items-center justify-center overflow-hidden rounded border border-line bg-muted-surface text-foreground-muted"
+          aria-label={`Открыть карточку техники ${vehicle.number}`}
+        >
+          {primaryPhotoUrl ? (
+            <img
+              src={buildApiUrl(primaryPhotoUrl)}
+              alt=""
+              className="h-full w-full object-cover"
+              loading="lazy"
+            />
+          ) : (
+            <span className="text-[10px] font-semibold uppercase leading-none" aria-hidden="true">Фото</span>
+          )}
+        </Link>
       </td>
       {!hiddenColumns.includes('number') ? (
         <td className="whitespace-nowrap px-6 py-4 font-medium">

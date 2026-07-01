@@ -328,8 +328,39 @@ async function run() {
         `hash-${odometerPhotoId}`,
         capturedAt,
       )
+      smokeDb.prepare(`
+        UPDATE vehicles
+        SET primary_photo_url = ?,
+            primary_photo_original_url = ?,
+            primary_photo_webp_url = ?,
+            primary_photo_thumb_url = ?,
+            primary_photo_source = 'inspection'
+        WHERE id = ? AND company_id = ?
+      `).run(
+        `/uploads/smoke/${odometerPhotoId}.webp`,
+        `/uploads/smoke/${odometerPhotoId}.jpg`,
+        `/uploads/smoke/${odometerPhotoId}.webp`,
+        `/uploads/smoke/${odometerPhotoId}-thumb.webp`,
+        created.id,
+        owner.companyId,
+      )
     } finally {
       smokeDb.close()
+    }
+
+    const normalizedPrimaryPhoto = await request(`/api/vehicles/${created.id}`, {
+      headers: { Authorization: `Bearer ${login.token}` },
+    })
+    if (normalizedPrimaryPhoto.primary_photo_thumb_url !== `/uploads/smoke/${overallPhotoId}-thumb.webp`) {
+      throw new Error(`Vehicle detail should normalize stale inspection primary photo to overall: ${JSON.stringify(normalizedPrimaryPhoto)}`)
+    }
+
+    const listWithPrimaryPhoto = await request(`/api/vehicles?search=${encodeURIComponent(correctedPlate)}&limit=100`, {
+      headers: { Authorization: `Bearer ${login.token}` },
+    })
+    const listedWithPhoto = listWithPrimaryPhoto.data.find((vehicle) => vehicle.id === created.id)
+    if (!listedWithPhoto || listedWithPhoto.primary_photo_thumb_url !== `/uploads/smoke/${overallPhotoId}-thumb.webp`) {
+      throw new Error(`Vehicle list should expose overall thumbnail: ${JSON.stringify(listedWithPhoto)}`)
     }
 
     const photoOptions = await request(`/api/vehicles/${created.id}/photo-options`, {

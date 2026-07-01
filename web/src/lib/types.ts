@@ -324,6 +324,11 @@ export type VehicleListItem = {
 
 export type VehicleRecord = VehicleListItem & {
   created_at?: string
+  primary_photo_url?: string | null
+  primary_photo_original_url?: string | null
+  primary_photo_webp_url?: string | null
+  primary_photo_thumb_url?: string | null
+  primary_photo_source?: 'upload' | 'inspection' | string | null
   quick_inspection_interval_days?: number | null
   planned_inspection_interval_days?: number | null
   inspection_schedule?: VehicleInspectionSchedule

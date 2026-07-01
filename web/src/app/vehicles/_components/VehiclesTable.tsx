@@ -45,6 +45,7 @@ export function VehiclesTable({
                   className="h-4 w-4 rounded border-line"
                 />
               </th>
+              <th className="w-20 px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-foreground-muted">Фото</th>
               {COLUMNS.map((column) =>
                 hiddenColumns.includes(column.key) ? null : (
                   <th
@@ -78,7 +79,7 @@ export function VehiclesTable({
               ))
             ) : (
               <tr>
-                <td colSpan={COLUMNS.length + 2} className="px-6 py-12 text-center text-foreground-muted">
+                <td colSpan={COLUMNS.length + 3} className="px-6 py-12 text-center text-foreground-muted">
                   Техника не найдена
                 </td>
               </tr>

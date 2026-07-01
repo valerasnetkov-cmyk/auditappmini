@@ -249,6 +249,37 @@ function updateVehiclePrimaryPhoto(db, vehicleId, companyId, photo, source) {
   )
 }
 
+function getLatestOverallVehiclePhoto(db, vehicleId, companyId) {
+  return db.prepare(`
+    SELECT ${QUALIFIED_PHOTO_SELECT_COLUMNS}
+    FROM photos p
+    JOIN inspections i ON i.id = p.inspection_id AND i.company_id = p.company_id
+    WHERE i.vehicle_id = ? AND p.company_id = ? AND p.photo_type = 'overall'
+    ORDER BY COALESCE(p.captured_at, p.created_at) DESC, p.id DESC
+    LIMIT 1
+  `).get(vehicleId, companyId)
+}
+
+function mapVehiclePrimaryPhoto(vehicle, overallPhoto) {
+  if (vehicle?.primary_photo_source === 'upload') return vehicle
+  const photo = overallPhoto
+  if (!photo) {
+    return {
+      ...vehicle,
+      primary_photo_url: null,
+      primary_photo_original_url: null,
+      primary_photo_webp_url: null,
+      primary_photo_thumb_url: null,
+      primary_photo_source: null,
+    }
+  }
+
+  return {
+    ...vehicle,
+    ...mapPrimaryPhotoUpdate(photo, 'inspection'),
+  }
+}
+
 function getVehicleUploadedPrimaryPhoto(vehicle) {
   if (vehicle?.primary_photo_source !== 'upload') return null
   return {
@@ -345,6 +376,15 @@ export default function registerVehicleRoutes({
         v.last_scheduled_inspection,
         v.quick_inspection_interval_days,
         v.planned_inspection_interval_days,
+        v.primary_photo_url,
+        v.primary_photo_original_url,
+        v.primary_photo_webp_url,
+        v.primary_photo_thumb_url,
+        v.primary_photo_source,
+        op.url AS overall_photo_url,
+        op.original_url AS overall_photo_original_url,
+        op.webp_url AS overall_photo_webp_url,
+        op.thumb_url AS overall_photo_thumb_url,
         (
           SELECT COALESCE(si.completed_at, si.created_at)
           FROM inspections si
@@ -368,6 +408,14 @@ export default function registerVehicleRoutes({
       LEFT JOIN companies c ON c.id = v.company_id
       LEFT JOIN latest_inspections li ON li.vehicle_id = v.id AND li.rn = 1
       LEFT JOIN defect_counts dc ON dc.vehicle_id = v.id
+      LEFT JOIN photos op ON op.id = (
+        SELECT p.id
+        FROM photos p
+        JOIN inspections oi ON oi.id = p.inspection_id AND oi.company_id = p.company_id
+        WHERE oi.vehicle_id = v.id AND p.company_id = v.company_id AND p.photo_type = 'overall'
+        ORDER BY COALESCE(p.captured_at, p.created_at) DESC, p.id DESC
+        LIMIT 1
+      )
       WHERE ${vehicleWhereClause}
       ORDER BY v.created_at DESC
     `)
@@ -377,13 +425,26 @@ export default function registerVehicleRoutes({
       last_inspection_id,
       last_inspection_created_at,
       defects_count,
+      overall_photo_url,
+      overall_photo_original_url,
+      overall_photo_webp_url,
+      overall_photo_thumb_url,
       ...vehicle
     }) => {
       const lastInspection = last_inspection_id
         ? { id: last_inspection_id, created_at: last_inspection_created_at }
         : undefined
 
-      return { ...vehicle, lastInspection, defectsCount: Number(defects_count || 0) }
+      const mappedVehicle = mapVehiclePrimaryPhoto(vehicle, overall_photo_url
+        ? {
+          url: overall_photo_url,
+          original_url: overall_photo_original_url,
+          webp_url: overall_photo_webp_url,
+          thumb_url: overall_photo_thumb_url,
+        }
+        : null)
+
+      return { ...mappedVehicle, lastInspection, defectsCount: Number(defects_count || 0) }
     })
     const scheduledVehicles = inspectionSchedule.enrichVehicles(vehiclesWithStats, companyId)
     const filteredVehicles = inspectionStatus === 'all'
@@ -473,7 +534,7 @@ export default function registerVehicleRoutes({
     if (!vehicle) {
       return sendError(res, 404, API_MESSAGES.vehicleNotFound)
     }
-    res.json(vehicle)
+    res.json(mapVehiclePrimaryPhoto(vehicle, getLatestOverallVehiclePhoto(db, req.params.id, companyId)))
   })
 
   app.get('/api/vehicles/:id/photo-options', authenticate, (req, res) => {
