@@ -35,6 +35,10 @@
 - **VPS deployment runbook**: documented the stable `/opt/auditappmini`
   deploy path, PM2 shape for `audit-web`, `502 Bad Gateway` diagnostics and
   the required stable `NEXT_SERVER_ACTIONS_ENCRYPTION_KEY`.
+- **Pilot request Telegram alert**: public pilot request creation now emits a
+  service-admin Telegram event `pilot_request.created` only after a new request
+  is inserted, with duplicate submissions skipped and smoke coverage through a
+  mock Telegram transport.
 - **Audit hardening fixes**: Redis-unavailable rate limiting now keeps fallback
   counters across requests, integration tests tolerate an intentionally stopped
   backend while matching the current `/api/health/ready` contract, mobile audit

@@ -1,6 +1,6 @@
 import crypto from 'node:crypto'
 
-const TELEGRAM_API_BASE_URL = 'https://api.telegram.org'
+const DEFAULT_TELEGRAM_API_BASE_URL = 'https://api.telegram.org'
 const DEFAULT_DEDUPE_WINDOW_MS = 15 * 60 * 1000
 const SEVERITIES = new Set(['critical', 'high', 'medium', 'low', 'info'])
 const SENSITIVE_PATTERN = /token|secret|password|cookie|authorization|jwt|setup|payload_json|photo|pdf|file/i
@@ -62,6 +62,7 @@ export function getTelegramBotConfig(env = process.env) {
   const adminChatId = env.TELEGRAM_ADMIN_CHAT_ID || env.TELEGRAM_ALERT_CHAT_ID || ''
   const resourceAlertsChatId = env.TELEGRAM_RESOURCE_ALERTS_CHAT_ID || adminChatId
   const dedupeWindowMs = readPositiveInteger(env.TELEGRAM_BOT_DEDUPE_WINDOW_MS, DEFAULT_DEDUPE_WINDOW_MS)
+  const apiBaseUrl = env.TELEGRAM_BOT_API_BASE_URL || DEFAULT_TELEGRAM_API_BASE_URL
 
   return {
     enabled,
@@ -70,6 +71,7 @@ export function getTelegramBotConfig(env = process.env) {
     adminChatId,
     resourceAlertsChatId,
     dedupeWindowMs,
+    apiBaseUrl,
     status: {
       enabled,
       configured: Boolean(token && (adminChatId || resourceAlertsChatId)),
@@ -147,9 +149,12 @@ export async function sendTelegramAdminAlert(input, {
     return { ok: true, delivered: false, skipped: true, reason: 'duplicate', status: config.status }
   }
 
-  const response = await fetchImpl(`${TELEGRAM_API_BASE_URL}/bot${config.token}/sendMessage`, {
+  const response = await fetchImpl(`${config.apiBaseUrl}/bot${config.token}/sendMessage`, {
     method: 'POST',
-    headers: { 'content-type': 'application/json' },
+    headers: {
+      'content-type': 'application/json',
+      'x-auditavto-event-type': event.type,
+    },
     body: JSON.stringify({
       chat_id: chatId,
       text: formatTelegramAdminMessage(event, url),

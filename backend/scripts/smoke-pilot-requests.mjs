@@ -1,6 +1,7 @@
 import { spawn } from 'node:child_process'
 import fs from 'node:fs/promises'
 import crypto from 'node:crypto'
+import http from 'node:http'
 import process from 'node:process'
 import Database from 'better-sqlite3'
 
@@ -9,6 +10,8 @@ const PORT = Number(process.env.PORT || 5320 + (process.pid % 500))
 const DATABASE_PATH = `./.tmp-smoke/smoke-pilot-requests-${process.pid}.sqlite`
 const JWT_SECRET = crypto.randomBytes(32).toString('hex')
 const BASE_URL = `http://${HOST}:${PORT}`
+const TELEGRAM_PORT = PORT + 1
+const TELEGRAM_BASE_URL = `http://${HOST}:${TELEGRAM_PORT}`
 
 function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms))
@@ -58,6 +61,24 @@ function publicPayload(suffix, overrides = {}) {
 
 async function run() {
   const suffix = `${Date.now()}-${process.pid}`
+  const telegramCalls = []
+  const telegramServer = http.createServer((req, res) => {
+    const chunks = []
+    req.on('data', (chunk) => chunks.push(chunk))
+    req.on('end', () => {
+      const bodyText = Buffer.concat(chunks).toString('utf8')
+      telegramCalls.push({
+        method: req.method,
+        url: req.url,
+        eventType: req.headers['x-auditavto-event-type'],
+        body: bodyText ? JSON.parse(bodyText) : {},
+      })
+      res.writeHead(200, { 'content-type': 'application/json' })
+      res.end(JSON.stringify({ ok: true }))
+    })
+  })
+  await new Promise((resolve) => telegramServer.listen(TELEGRAM_PORT, HOST, resolve))
+
   const server = spawn(process.execPath, ['src/server.js'], {
     cwd: process.cwd(),
     env: {
@@ -69,6 +90,11 @@ async function run() {
       ADMIN_PASSWORD: 'admin123',
       PILOT_REQUEST_RATE_LIMIT_MAX: '3',
       PILOT_REQUEST_RATE_LIMIT_WINDOW_MS: '1800000',
+      TELEGRAM_BOT_ENABLED: 'true',
+      TELEGRAM_BOT_TOKEN: 'smoke-telegram-token',
+      TELEGRAM_ADMIN_CHAT_ID: 'smoke-admin-chat',
+      TELEGRAM_BOT_API_BASE_URL: TELEGRAM_BASE_URL,
+      WEB_APP_URL: 'https://auditavto.ru',
     },
     stdio: ['ignore', 'pipe', 'pipe'],
   })
@@ -101,6 +127,28 @@ async function run() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(publicPayload(`${suffix}-limited`)),
     }, 429)
+
+    if (telegramCalls.length !== 1) {
+      throw new Error(`Pilot request should send one Telegram alert only for the created request: ${JSON.stringify(telegramCalls)}`)
+    }
+    const telegramCall = telegramCalls[0]
+    const telegramText = String(telegramCall.body?.text || '')
+    if (
+      telegramCall.method !== 'POST'
+      || !telegramCall.url?.includes('/botsmoke-telegram-token/sendMessage')
+      || telegramCall.eventType !== 'pilot_request.created'
+      || telegramCall.body?.chat_id !== 'smoke-admin-chat'
+      || !telegramText.includes('[AuditAvto] Новая заявка на пилот')
+      || !telegramText.includes(`Компания: ${primary.companyName}`)
+      || !telegramText.includes(`Регион: ${primary.region}`)
+      || !telegramText.includes(`Парк: ${primary.vehicleCount}`)
+      || !telegramText.includes('https://auditavto.ru/saas-admin/pilot-requests')
+      || /cookie|jwt|setup|payload_json/i.test(telegramText)
+      || telegramText.includes(primary.contactEmail)
+      || telegramText.includes(primary.contactPhone)
+    ) {
+      throw new Error(`Unexpected pilot Telegram alert payload: ${JSON.stringify(telegramCall)}`)
+    }
 
     const adminLogin = await request('/api/auth/login', {
       method: 'POST',
@@ -252,6 +300,7 @@ async function run() {
     console.log('Pilot requests smoke passed')
   } finally {
     server.kill('SIGTERM')
+    telegramServer.close()
     await new Promise((resolve) => server.once('exit', resolve))
     await fs.rm(DATABASE_PATH, { force: true })
     await fs.rm(`${DATABASE_PATH}-shm`, { force: true })

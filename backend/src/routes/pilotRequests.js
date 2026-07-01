@@ -173,6 +173,8 @@ export default function registerPilotRequestRoutes({
     const contactEmail = normalizeEmail(req.body?.contactEmail)
     const contactPhone = text(req.body?.contactPhone, 32)
     const vehicleCount = Number(req.body?.vehicleCount)
+    const region = nullableText(req.body?.region, 160)
+    const preferredPlanCode = normalizePreferredPlanCode(req.body?.preferredPlanCode || req.body?.planCode)
     const consentGiven = req.body?.consentGiven === true
 
     if (!companyName || !contactName || !contactEmail || !contactPhone || !Number.isInteger(vehicleCount)) {
@@ -208,8 +210,8 @@ export default function registerPilotRequestRoutes({
       contactEmail,
       contactPhone,
       vehicleCount,
-      nullableText(req.body?.region, 160),
-      normalizePreferredPlanCode(req.body?.preferredPlanCode || req.body?.planCode),
+      region,
+      preferredPlanCode,
       nullableText(req.body?.comment, 2000),
       normalizeSource(req.body?.source),
       nullableText(req.body?.utmSource, 160),
@@ -220,16 +222,21 @@ export default function registerPilotRequestRoutes({
     )
     writeAudit(db, req, 'pilot_request.created', id, {
       source: normalizeSource(req.body?.source),
-      preferredPlanCode: normalizePreferredPlanCode(req.body?.preferredPlanCode || req.body?.planCode),
+      preferredPlanCode,
     })
+    const telegramLines = [
+      `Компания: ${companyName}`,
+      region ? `Регион: ${region}` : null,
+      Number.isInteger(vehicleCount) ? `Парк: ${vehicleCount}` : null,
+    ].filter(Boolean)
     void sendTelegramAdminAlert({
-      type: 'pilot_request_created',
+      type: 'pilot_request.created',
       title: 'Новая заявка на пилот',
-      message: `Компания: ${companyName}. Статус: новая заявка.`,
+      message: telegramLines.join('\n'),
       url: '/saas-admin/pilot-requests',
       severity: 'info',
       entityKey: id,
-    }).catch((error) => console.warn('[telegram] pilot request alert skipped:', error.message))
+    }).catch(() => console.warn('[telegram] pilot request alert skipped'))
     return res.status(201).json({ accepted: true })
   })
 
