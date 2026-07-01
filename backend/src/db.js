@@ -453,7 +453,7 @@ function seedDefaultPlans() {
     VALUES (?, ?, ?, ?, 1, 1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active', datetime('now'), datetime('now'))
   `)
 
-  insertPlan.run(['pilot', 'Пилот', 'Пилотное внедрение для небольшой группы техники', 10, null, 1, 0, 10, 3, 300, 10240, 10, 1, 300, 1, 0, 1, 0, 0, 0, 'basic', 5000])
+  insertPlan.run(['pilot', 'Пилот', 'Пилотное внедрение для небольшой группы техники', 10, null, 1, 0, 25, 10, 100, 10240, 10, 1, 100, 1, 0, 1, 0, 0, 0, 'basic', 5000])
   insertPlan.run(['standard', 'Стандарт', 'Основной тариф для регулярного контроля автопарка', 20, 150000, 0, 1, 50, 10, 2000, 51200, 50, 1, 2000, 1, 1, 1, 0, 0, 0, 'priority', 15000])
   insertPlan.run(['enterprise', 'Enterprise', 'Индивидуальные условия для крупных парков', 30, null, 0, 0, 150, 30, null, 204800, 200, 1, null, 1, 1, 1, 1, 1, 1, 'personal', 50000])
   insertPlan.free?.()
@@ -469,7 +469,7 @@ function seedDefaultPlans() {
         support_level = ?, status = 'active', updated_at = datetime('now')
     WHERE code = ?
   `)
-  updatePlan.run(['Пилот', 'Пилотное внедрение для небольшой группы техники', 10, 5000, null, 1, 0, 10, 3, 300, 10240, 10, 1, 300, 1, 0, 1, 0, 0, 0, 'basic', 'pilot'])
+  updatePlan.run(['Пилот', 'Пилотное внедрение для небольшой группы техники', 10, 5000, null, 1, 0, 25, 10, 100, 10240, 10, 1, 100, 1, 0, 1, 0, 0, 0, 'basic', 'pilot'])
   updatePlan.run(['Стандарт', 'Основной тариф для регулярного контроля автопарка', 20, 15000, 150000, 0, 1, 50, 10, 2000, 51200, 50, 1, 2000, 1, 1, 1, 0, 0, 0, 'priority', 'standard'])
   updatePlan.run(['Enterprise', 'Индивидуальные условия для крупных парков', 30, 50000, null, 0, 0, 150, 30, null, 204800, 200, 1, null, 1, 1, 1, 1, 1, 1, 'personal', 'enterprise'])
   updatePlan.free?.()
@@ -480,6 +480,17 @@ function seedDefaultPlans() {
     FROM companies
   `)
   db.run("UPDATE company_limits SET plan_code = 'standard' WHERE company_id = 'default' AND (plan_code IS NULL OR plan_code = 'pilot')")
+
+  db.run(`
+    UPDATE company_limits
+    SET
+      max_vehicles = CASE WHEN max_vehicles IS NULL OR max_vehicles IN (10, 25) THEN 25 ELSE max_vehicles END,
+      max_users = CASE WHEN max_users IS NULL OR max_users IN (3, 10) THEN 10 ELSE max_users END,
+      max_inspections_per_month = CASE WHEN max_inspections_per_month IS NULL OR max_inspections_per_month = 300 THEN 100 ELSE max_inspections_per_month END,
+      ocr_monthly_limit = CASE WHEN ocr_monthly_limit IS NULL OR ocr_monthly_limit = 300 THEN 100 ELSE ocr_monthly_limit END,
+      updated_at = datetime('now')
+    WHERE plan_code = 'pilot'
+  `)
 
   db.run(`
     INSERT OR IGNORE INTO company_billing (

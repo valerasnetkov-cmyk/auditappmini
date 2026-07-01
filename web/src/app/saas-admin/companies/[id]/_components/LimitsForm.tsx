@@ -28,7 +28,9 @@ export default function LimitsForm({ form, setForm, plans, onSubmit, saving }: P
               planCode: event.target.value,
               maxVehicles: plan?.limits.maxVehicles ?? null,
               maxUsers: plan?.limits.maxUsers ?? null,
+              maxInspectionsPerMonth: plan?.limits.maxInspectionsPerMonth ?? null,
               maxStorageMb: plan?.limits.maxStorageMb ?? null,
+              ocrMonthlyLimit: plan?.limits.ocrMonthlyLimit ?? null,
               ocrEnabled: plan?.features.ocrEnabled ?? false,
               accidentModuleEnabled: plan?.features.accidentModuleEnabled ?? false,
               analyticsEnabled: plan?.features.analyticsEnabled ?? false,
@@ -58,9 +60,23 @@ export default function LimitsForm({ form, setForm, plans, onSubmit, saving }: P
         <input
           className="rounded-lg border border-gray-200 px-3 py-2 text-sm"
           inputMode="numeric"
+          placeholder="Осмотры в месяц"
+          value={form.maxInspectionsPerMonth ?? ''}
+          onChange={(event) => setForm((prev) => ({ ...prev, maxInspectionsPerMonth: numberOrNull(event.target.value) }))}
+        />
+        <input
+          className="rounded-lg border border-gray-200 px-3 py-2 text-sm"
+          inputMode="numeric"
           placeholder="Хранилище, МБ"
           value={form.maxStorageMb ?? ''}
           onChange={(event) => setForm((prev) => ({ ...prev, maxStorageMb: numberOrNull(event.target.value) }))}
+        />
+        <input
+          className="rounded-lg border border-gray-200 px-3 py-2 text-sm"
+          inputMode="numeric"
+          placeholder="OCR в месяц"
+          value={form.ocrMonthlyLimit ?? ''}
+          onChange={(event) => setForm((prev) => ({ ...prev, ocrMonthlyLimit: numberOrNull(event.target.value) }))}
         />
       </div>
       <div className="mt-4 grid gap-2 text-sm md:grid-cols-4">

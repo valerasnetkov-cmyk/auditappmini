@@ -627,17 +627,21 @@ export default function registerSaasAdminRoutes({ app, db, authenticate, ensureA
 
     db.prepare(`
       INSERT INTO plans (
-        code, name, max_vehicles, max_users, max_storage_mb, ocr_enabled,
+        code, name, max_vehicles, max_users, max_inspections_per_month, max_storage_mb,
+        storage_limit_gb, ocr_enabled, ocr_monthly_limit,
         accident_module_enabled, analytics_enabled, pdf_report_enabled, api_access_enabled, monthly_price_rub, status, created_at, updated_at
       )
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))
     `).run(
       payload.code,
       payload.name,
       payload.maxVehicles,
       payload.maxUsers,
+      payload.maxInspectionsPerMonth,
       payload.maxStorageMb,
+      payload.storageLimitGb,
       payload.ocrEnabled === null ? null : (payload.ocrEnabled ? 1 : 0),
+      payload.ocrMonthlyLimit,
       payload.accidentModuleEnabled === null ? null : (payload.accidentModuleEnabled ? 1 : 0),
       payload.analyticsEnabled === null ? null : (payload.analyticsEnabled ? 1 : 0),
       payload.pdfReportEnabled === null ? null : (payload.pdfReportEnabled ? 1 : 0),
@@ -669,15 +673,19 @@ export default function registerSaasAdminRoutes({ app, db, authenticate, ensureA
 
     db.prepare(`
       UPDATE plans
-      SET name = ?, max_vehicles = ?, max_users = ?, max_storage_mb = ?, ocr_enabled = ?,
+      SET name = ?, max_vehicles = ?, max_users = ?, max_inspections_per_month = ?,
+        max_storage_mb = ?, storage_limit_gb = ?, ocr_enabled = ?, ocr_monthly_limit = ?,
         accident_module_enabled = ?, analytics_enabled = ?, pdf_report_enabled = ?, api_access_enabled = ?, monthly_price_rub = ?, status = ?, updated_at = datetime('now')
       WHERE code = ?
     `).run(
       payload.name,
       payload.maxVehicles,
       payload.maxUsers,
+      payload.maxInspectionsPerMonth,
       payload.maxStorageMb,
+      payload.storageLimitGb,
       payload.ocrEnabled === null ? null : (payload.ocrEnabled ? 1 : 0),
+      payload.ocrMonthlyLimit,
       payload.accidentModuleEnabled === null ? null : (payload.accidentModuleEnabled ? 1 : 0),
       payload.analyticsEnabled === null ? null : (payload.analyticsEnabled ? 1 : 0),
       payload.pdfReportEnabled === null ? null : (payload.pdfReportEnabled ? 1 : 0),

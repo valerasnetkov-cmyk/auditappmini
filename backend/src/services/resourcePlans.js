@@ -52,8 +52,10 @@ export function mapLimit(row) {
     planCode: row.plan_code || null,
     maxVehicles: nullableNumber(row.max_vehicles),
     maxUsers: nullableNumber(row.max_users),
+    maxInspectionsPerMonth: nullableNumber(row.max_inspections_per_month),
     maxStorageMb: nullableNumber(row.max_storage_mb),
     ocrEnabled: nullableBoolean(row.ocr_enabled),
+    ocrMonthlyLimit: nullableNumber(row.ocr_monthly_limit),
     accidentModuleEnabled: nullableBoolean(row.accident_module_enabled),
     analyticsEnabled: nullableBoolean(row.analytics_enabled),
     pdfReportEnabled: nullableBoolean(row.pdf_report_enabled),
@@ -71,7 +73,10 @@ export function mapPlan(row) {
     limits: {
       maxVehicles: nullableNumber(row.max_vehicles),
       maxUsers: nullableNumber(row.max_users),
+      maxInspectionsPerMonth: nullableNumber(row.max_inspections_per_month),
       maxStorageMb: nullableNumber(row.max_storage_mb),
+      storageLimitGb: nullableNumber(row.storage_limit_gb),
+      ocrMonthlyLimit: nullableNumber(row.ocr_monthly_limit),
     },
     features: {
       ocrEnabled: nullableBoolean(row.ocr_enabled),
@@ -88,7 +93,8 @@ export function mapPlan(row) {
 export function getPlans(db) {
   ensureCorePlanPrices(db)
   return db.prepare(`
-    SELECT code, name, max_vehicles, max_users, max_storage_mb, monthly_price_rub, ocr_enabled,
+    SELECT code, name, max_vehicles, max_users, max_inspections_per_month, max_storage_mb,
+      storage_limit_gb, ocr_monthly_limit, monthly_price_rub, ocr_enabled,
       accident_module_enabled, analytics_enabled, pdf_report_enabled, api_access_enabled, status, created_at, updated_at
     FROM plans
     ORDER BY name COLLATE NOCASE ASC
@@ -98,7 +104,8 @@ export function getPlans(db) {
 export function getPlan(db, code) {
   ensureCorePlanPrices(db)
   return db.prepare(`
-    SELECT code, name, max_vehicles, max_users, max_storage_mb, monthly_price_rub,
+    SELECT code, name, max_vehicles, max_users, max_inspections_per_month, max_storage_mb,
+      storage_limit_gb, ocr_monthly_limit, monthly_price_rub,
       ocr_enabled, accident_module_enabled, analytics_enabled, pdf_report_enabled, api_access_enabled,
       status, created_at, updated_at
     FROM plans
@@ -111,8 +118,10 @@ export function buildLimitPayload(body = {}) {
     planCode: identifier(body.planCode || body.plan_code || 'pilot') || 'pilot',
     maxVehicles: nullableNumber(body.maxVehicles ?? body.max_vehicles),
     maxUsers: nullableNumber(body.maxUsers ?? body.max_users),
+    maxInspectionsPerMonth: nullableNumber(body.maxInspectionsPerMonth ?? body.max_inspections_per_month),
     maxStorageMb: nullableNumber(body.maxStorageMb ?? body.max_storage_mb),
     ocrEnabled: nullableBoolean(body.ocrEnabled ?? body.ocr_enabled),
+    ocrMonthlyLimit: nullableNumber(body.ocrMonthlyLimit ?? body.ocr_monthly_limit),
     accidentModuleEnabled: nullableBoolean(body.accidentModuleEnabled ?? body.accident_module_enabled),
     analyticsEnabled: nullableBoolean(body.analyticsEnabled ?? body.analytics_enabled),
     pdfReportEnabled: nullableBoolean(body.pdfReportEnabled ?? body.pdf_report_enabled),
@@ -127,8 +136,11 @@ export function buildPlanPayload(body = {}) {
     status: body.status === 'archived' ? 'archived' : 'active',
     maxVehicles: nullableNumber(body.maxVehicles ?? body.max_vehicles),
     maxUsers: nullableNumber(body.maxUsers ?? body.max_users),
+    maxInspectionsPerMonth: nullableNumber(body.maxInspectionsPerMonth ?? body.max_inspections_per_month),
     maxStorageMb: nullableNumber(body.maxStorageMb ?? body.max_storage_mb),
+    storageLimitGb: nullableNumber(body.storageLimitGb ?? body.storage_limit_gb),
     ocrEnabled: nullableBoolean(body.ocrEnabled ?? body.ocr_enabled),
+    ocrMonthlyLimit: nullableNumber(body.ocrMonthlyLimit ?? body.ocr_monthly_limit),
     accidentModuleEnabled: nullableBoolean(body.accidentModuleEnabled ?? body.accident_module_enabled),
     analyticsEnabled: nullableBoolean(body.analyticsEnabled ?? body.analytics_enabled),
     pdfReportEnabled: nullableBoolean(body.pdfReportEnabled ?? body.pdf_report_enabled),
@@ -151,8 +163,16 @@ export function buildPlanUpdatePayload(existing, body = {}) {
       : (body.status === 'archived' ? 'archived' : 'active'),
     maxVehicles: value('maxVehicles', 'max_vehicles', existing.max_vehicles, nullableNumber),
     maxUsers: value('maxUsers', 'max_users', existing.max_users, nullableNumber),
+    maxInspectionsPerMonth: value(
+      'maxInspectionsPerMonth',
+      'max_inspections_per_month',
+      existing.max_inspections_per_month,
+      nullableNumber,
+    ),
     maxStorageMb: value('maxStorageMb', 'max_storage_mb', existing.max_storage_mb, nullableNumber),
+    storageLimitGb: value('storageLimitGb', 'storage_limit_gb', existing.storage_limit_gb, nullableNumber),
     ocrEnabled: value('ocrEnabled', 'ocr_enabled', existing.ocr_enabled, nullableBoolean),
+    ocrMonthlyLimit: value('ocrMonthlyLimit', 'ocr_monthly_limit', existing.ocr_monthly_limit, nullableNumber),
     accidentModuleEnabled: value(
       'accidentModuleEnabled',
       'accident_module_enabled',
@@ -169,16 +189,19 @@ export function buildPlanUpdatePayload(existing, body = {}) {
 export function upsertCompanyLimits(db, companyId, payload) {
   db.prepare(`
     INSERT INTO company_limits (
-      id, company_id, plan_code, max_vehicles, max_users, max_storage_mb, ocr_enabled,
+      id, company_id, plan_code, max_vehicles, max_users, max_inspections_per_month,
+      max_storage_mb, ocr_enabled, ocr_monthly_limit,
       accident_module_enabled, analytics_enabled, pdf_report_enabled, api_access_enabled, updated_at
     )
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
     ON CONFLICT(company_id) DO UPDATE SET
       plan_code = excluded.plan_code,
       max_vehicles = excluded.max_vehicles,
       max_users = excluded.max_users,
+      max_inspections_per_month = excluded.max_inspections_per_month,
       max_storage_mb = excluded.max_storage_mb,
       ocr_enabled = excluded.ocr_enabled,
+      ocr_monthly_limit = excluded.ocr_monthly_limit,
       accident_module_enabled = excluded.accident_module_enabled,
       analytics_enabled = excluded.analytics_enabled,
       pdf_report_enabled = excluded.pdf_report_enabled,
@@ -190,8 +213,10 @@ export function upsertCompanyLimits(db, companyId, payload) {
     payload.planCode,
     payload.maxVehicles,
     payload.maxUsers,
+    payload.maxInspectionsPerMonth,
     payload.maxStorageMb,
     databaseBoolean(payload.ocrEnabled),
+    payload.ocrMonthlyLimit,
     databaseBoolean(payload.accidentModuleEnabled),
     databaseBoolean(payload.analyticsEnabled),
     databaseBoolean(payload.pdfReportEnabled),

@@ -3,6 +3,12 @@
 ## Unreleased
 
 ### Changed
+- **Tariff limits sync**: pilot tariff limits are now synchronized across
+  landing copy, backend plans, resource-admin tariff forms and company-limit
+  forms as 25 vehicles, 10 users and 100 inspections/OCR per month; standard
+  and enterprise limits were re-checked and exposed through the admin plans API.
+  The landing tariff cards now read `/api/public/plans`, so resource-admin
+  `plans` are the display source for public tariff prices and limits.
 - **Operational pilot controls**: integrated the external operations pack into
   project docs, added Telegram alert dry-run and Sentry-ready env placeholders,
   and extended release/resource-admin evidence with backup, alerts and worker

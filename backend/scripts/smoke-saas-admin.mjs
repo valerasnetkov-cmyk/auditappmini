@@ -290,6 +290,7 @@ async function run() {
         name: `Smoke ${suffix}`,
         maxVehicles: 15,
         maxUsers: 8,
+        maxInspectionsPerMonth: 900,
         analyticsEnabled: true,
         pdfReportEnabled: true,
       }),
@@ -305,7 +306,9 @@ async function run() {
         planCode: 'pilot',
         maxVehicles: 7,
         maxUsers: 4,
+        maxInspectionsPerMonth: 100,
         maxStorageMb: 1024,
+        ocrMonthlyLimit: 100,
         ocrEnabled: true,
         accidentModuleEnabled: true,
         analyticsEnabled: false,
@@ -314,7 +317,7 @@ async function run() {
       }),
     })
 
-    if (updatedLimits.maxVehicles !== 7 || updatedLimits.analyticsEnabled !== false || updatedLimits.pdfReportEnabled !== true) {
+    if (updatedLimits.maxVehicles !== 7 || updatedLimits.maxInspectionsPerMonth !== 100 || updatedLimits.ocrMonthlyLimit !== 100 || updatedLimits.analyticsEnabled !== false || updatedLimits.pdfReportEnabled !== true) {
       throw new Error(`Resource admin company limits update failed: ${JSON.stringify(updatedLimits)}`)
     }
 
@@ -382,14 +385,36 @@ async function run() {
     }
 
     const stats = await request('/api/admin/resource/stats', { headers: adminHeaders })
+    const publicPlans = await request('/api/public/plans')
     const legacyAlias = await request('/api/admin/saas/stats', { headers: adminHeaders })
     const companyDetails = await request(`/api/admin/resource/companies/${company.id}`, { headers: adminHeaders })
     const expectedPlanPrices = { pilot: 5000, standard: 15000, enterprise: 50000 }
+    const expectedPlanLimits = {
+      pilot: { maxVehicles: 25, maxUsers: 10, maxInspectionsPerMonth: 100 },
+      standard: { maxVehicles: 50, maxUsers: 10, maxInspectionsPerMonth: 2000 },
+      enterprise: { maxVehicles: 150, maxUsers: 30, maxInspectionsPerMonth: null },
+    }
     for (const [code, price] of Object.entries(expectedPlanPrices)) {
       const listedPlan = stats.plans?.find((item) => item.code === code)
       if (!listedPlan || listedPlan.monthlyPriceRub !== price) {
         throw new Error(`Resource admin plan price mismatch for ${code}: ${JSON.stringify(listedPlan)}`)
       }
+      const expectedLimits = expectedPlanLimits[code]
+      if (
+        listedPlan.limits?.maxVehicles !== expectedLimits.maxVehicles ||
+        listedPlan.limits?.maxUsers !== expectedLimits.maxUsers ||
+        listedPlan.limits?.maxInspectionsPerMonth !== expectedLimits.maxInspectionsPerMonth
+      ) {
+        throw new Error(`Resource admin plan limits mismatch for ${code}: ${JSON.stringify(listedPlan)}`)
+      }
+    }
+    const publicPilotPlan = publicPlans.plans?.find((item) => item.code === 'pilot')
+    if (
+      publicPilotPlan?.limits?.maxVehicles !== 25 ||
+      publicPilotPlan?.limits?.maxUsers !== 10 ||
+      publicPilotPlan?.limits?.maxInspectionsPerMonth !== 100
+    ) {
+      throw new Error(`Public landing plans are not sourced from tariff limits: ${JSON.stringify(publicPilotPlan)}`)
     }
 
     if (
@@ -451,6 +476,7 @@ async function run() {
       createdCompany.owners !== 1 ||
       createdCompany.status !== 'inactive' ||
       createdCompany.limits?.maxVehicles !== 7 ||
+      createdCompany.limits?.maxInspectionsPerMonth !== 100 ||
       createdCompany.limits?.pdfReportEnabled !== true ||
       typeof createdCompany.healthStatus !== 'string' ||
       typeof createdCompany.riskStatus !== 'string'
@@ -484,7 +510,7 @@ async function run() {
 
     const statsAfterPlanUpdate = await request('/api/admin/resource/stats', { headers: adminHeaders })
     const updatedPlan = statsAfterPlanUpdate.plans?.find((item) => item.code === plan.code)
-    if (!updatedPlan || updatedPlan.status !== 'archived' || updatedPlan.limits?.maxVehicles !== 15 || updatedPlan.features?.analyticsEnabled !== true || updatedPlan.features?.pdfReportEnabled !== true) {
+    if (!updatedPlan || updatedPlan.status !== 'archived' || updatedPlan.limits?.maxVehicles !== 15 || updatedPlan.limits?.maxInspectionsPerMonth !== 900 || updatedPlan.features?.analyticsEnabled !== true || updatedPlan.features?.pdfReportEnabled !== true) {
       throw new Error(`Partial plan update did not preserve existing limits/features: ${JSON.stringify(updatedPlan)}`)
     }
 

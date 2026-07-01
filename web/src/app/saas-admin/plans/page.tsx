@@ -17,6 +17,7 @@ const emptyPlanForm: PlanForm = {
   status: 'active',
   maxVehicles: null,
   maxUsers: null,
+  maxInspectionsPerMonth: null,
   maxStorageMb: null,
   monthlyPriceRub: 0,
   ocrEnabled: true,
@@ -147,6 +148,7 @@ export default function ResourcePlansPage() {
                 <input className="rounded-lg border px-3 py-2" inputMode="numeric" placeholder="Цена в месяц, ₽" value={planForm.monthlyPriceRub ?? ''} onChange={(event) => setPlanForm({ ...planForm, monthlyPriceRub: numberOrNull(event.target.value) })} />
                 <input className="rounded-lg border px-3 py-2" inputMode="numeric" placeholder="Лимит техники" value={planForm.maxVehicles ?? ''} onChange={(event) => setPlanForm({ ...planForm, maxVehicles: numberOrNull(event.target.value) })} />
                 <input className="rounded-lg border px-3 py-2" inputMode="numeric" placeholder="Лимит пользователей" value={planForm.maxUsers ?? ''} onChange={(event) => setPlanForm({ ...planForm, maxUsers: numberOrNull(event.target.value) })} />
+                <input className="rounded-lg border px-3 py-2" inputMode="numeric" placeholder="Осмотры в месяц" value={planForm.maxInspectionsPerMonth ?? ''} onChange={(event) => setPlanForm({ ...planForm, maxInspectionsPerMonth: numberOrNull(event.target.value) })} />
                 <input className="rounded-lg border px-3 py-2" inputMode="numeric" placeholder="Хранилище, МБ" value={planForm.maxStorageMb ?? ''} onChange={(event) => setPlanForm({ ...planForm, maxStorageMb: numberOrNull(event.target.value) })} />
               </div>
               <div className="mt-4 grid gap-2 text-sm md:grid-cols-4">
@@ -187,6 +189,7 @@ export default function ResourcePlansPage() {
                         <td className="px-4 py-3">
                           Техника: {displayLimit(plan.limits.maxVehicles)}<br />
                           Пользователи: {displayLimit(plan.limits.maxUsers)}<br />
+                          Осмотры/мес.: {displayLimit(plan.limits.maxInspectionsPerMonth)}<br />
                           Хранилище: {displayLimit(plan.limits.maxStorageMb)} МБ
                         </td>
                         <td className="px-4 py-3">

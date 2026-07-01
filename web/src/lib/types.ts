@@ -921,7 +921,9 @@ export type SaasCompanyLimits = {
   planCode?: string | null
   maxVehicles?: number | null
   maxUsers?: number | null
+  maxInspectionsPerMonth?: number | null
   maxStorageMb?: number | null
+  ocrMonthlyLimit?: number | null
   ocrEnabled?: boolean | null
   accidentModuleEnabled?: boolean | null
   analyticsEnabled?: boolean | null
@@ -1137,7 +1139,9 @@ export type ResourceCompanyLimitsPayload = {
   planCode?: string
   maxVehicles?: number | null
   maxUsers?: number | null
+  maxInspectionsPerMonth?: number | null
   maxStorageMb?: number | null
+  ocrMonthlyLimit?: number | null
   ocrEnabled?: boolean | null
   accidentModuleEnabled?: boolean | null
   analyticsEnabled?: boolean | null
@@ -1151,7 +1155,10 @@ export type ResourcePlanPayload = {
   status?: 'active' | 'archived' | string
   maxVehicles?: number | null
   maxUsers?: number | null
+  maxInspectionsPerMonth?: number | null
   maxStorageMb?: number | null
+  storageLimitGb?: number | null
+  ocrMonthlyLimit?: number | null
   ocrEnabled?: boolean | null
   accidentModuleEnabled?: boolean | null
   analyticsEnabled?: boolean | null
@@ -1168,7 +1175,10 @@ export type SaasPlan = {
   limits: {
     maxVehicles?: number | null
     maxUsers?: number | null
+    maxInspectionsPerMonth?: number | null
     maxStorageMb?: number | null
+    storageLimitGb?: number | null
+    ocrMonthlyLimit?: number | null
   }
   features: {
     ocrEnabled?: boolean | null

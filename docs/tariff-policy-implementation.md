@@ -41,9 +41,9 @@
 |---|---:|
 | Цена в месяц | 5 000 ₽ |
 | Цена за 3 месяца пилота | 15 000 ₽ |
-| Техника | до 10 |
-| Пользователи | до 3 |
-| Осмотры в месяц | до 300 |
+| Техника | до 25 |
+| Пользователи | до 10 |
+| Осмотры в месяц | до 100 |
 | Фото-хранилище | до 10 ГБ |
 | Быстрый осмотр | да |
 | Плановый осмотр | да |
@@ -329,12 +329,12 @@ enterprise
   "yearly_price_rub": null,
   "trial_months": 3,
   "recommended": false,
-  "max_vehicles": 10,
-  "max_users": 3,
-  "max_inspections_per_month": 300,
+  "max_vehicles": 25,
+  "max_users": 10,
+  "max_inspections_per_month": 100,
   "storage_limit_gb": 10,
   "ocr_enabled": true,
-  "ocr_monthly_limit": 300,
+  "ocr_monthly_limit": 100,
   "accident_module_enabled": true,
   "analytics_enabled": false,
   "export_enabled": true,
@@ -531,8 +531,8 @@ POST /api/odometer/recognize
 {
   "error": "ocr_limit_exceeded",
   "message": "Достигнут месячный лимит распознаваний OCR.",
-  "limit": 300,
-  "used": 300,
+  "limit": 100,
+  "used": 100,
   "period": "2026-06"
 }
 ```
@@ -1248,14 +1248,14 @@ backend/scripts/smoke-billing-status.mjs
 ### 1. Лимит техники
 
 - создать компанию на `pilot`;
-- создать 10 единиц техники;
-- попытаться создать 11-ю;
+- создать 25 единиц техники;
+- попытаться создать 26-ю;
 - получить `409 vehicle_limit_exceeded`.
 
 ### 2. Лимит пользователей
 
-- создать 3 пользователей на `pilot`;
-- попытаться создать 4-го;
+- создать 10 пользователей на `pilot`;
+- попытаться создать 11-го;
 - получить `409 user_limit_exceeded`.
 
 ### 3. Лимит осмотров

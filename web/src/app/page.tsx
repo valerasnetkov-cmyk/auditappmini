@@ -159,14 +159,54 @@ const economicEffects = [
   ['Контроль дефектов', 'Открытые и повторные дефекты видны без ручной сверки таблиц.'],
 ]
 
-const tariffs = [
+type LandingTariff = {
+  code: string
+  name: string
+  price: string
+  period: string
+  yearly?: string
+  description: string
+  features: string[]
+  action: string
+  pilotSource: string
+  planCode: string
+  recommended?: boolean
+}
+
+type PublicPlan = {
+  code: string
+  name: string
+  description?: string | null
+  recommended?: boolean | null
+  monthlyPriceRub?: number | null
+  yearlyPriceRub?: number | null
+  trialMonths?: number | null
+  limits?: {
+    maxVehicles?: number | null
+    maxUsers?: number | null
+    maxInspectionsPerMonth?: number | null
+    maxStorageMb?: number | null
+    storageLimitGb?: number | null
+    ocrMonthlyLimit?: number | null
+  }
+  features?: {
+    ocrEnabled?: boolean | null
+    accidentModuleEnabled?: boolean | null
+    analyticsEnabled?: boolean | null
+    pdfReportEnabled?: boolean | null
+    exportEnabled?: boolean | null
+    apiAccessEnabled?: boolean | null
+  }
+}
+
+const fallbackTariffs: LandingTariff[] = [
   {
     code: 'pilot',
     name: 'Пилот',
-    price: '5 000 ₽',
+    price: 'По запросу',
     period: 'в месяц',
     description: 'Для тестового внедрения на небольшой группе техники. Новым компаниям доступно 30 дней бесплатно.',
-    features: ['30 дней бесплатно для новых компаний', 'До 10 единиц техники', 'До 3 пользователей', 'До 300 осмотров в месяц', '10 ГБ фото-хранилища', 'OCR и ДТП-осмотры', 'Выгрузка PDF-отчётов'],
+    features: ['30 дней бесплатно для новых компаний', 'Лимит техники из админ-панели', 'Лимит пользователей из админ-панели', 'Лимит осмотров из админ-панели', 'Фото-хранилище по тарифу', 'Доступные модули по тарифу'],
     action: 'Запросить пилот',
     pilotSource: 'tariff-pilot',
     planCode: 'pilot',
@@ -174,11 +214,10 @@ const tariffs = [
   {
     code: 'standard',
     name: 'Стандарт',
-    price: '15 000 ₽',
+    price: 'По запросу',
     period: 'в месяц',
-    yearly: '150 000 ₽ в год',
     description: 'Основной тариф для регулярного контроля автопарка.',
-    features: ['До 50 единиц техники', 'До 10 пользователей', 'До 2 000 осмотров в месяц', '50 ГБ фото-хранилища', 'OCR, аналитика и экспорт', 'Выгрузка PDF-отчётов'],
+    features: ['Лимит техники из админ-панели', 'Лимит пользователей из админ-панели', 'Лимит осмотров из админ-панели', 'Фото-хранилище по тарифу', 'Модули по тарифу', 'Экспорт по тарифу'],
     action: 'Выбрать Стандарт',
     pilotSource: 'tariff-standard',
     planCode: 'standard',
@@ -187,15 +226,102 @@ const tariffs = [
   {
     code: 'enterprise',
     name: 'Enterprise',
-    price: '50 000 ₽',
+    price: 'По запросу',
     period: 'в месяц',
     description: 'Для крупных парков, филиалов и индивидуальных требований.',
-    features: ['От 150 единиц техники', 'От 30 пользователей', 'Индивидуальные лимиты', 'От 200 ГБ хранилища', 'API, отдельный контур и SLA', 'Выгрузка PDF-отчётов'],
+    features: ['Лимиты из админ-панели', 'Индивидуальные условия', 'Фото-хранилище по тарифу', 'API и SLA по тарифу', 'Экспорт по тарифу'],
     action: 'Обсудить условия',
     pilotSource: 'tariff-enterprise',
     planCode: 'enterprise',
   },
 ]
+
+function apiBaseUrl() {
+  return (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api').replace(/\/+$/, '')
+}
+
+function money(value?: number | null) {
+  return value ? `${value.toLocaleString('ru-RU')} ₽` : 'По запросу'
+}
+
+function storageGb(plan: PublicPlan) {
+  const direct = plan.limits?.storageLimitGb
+  if (direct !== null && direct !== undefined) return direct
+  const mb = plan.limits?.maxStorageMb
+  if (mb === null || mb === undefined) return null
+  return Math.round((mb / 1024) * 10) / 10
+}
+
+function limitFeature(label: string, value?: number | null, mode: 'upTo' | 'from' = 'upTo') {
+  if (value === null || value === undefined) return 'Индивидуальные лимиты'
+  const prefix = mode === 'from' ? 'От' : 'До'
+  return `${prefix} ${value.toLocaleString('ru-RU')} ${label}`
+}
+
+function actionForPlan(code: string) {
+  if (code === 'standard') return 'Выбрать Стандарт'
+  if (code === 'enterprise') return 'Обсудить условия'
+  return 'Запросить пилот'
+}
+
+function descriptionForPlan(plan: PublicPlan) {
+  if (plan.description) return plan.description
+  return fallbackTariffs.find((item) => item.code === plan.code)?.description || 'Тариф для работы с автопарком.'
+}
+
+function featuresForPlan(plan: PublicPlan) {
+  const enterprise = plan.code === 'enterprise'
+  const features: string[] = []
+  if ((plan.trialMonths || 0) > 0) features.push('30 дней бесплатно для новых компаний')
+  features.push(limitFeature('единиц техники', plan.limits?.maxVehicles, enterprise ? 'from' : 'upTo'))
+  features.push(limitFeature('пользователей', plan.limits?.maxUsers, enterprise ? 'from' : 'upTo'))
+  features.push(
+    plan.limits?.maxInspectionsPerMonth === null || plan.limits?.maxInspectionsPerMonth === undefined
+      ? 'Индивидуальные лимиты осмотров'
+      : `До ${plan.limits.maxInspectionsPerMonth.toLocaleString('ru-RU')} осмотров в месяц`,
+  )
+  const storage = storageGb(plan)
+  features.push(storage === null ? 'Индивидуальное фото-хранилище' : `${enterprise ? 'От ' : ''}${storage.toLocaleString('ru-RU')} ГБ фото-хранилища`)
+  if (plan.features?.apiAccessEnabled) {
+    features.push('API, отдельный контур и SLA')
+  } else if (plan.features?.ocrEnabled && plan.features?.analyticsEnabled) {
+    features.push('OCR, аналитика и экспорт')
+  } else if (plan.features?.ocrEnabled || plan.features?.accidentModuleEnabled) {
+    features.push('OCR и ДТП-осмотры')
+  }
+  if (plan.features?.pdfReportEnabled || plan.features?.exportEnabled) features.push('Выгрузка PDF-отчётов')
+  return features
+}
+
+function mapPlanToTariff(plan: PublicPlan): LandingTariff {
+  const fallback = fallbackTariffs.find((item) => item.code === plan.code)
+  return {
+    code: plan.code,
+    name: plan.name || fallback?.name || plan.code,
+    price: money(plan.monthlyPriceRub),
+    period: 'в месяц',
+    yearly: plan.yearlyPriceRub ? `${plan.yearlyPriceRub.toLocaleString('ru-RU')} ₽ в год` : undefined,
+    description: descriptionForPlan(plan),
+    features: featuresForPlan(plan),
+    action: fallback?.action || actionForPlan(plan.code),
+    pilotSource: fallback?.pilotSource || `tariff-${plan.code}`,
+    planCode: plan.code,
+    recommended: Boolean(plan.recommended),
+  }
+}
+
+async function getLandingTariffs(): Promise<LandingTariff[]> {
+  try {
+    const response = await fetch(`${apiBaseUrl()}/public/plans`, { cache: 'no-store' })
+    if (!response.ok) return fallbackTariffs
+    const data = await response.json() as { plans?: PublicPlan[] }
+    const plans = Array.isArray(data.plans) ? data.plans : []
+    const tariffs = plans.filter((plan) => plan.code).map(mapPlanToTariff)
+    return tariffs.length ? tariffs : fallbackTariffs
+  } catch {
+    return fallbackTariffs
+  }
+}
 
 const faqs = [
   ['Что такое «Аудит авто»?', '«Аудит авто» — сервис фотофиксации состояния автотехники: осмотры, дефекты, пробег, ДТП и история по каждому автомобилю в одной системе.'],
@@ -226,8 +352,9 @@ function SectionTitle({ title, text }: { title: string; text: string }) {
   )
 }
 
-export default function LandingPage() {
+export default async function LandingPage() {
   const inspectionPreview = getLandingInspectionPreview()
+  const tariffs = await getLandingTariffs()
 
   return (
     <PilotRequestProvider>
