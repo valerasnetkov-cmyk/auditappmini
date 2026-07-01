@@ -421,10 +421,47 @@ async function run() {
     const updatedPrimaryPhoto = await request(`/api/vehicles/${created.id}/primary-photo/from-photo`, {
       method: 'POST',
       headers,
-      body: JSON.stringify({ photo_id: overviewPhotoId }),
+      body: JSON.stringify({ photo_id: overallPhotoId }),
     })
-    if (updatedPrimaryPhoto.primary_photo_source !== 'inspection' || updatedPrimaryPhoto.primary_photo_thumb_url !== `/uploads/smoke/${overviewPhotoId}-thumb.webp`) {
-      throw new Error(`Overview photo was not accepted as vehicle primary photo: ${JSON.stringify(updatedPrimaryPhoto)}`)
+    if (updatedPrimaryPhoto.primary_photo_source !== 'inspection' || updatedPrimaryPhoto.primary_photo_thumb_url !== `/uploads/smoke/${overallPhotoId}-thumb.webp`) {
+      throw new Error(`Selected overview photo was not accepted as vehicle primary photo: ${JSON.stringify(updatedPrimaryPhoto)}`)
+    }
+
+    const reloadedSelectedPrimaryPhoto = await request(`/api/vehicles/${created.id}`, {
+      headers: { Authorization: `Bearer ${login.token}` },
+    })
+    if (reloadedSelectedPrimaryPhoto.primary_photo_thumb_url !== `/uploads/smoke/${overallPhotoId}-thumb.webp`) {
+      throw new Error(`Selected primary photo should persist after reload: ${JSON.stringify(reloadedSelectedPrimaryPhoto)}`)
+    }
+
+    const listWithSelectedPrimaryPhoto = await request(`/api/vehicles?search=${encodeURIComponent(correctedPlate)}&limit=100`, {
+      headers: { Authorization: `Bearer ${login.token}` },
+    })
+    const listedWithSelectedPhoto = listWithSelectedPrimaryPhoto.data.find((vehicle) => vehicle.id === created.id)
+    if (!listedWithSelectedPhoto || listedWithSelectedPhoto.primary_photo_thumb_url !== `/uploads/smoke/${overallPhotoId}-thumb.webp`) {
+      throw new Error(`Vehicle list should keep selected primary thumbnail: ${JSON.stringify(listedWithSelectedPhoto)}`)
+    }
+
+    await request(`/api/vehicles/${created.id}/photo-options/${overallPhotoId}`, {
+      method: 'DELETE',
+      headers,
+    }, 204)
+    const photoOptionsAfterHide = await request(`/api/vehicles/${created.id}/photo-options`, {
+      headers: { Authorization: `Bearer ${login.token}` },
+    })
+    if (!Array.isArray(photoOptionsAfterHide) || photoOptionsAfterHide.length !== 1 || photoOptionsAfterHide[0].id !== overviewPhotoId) {
+      throw new Error(`Hidden primary photo option should disappear only from picker list: ${JSON.stringify(photoOptionsAfterHide)}`)
+    }
+    await expectStatus(`/api/vehicles/${created.id}/primary-photo/from-photo`, 404, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ photo_id: overallPhotoId }),
+    })
+    const primaryAfterHide = await request(`/api/vehicles/${created.id}`, {
+      headers: { Authorization: `Bearer ${login.token}` },
+    })
+    if (primaryAfterHide.primary_photo_thumb_url !== `/uploads/smoke/${overviewPhotoId}-thumb.webp`) {
+      throw new Error(`Hidden selected photo should fall back to visible overview: ${JSON.stringify(primaryAfterHide)}`)
     }
 
     const vehicleInspections = await request(`/api/vehicles/${created.id}/inspections?limit=10`, {

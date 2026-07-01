@@ -257,15 +257,61 @@ function getLatestOverallVehiclePhoto(db, vehicleId, companyId) {
     SELECT ${QUALIFIED_PHOTO_SELECT_COLUMNS}
     FROM photos p
     JOIN inspections i ON i.id = p.inspection_id AND i.company_id = p.company_id
+    LEFT JOIN vehicle_primary_photo_hidden hidden
+      ON hidden.company_id = p.company_id AND hidden.vehicle_id = i.vehicle_id AND hidden.photo_id = p.id
     WHERE i.vehicle_id = ? AND p.company_id = ? AND ${vehiclePrimaryPhotoTypeSql('p')}
+      AND hidden.photo_id IS NULL
     ORDER BY COALESCE(p.captured_at, p.created_at) DESC, p.id DESC
     LIMIT 1
   `).get(vehicleId, companyId)
 }
 
-function mapVehiclePrimaryPhoto(vehicle, overallPhoto) {
+function getSelectedVehiclePrimaryPhoto(db, vehicle) {
+  if (!vehicle || vehicle.primary_photo_source !== 'inspection') return null
+  const primaryUrls = [
+    vehicle.primary_photo_url,
+    vehicle.primary_photo_original_url,
+    vehicle.primary_photo_webp_url,
+    vehicle.primary_photo_thumb_url,
+  ].filter(Boolean)
+  if (!primaryUrls.length) return null
+
+  const placeholders = primaryUrls.map(() => '?').join(', ')
+  return db.prepare(`
+    SELECT ${QUALIFIED_PHOTO_SELECT_COLUMNS}
+    FROM photos p
+    JOIN inspections i ON i.id = p.inspection_id AND i.company_id = p.company_id
+    LEFT JOIN vehicle_primary_photo_hidden hidden
+      ON hidden.company_id = p.company_id AND hidden.vehicle_id = i.vehicle_id AND hidden.photo_id = p.id
+    WHERE i.vehicle_id = ? AND p.company_id = ? AND ${vehiclePrimaryPhotoTypeSql('p')}
+      AND hidden.photo_id IS NULL
+      AND (
+        p.id IN (${placeholders})
+        OR p.url IN (${placeholders})
+        OR p.original_url IN (${placeholders})
+        OR p.webp_url IN (${placeholders})
+        OR p.thumb_url IN (${placeholders})
+      )
+    ORDER BY COALESCE(p.captured_at, p.created_at) DESC, p.id DESC
+    LIMIT 1
+  `).get(
+    vehicle.id,
+    vehicle.company_id,
+    ...primaryUrls,
+    ...primaryUrls,
+    ...primaryUrls,
+    ...primaryUrls,
+    ...primaryUrls,
+  )
+}
+
+function getEffectiveVehiclePrimaryPhoto(db, vehicle) {
   if (vehicle?.primary_photo_source === 'upload') return vehicle
-  const photo = overallPhoto
+  const photo = getSelectedVehiclePrimaryPhoto(db, vehicle) || getLatestOverallVehiclePhoto(db, vehicle.id, vehicle.company_id)
+  return mapVehiclePrimaryPhotoFromPhoto(vehicle, photo)
+}
+
+function mapVehiclePrimaryPhotoFromPhoto(vehicle, photo) {
   if (!photo) {
     return {
       ...vehicle,
@@ -415,8 +461,25 @@ export default function registerVehicleRoutes({
         SELECT p.id
         FROM photos p
         JOIN inspections oi ON oi.id = p.inspection_id AND oi.company_id = p.company_id
+        LEFT JOIN vehicle_primary_photo_hidden hidden
+          ON hidden.company_id = p.company_id AND hidden.vehicle_id = oi.vehicle_id AND hidden.photo_id = p.id
         WHERE oi.vehicle_id = v.id AND p.company_id = v.company_id AND ${vehiclePrimaryPhotoTypeSql('p')}
-        ORDER BY COALESCE(p.captured_at, p.created_at) DESC, p.id DESC
+          AND hidden.photo_id IS NULL
+        ORDER BY CASE
+          WHEN v.primary_photo_source = 'inspection'
+            AND (
+              p.id = v.primary_photo_url
+              OR p.id = v.primary_photo_thumb_url
+              OR p.url = v.primary_photo_url
+              OR p.original_url = v.primary_photo_original_url
+              OR p.webp_url = v.primary_photo_webp_url
+              OR p.thumb_url = v.primary_photo_thumb_url
+            )
+            THEN 0
+          ELSE 1
+        END,
+        COALESCE(p.captured_at, p.created_at) DESC,
+        p.id DESC
         LIMIT 1
       )
       WHERE ${vehicleWhereClause}
@@ -438,7 +501,9 @@ export default function registerVehicleRoutes({
         ? { id: last_inspection_id, created_at: last_inspection_created_at }
         : undefined
 
-      const mappedVehicle = mapVehiclePrimaryPhoto(vehicle, overall_photo_url
+      const mappedVehicle = vehicle.primary_photo_source === 'upload'
+        ? vehicle
+        : mapVehiclePrimaryPhotoFromPhoto(vehicle, overall_photo_url
         ? {
           url: overall_photo_url,
           original_url: overall_photo_original_url,
@@ -537,7 +602,7 @@ export default function registerVehicleRoutes({
     if (!vehicle) {
       return sendError(res, 404, API_MESSAGES.vehicleNotFound)
     }
-    res.json(mapVehiclePrimaryPhoto(vehicle, getLatestOverallVehiclePhoto(db, req.params.id, companyId)))
+    res.json(getEffectiveVehiclePrimaryPhoto(db, vehicle))
   })
 
   app.get('/api/vehicles/:id/photo-options', authenticate, (req, res) => {
@@ -553,7 +618,10 @@ export default function registerVehicleRoutes({
              i.created_at AS inspection_created_at
       FROM photos p
       JOIN inspections i ON i.id = p.inspection_id AND i.company_id = p.company_id
+      LEFT JOIN vehicle_primary_photo_hidden hidden
+        ON hidden.company_id = p.company_id AND hidden.vehicle_id = i.vehicle_id AND hidden.photo_id = p.id
       WHERE i.vehicle_id = ? AND p.company_id = ? AND ${vehiclePrimaryPhotoTypeSql('p')}
+        AND hidden.photo_id IS NULL
       ORDER BY COALESCE(p.captured_at, p.created_at) DESC, p.id DESC
       LIMIT 120
     `).all(req.params.id, companyId)
@@ -612,7 +680,10 @@ export default function registerVehicleRoutes({
       SELECT ${QUALIFIED_PHOTO_SELECT_COLUMNS}
       FROM photos p
       JOIN inspections i ON i.id = p.inspection_id AND i.company_id = p.company_id
+      LEFT JOIN vehicle_primary_photo_hidden hidden
+        ON hidden.company_id = p.company_id AND hidden.vehicle_id = i.vehicle_id AND hidden.photo_id = p.id
       WHERE p.id = ? AND p.company_id = ? AND i.vehicle_id = ? AND ${vehiclePrimaryPhotoTypeSql('p')}
+        AND hidden.photo_id IS NULL
     `).get(photoId, companyId, req.params.id)
     if (!photo) {
       return sendError(res, 404, 'Photo not found')
@@ -622,6 +693,33 @@ export default function registerVehicleRoutes({
     updateVehiclePrimaryPhoto(db, req.params.id, companyId, photo, 'inspection')
     await removePhotoFiles(previousUpload)
     res.json(getVehicleById(req.params.id, companyId))
+  })
+
+  app.delete('/api/vehicles/:id/photo-options/:photoId', authenticate, (req, res) => {
+    if (!ensureCompanyOperationalWriteAllowed(req, res, { mode: 'write' })) return
+
+    const companyId = req.user.company_id || 'default'
+    const vehicle = getVehicleById(req.params.id, companyId)
+    if (!vehicle) {
+      return sendError(res, 404, API_MESSAGES.vehicleNotFound)
+    }
+
+    const photo = db.prepare(`
+      SELECT p.id
+      FROM photos p
+      JOIN inspections i ON i.id = p.inspection_id AND i.company_id = p.company_id
+      WHERE p.id = ? AND p.company_id = ? AND i.vehicle_id = ? AND ${vehiclePrimaryPhotoTypeSql('p')}
+    `).get(req.params.photoId, companyId, req.params.id)
+    if (!photo) {
+      return sendError(res, 404, 'Photo not found')
+    }
+
+    db.prepare(`
+      INSERT OR IGNORE INTO vehicle_primary_photo_hidden (company_id, vehicle_id, photo_id, hidden_by)
+      VALUES (?, ?, ?, ?)
+    `).run(companyId, req.params.id, req.params.photoId, req.user.id || null)
+
+    res.status(204).end()
   })
 
   app.post('/api/vehicles', authenticate, (req, res) => {

@@ -517,6 +517,12 @@ class ApiClient {
     })
   }
 
+  async hideVehiclePhotoOption(id: string, photoId: string) {
+    return this.request<void>(`/vehicles/${id}/photo-options/${photoId}`, {
+      method: 'DELETE',
+    })
+  }
+
   async createVehicle(data: CreateVehiclePayload) {
     return this.request<VehicleDetail>('/vehicles', {
       method: 'POST',

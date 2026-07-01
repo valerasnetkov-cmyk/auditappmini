@@ -130,6 +130,29 @@ export default function VehicleDetailPage() {
     setPhotoSaving(false)
   }
 
+  const handlePhotoOptionHide = async (photoId: string) => {
+    if (companyUsageLoading) {
+      data.setError('Проверяем статус тарифа компании. Повторите действие через несколько секунд.')
+      return
+    }
+    if (writeRestriction) {
+      data.setError(`${writeRestriction.title}: ${writeRestriction.message}`)
+      return
+    }
+
+    setPhotoSaving(true)
+    const result = await api.hideVehiclePhotoOption(vehicleId, photoId)
+    if (result.error) {
+      data.setError(result.error)
+    } else {
+      setPhotoOptions((current) => current.filter((photo) => photo.id !== photoId))
+      const vehicleResult = await api.getVehicle(vehicleId)
+      if (vehicleResult.data) data.setVehicle(vehicleResult.data)
+      showToast('Фото скрыто из вариантов')
+    }
+    setPhotoSaving(false)
+  }
+
   if (data.loading) {
     return (
       <Layout currentPage="vehicles">
@@ -217,6 +240,7 @@ export default function VehicleDetailPage() {
             disabled={Boolean(writeRestrictionMessage)}
             onUpload={handlePrimaryPhotoUpload}
             onSelect={handlePrimaryPhotoSelect}
+            onHideOption={handlePhotoOptionHide}
           />
           <VehicleInfoCard vehicle={data.vehicle} />
         </div>

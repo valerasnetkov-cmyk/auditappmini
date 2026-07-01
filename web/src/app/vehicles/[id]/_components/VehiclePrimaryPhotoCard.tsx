@@ -14,6 +14,7 @@ type Props = {
   disabled: boolean
   onUpload: (file: File) => void
   onSelect: (photoId: string) => void
+  onHideOption: (photoId: string) => void
 }
 
 export default function VehiclePrimaryPhotoCard({
@@ -24,6 +25,7 @@ export default function VehiclePrimaryPhotoCard({
   disabled,
   onUpload,
   onSelect,
+  onHideOption,
 }: Props) {
   const inputRef = useRef<HTMLInputElement | null>(null)
   const primaryUrl = vehicle.primary_photo_thumb_url || vehicle.primary_photo_webp_url || vehicle.primary_photo_url
@@ -80,17 +82,37 @@ export default function VehiclePrimaryPhotoCard({
                 const thumbUrl = photo.thumb_url || photo.webp_url || photo.url
                 const isSelected = Boolean(thumbUrl && primaryUrl && thumbUrl === primaryUrl)
                 return (
-                  <button
+                  <div
                     key={photo.id || thumbUrl}
-                    type="button"
-                    onClick={() => photo.id && onSelect(photo.id)}
-                    disabled={disabled || saving || !photo.id}
-                    className={`overflow-hidden rounded-card border text-left transition ${
+                    className={`group relative overflow-hidden rounded-card border text-left transition ${
                       isSelected ? 'border-primary ring-2 ring-primary/25' : 'border-line hover:border-primary'
-                    } disabled:cursor-not-allowed disabled:opacity-60`}
+                    } ${disabled || saving ? 'opacity-60' : ''}`}
                   >
-                    <img src={buildApiUrl(thumbUrl)} alt="" className="aspect-[4/3] w-full object-cover" />
-                  </button>
+                    <button
+                      type="button"
+                      onClick={() => photo.id && onSelect(photo.id)}
+                      disabled={disabled || saving || !photo.id}
+                      className="block w-full disabled:cursor-not-allowed"
+                      aria-label="Выбрать основное фото"
+                    >
+                      <img src={buildApiUrl(thumbUrl)} alt="" className="aspect-[4/3] w-full object-cover" />
+                    </button>
+                    {photo.id ? (
+                      <button
+                        type="button"
+                        onClick={(event) => {
+                          event.stopPropagation()
+                          onHideOption(photo.id as string)
+                        }}
+                        disabled={disabled || saving}
+                        className="absolute right-1 top-1 flex h-6 w-6 items-center justify-center rounded-full bg-white/90 text-sm font-semibold leading-none text-primary shadow-sm ring-1 ring-line hover:bg-white disabled:cursor-not-allowed disabled:opacity-60"
+                        aria-label="Убрать фото из вариантов"
+                        title="Убрать из списка"
+                      >
+                        ×
+                      </button>
+                    ) : null}
+                  </div>
                 )
               })}
             </div>

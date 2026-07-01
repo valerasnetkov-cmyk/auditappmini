@@ -39,6 +39,10 @@
   service-admin Telegram event `pilot_request.created` only after a new request
   is inserted, with duplicate submissions skipped and smoke coverage through a
   mock Telegram transport.
+- **Vehicle primary photo persistence**: selecting an inspection photo as the
+  vehicle primary photo now survives refresh/list navigation, and unwanted
+  overview candidates can be hidden from that vehicle's picker without deleting
+  the original inspection photo.
 - **Audit hardening fixes**: Redis-unavailable rate limiting now keeps fallback
   counters across requests, integration tests tolerate an intentionally stopped
   backend while matching the current `/api/health/ready` contract, mobile audit

@@ -650,6 +650,17 @@ function applySchemaMigrations() {
   ensureColumn('photos', 'watermark_url', 'TEXT')
   ensureColumn('photos', 'watermark_generated_at', 'TEXT')
   ensureColumn('photos', 'created_at', 'TEXT')
+  db.run(`
+    CREATE TABLE IF NOT EXISTS vehicle_primary_photo_hidden (
+      company_id TEXT NOT NULL,
+      vehicle_id TEXT NOT NULL,
+      photo_id TEXT NOT NULL,
+      hidden_by TEXT,
+      hidden_at TEXT DEFAULT (datetime('now')),
+      PRIMARY KEY (company_id, vehicle_id, photo_id)
+    )
+  `)
+  db.run('CREATE INDEX IF NOT EXISTS idx_vehicle_primary_photo_hidden_vehicle ON vehicle_primary_photo_hidden(company_id, vehicle_id)')
 
   db.run(`
     CREATE TABLE IF NOT EXISTS inspection_reports (
